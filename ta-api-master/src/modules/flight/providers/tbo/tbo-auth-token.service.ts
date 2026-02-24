@@ -55,8 +55,14 @@ export class TboAuthTokenService {
                 Password: providerCred.password,
                 EndUserIp: headers['ip-address'],
             };
-            // const endpoint = `${providerCred.url}SharedServices/SharedData.svc/rest/Authenticate`;
-            const endpoint = `${providerCred.auth_url}/SharedData.svc/rest/Authenticate`;
+            // dev endpoint
+            // const endpoint = `${providerCred.auth_url}/SharedData.svc/rest/Authenticate`;
+
+            
+            // prod endpoint
+            const endpoint = `${providerCred.auth_url}/rest/Authenticate`;
+            console.log("endpoint:::::::::",endpoint);
+
             const sessionData = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(data));
             const logs = {
                 request: data,

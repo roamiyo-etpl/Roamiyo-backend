@@ -27,7 +27,11 @@ export class TboSearchService {
 
         try {
             const requestBody = this.creatingSearchRequest(searchRequest);
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Search`;
+            // dev endpoint
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Search`;
+
+            // prod endpoint
+            const endpoint = `${providerCred.url}/rest/Search`;
             const startTime = Date.now();
             const searchResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody));
             const endTime = Date.now();

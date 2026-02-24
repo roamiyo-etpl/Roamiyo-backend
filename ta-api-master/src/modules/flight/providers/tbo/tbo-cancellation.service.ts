@@ -32,7 +32,7 @@ export class TboCancellationService {
     constructor(
         private readonly tboAuthTokenService: TboAuthTokenService,
         private readonly supplierLogUtility: SupplierLogUtility,
-    ) {}
+    ) { }
 
     /**
      * @param cancelRequest - Cancellation request parameters
@@ -59,7 +59,7 @@ export class TboCancellationService {
             }
 
             const logPrefix = `cancel-${Date.now()}`;
-            
+
             // Step 1: Release PNR Request (only for hold bookings - ticket not generated)
             // If releasePnr is true, ONLY call ReleasePNR and return - no other APIs needed
             if (cancelReq?.supplierParams?.releasePnr === true) {
@@ -73,7 +73,7 @@ export class TboCancellationService {
                 });
 
                 const source = bookingDetails?.Response?.FlightItinerary?.Source;
-                
+
                 const releaseResult = await this.releasePNR({
                     cancelReq,
                     providerCred,
@@ -82,12 +82,12 @@ export class TboCancellationService {
                     logPrefix,
                     source,
                 });
-                
+
                 // Build response for ReleasePNR
                 finalResponse.success = releaseResult?.Response?.ResponseStatus === 1;
                 finalResponse.message = 'Hold booking released successfully';
                 finalResponse.error = releaseResult?.Response?.Error;
-                
+
                 return finalResponse;
             }
 
@@ -133,7 +133,7 @@ export class TboCancellationService {
                 headers,
                 logPrefix,
             });
-            
+
             finalResponse.success = getStatusResult.responseStatus === 1;
             finalResponse.cancellationStatus = getStatusResult.responseStatus === 1 && getStatusResult.changeRequestStatus === 3; // 3 = Completed
             finalResponse.cancellationCharge = getStatusResult.cancellationCharge;
@@ -169,7 +169,11 @@ export class TboCancellationService {
                 Source: source || '4', // Source fetched from GetBookingDetails API
             };
 
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/ReleasePNRRequest`;
+            // dev
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/ReleasePNRRequest`;
+
+            // prod
+            const endpoint = `${providerCred.book_url}/rest/ReleasePNRRequest`;
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
             await this.supplierLogUtility.generateLogFile({
@@ -179,7 +183,7 @@ export class TboCancellationService {
                 logId: null,
                 title: 'Release-PNR-TBO',
                 searchReqId: null,
-                    bookingReferenceId: cancelReq.bookingId.toString(),
+                bookingReferenceId: cancelReq.bookingId.toString(),
             });
 
             return response;
@@ -218,7 +222,11 @@ export class TboCancellationService {
                 }
             }
 
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SendChangeRequest`;
+            // dev
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SendChangeRequest`;
+
+            // prod url
+            const endpoint = `${providerCred.book_url}/rest/SendChangeRequest`;
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
             await this.supplierLogUtility.generateLogFile({
@@ -261,7 +269,12 @@ export class TboCancellationService {
                 ChangeRequestId: changeRequestId,
             };
 
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetChangeRequestStatus`;
+            // dev
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetChangeRequestStatus`;
+
+            // prod
+            const endpoint = `${providerCred.book_url}/rest/GetChangeRequestStatus`;
+
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
             // Some responses are wrapped inside a top-level `Response` object. Normalize it.
@@ -310,12 +323,16 @@ export class TboCancellationService {
                 TokenId: authToken,
                 RequestType: this.generateRequestType(cancelReq.requestType),
                 BookingId: cancelReq.bookingId,
-                BookingMode: 5, 
+                BookingMode: 5,
             };
 
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCancellationCharges`;
+            // dev
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCancellationCharges`;
+
+            // prod
+            const endpoint = `${providerCred.book_url}/rest/GetCancellationCharges`;
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
-           
+
             await this.supplierLogUtility.generateLogFile({
                 fileName: `${logPrefix}-getcancellationcharges-TBO`,
                 logData: { request: requestData, response },
@@ -327,7 +344,7 @@ export class TboCancellationService {
             });
 
             const supplierResponseStatus = response?.Response?.ResponseStatus || 0;
-            
+
             return {
                 success: supplierResponseStatus === 1,
                 supplierResponseStatus: this.getResponseStatusText(supplierResponseStatus),
@@ -421,7 +438,7 @@ export class TboCancellationService {
         };
         return statusMap[status] || 'Unknown';
     }
-   
+
     private generateRequestType(requestType: string | number): number {
         if (typeof requestType === 'number') return requestType;
         const map = {
@@ -432,7 +449,7 @@ export class TboCancellationService {
         } as Record<string, number>;
         return map[(requestType || '').trim()] ?? 0;
     }
-   
+
     /**
      * Generate cancellation type for TBO
      * Defaults to 'Others' (3) if not provided or invalid
@@ -459,7 +476,11 @@ export class TboCancellationService {
                 BookingId: cancelReq.bookingId,
             };
 
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetBookingDetails`;
+            // dev
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetBookingDetails`;
+
+            // prod
+            const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
             await this.supplierLogUtility.generateLogFile({

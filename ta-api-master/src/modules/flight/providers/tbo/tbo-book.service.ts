@@ -259,7 +259,12 @@ export class TboBookService {
         /* Check if booking is Non LCC create initiate the book API call */
         if (!isLCC) {
             const requestBody = await this.createBookRequest({ bookRequest, pnr, bookingId, bookTraceId, index });
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Book`;
+               // dev
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Book`;
+
+
+            // prod url
+            const endpoint = `${providerCred.book_url}/rest/Book`;
             let bookResult;
             try {
                 bookResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody));
@@ -326,7 +331,11 @@ export class TboBookService {
         /* Ticketing API for the LCC book */
         const requestBodyTicketing = await this.createBookRequest({ bookRequest, pnr, bookingId, bookTraceId, index, supplierResult });
 
-        const endpointTicketing = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Ticket`;
+        // dev
+        // const endpointTicketing = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Ticket`;
+
+        // prod url
+            const endpointTicketing = `${providerCred.book_url}/rest/Ticket`;
         let ticketingResult;
         try {
             ticketingResult = await Http.httpRequestTBO('POST', endpointTicketing, JSON.stringify(requestBodyTicketing));

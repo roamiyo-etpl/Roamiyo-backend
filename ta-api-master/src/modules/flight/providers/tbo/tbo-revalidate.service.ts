@@ -76,7 +76,12 @@ export class TboRevalidateService {
                 }
                 const requestBody = this.createRequest(tempRequestData, authToken);
                 // const TIMEOUT = Http.Timeout.Others;
-                const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareQuote`;
+                // dev endpoint
+                // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareQuote`;
+
+
+                // prod endpoint
+                const endpoint = `${providerCred.url}/rest/FareQuote`;
                 const revalidateResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody));
 
                 /* Saving the revalidate result */
@@ -326,7 +331,12 @@ export class TboRevalidateService {
             // Create API request body
             const requestBody = this.getFareRuleRequest(fareRuleReq, authToken, headers);
 
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareRule`;
+            //dev
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareRule`;
+
+            //prod
+            const endpoint = `${providerCred.url}/rest/FareRule`;
+            
             // const TIMEOUT = Http.Timeout.Others;
             const requestResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody));
 
