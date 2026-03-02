@@ -410,6 +410,8 @@ export class Generic {
         const projectPath = process.cwd();
         const logsPath = path.join(projectPath, '../', 'logs/flight/' + folderName + '/');
         fileName = logsPath + fileName + '.json';
+        // console.log("LOG PATH:", logsPath);
+        // console.log("FILE PATH:", fileName);
 
         try {
             /* In case of directory does not exist create one */

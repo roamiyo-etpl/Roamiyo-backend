@@ -26,13 +26,14 @@ export class TboSearchService {
         searchRequest.authToken = authToken;
 
         try {
+            console.log("Azure URL:", process.env.AZURE_BLOB_SAS_LINK);
             const requestBody = this.creatingSearchRequest(searchRequest);
             // dev endpoint
             // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Search`;
 
             // prod endpoint
             const endpoint = `${providerCred.url}/rest/Search`;
-            // console.log("endpoint:::::::::",endpoint);
+            // console.log("endpoint:::::::::",endpoint); 
             const startTime = Date.now();
             const searchResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody));
             const endTime = Date.now();

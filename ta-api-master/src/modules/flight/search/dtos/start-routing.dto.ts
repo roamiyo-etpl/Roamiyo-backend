@@ -36,7 +36,7 @@ export class TravelPreference {
         minimum: 0,
     })
     @IsNumber()
-    maxStopsQuantity: number;
+    maxStopsQuantity: number; 
 
     @ApiProperty({
         description: 'Cabin class preference',

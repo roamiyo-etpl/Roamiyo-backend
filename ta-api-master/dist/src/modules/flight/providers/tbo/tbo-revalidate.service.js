@@ -84,7 +84,7 @@ let TboRevalidateService = class TboRevalidateService {
                     handleAuthenticationFailure();
                 }
                 const requestBody = this.createRequest(tempRequestData, authToken);
-                const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareQuote`;
+                const endpoint = `${providerCred.url}/rest/FareQuote`;
                 const revalidateResult = await http_utility_1.Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody));
                 await this.revalidateRepo.save({ solution_id: solutionIds[i], response: JSON.stringify(revalidateResult), provider_code: providerCred.provider });
                 const convertedResult = await this.convertingResponse(requestData, revalidateResult);
@@ -281,7 +281,7 @@ let TboRevalidateService = class TboRevalidateService {
         try {
             const authToken = await this.tboAuthToken.getAuthToken(fareRuleRequest);
             const requestBody = this.getFareRuleRequest(fareRuleReq, authToken, headers);
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareRule`;
+            const endpoint = `${providerCred.url}/rest/FareRule`;
             const requestResult = await http_utility_1.Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody));
             const logs = { ApiRequest: fareRuleReq, supplierRequest: requestBody, supplierResponse: requestResult };
             const convertResponseData = await this.convertFareRuleResponse(fareRuleRequest, requestResult);

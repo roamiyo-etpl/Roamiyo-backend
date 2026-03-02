@@ -123,7 +123,7 @@ let TboCancellationService = class TboCancellationService {
                 BookingId: cancelReq.bookingId,
                 Source: source || '4',
             };
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/ReleasePNRRequest`;
+            const endpoint = `${providerCred.book_url}/rest/ReleasePNRRequest`;
             const response = await http_utility_1.Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
             await this.supplierLogUtility.generateLogFile({
                 fileName: `${logPrefix}-releasepnr-TBO`,
@@ -162,7 +162,7 @@ let TboCancellationService = class TboCancellationService {
                     }));
                 }
             }
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SendChangeRequest`;
+            const endpoint = `${providerCred.book_url}/rest/SendChangeRequest`;
             const response = await http_utility_1.Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
             await this.supplierLogUtility.generateLogFile({
                 fileName: `${logPrefix}-sendchangerequest-TBO`,
@@ -197,7 +197,7 @@ let TboCancellationService = class TboCancellationService {
                 TokenId: authToken,
                 ChangeRequestId: changeRequestId,
             };
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetChangeRequestStatus`;
+            const endpoint = `${providerCred.book_url}/rest/GetChangeRequestStatus`;
             const response = await http_utility_1.Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
             const res = (response && response.Response) ? response.Response : response;
             await this.supplierLogUtility.generateLogFile({
@@ -240,7 +240,7 @@ let TboCancellationService = class TboCancellationService {
                 BookingId: cancelReq.bookingId,
                 BookingMode: 5,
             };
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCancellationCharges`;
+            const endpoint = `${providerCred.book_url}/rest/GetCancellationCharges`;
             const response = await http_utility_1.Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
             await this.supplierLogUtility.generateLogFile({
                 fileName: `${logPrefix}-getcancellationcharges-TBO`,
@@ -373,7 +373,7 @@ let TboCancellationService = class TboCancellationService {
                 TokenId: authToken,
                 BookingId: cancelReq.bookingId,
             };
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetBookingDetails`;
+            const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
             const response = await http_utility_1.Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
             await this.supplierLogUtility.generateLogFile({
                 fileName: `${logPrefix}-getbookingdetails-TBO`,

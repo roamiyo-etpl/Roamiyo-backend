@@ -51,7 +51,7 @@ let TboOrderDetailService = class TboOrderDetailService {
         Object.assign(orderRequest, { tokenReqData: orderReq, searchReqId: orderReq.searchReqId, bookReq: bookReq });
         try {
             const authToken = await this.tboAuthTokenService.getAuthToken(orderRequest);
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetBookingDetails`;
+            const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
             const supplierOrderDetailResponse = [];
             const result = [];
             const bookingDetails = Array.isArray(orderReq?.bookingDetails) ? orderReq.bookingDetails : [orderReq?.bookingDetails];

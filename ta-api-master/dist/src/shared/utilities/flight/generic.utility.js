@@ -355,8 +355,8 @@ class Generic {
                     else if (cabinCode.toLowerCase() == 'premium_business') {
                         cabin = '5';
                     }
-                    else {
-                        cabin = 'all';
+                    else if (cabinCode.toLowerCase() == 'all') {
+                        cabin = '1';
                     }
                 }
                 else {
