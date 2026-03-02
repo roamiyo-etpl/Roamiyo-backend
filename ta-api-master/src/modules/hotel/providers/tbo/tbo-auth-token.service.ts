@@ -10,7 +10,7 @@ export class TboAuthTokenService {
         private readonly configurationService: ConfigurationService,
         // private readonly s3BucketService: s3BucketService,
         // private readonly supplierLogUtility: SupplierLogUtility,
-    ) {}
+    ) { }
 
     /** [@Description: This method is used to get the auth token]
      * @author: Prashant Joshi at 13-10-2025 **/
@@ -56,7 +56,13 @@ export class TboAuthTokenService {
                 EndUserIp: headers['ip-address'],
             };
             // const endpoint = `${providerCred.url}SharedServices/SharedData.svc/rest/Authenticate`;
-            const endpoint = `${providerCred.auth_url}/SharedData.svc/rest/Authenticate`;
+            // dev endpoint
+            // const endpoint = `${providerCred.auth_url}/SharedData.svc/rest/Authenticate`;
+
+            // prod endpoint
+            const endpoint = `${providerCred.auth_url}/rest/Authenticate`;
+            console.log("endpoint:::::::::", endpoint);
+
             const sessionData = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(data));
             const logs = {
                 request: data,

@@ -378,8 +378,8 @@ export class Generic {
                         cabin = '3';
                     } else if (cabinCode.toLowerCase() == 'premium_business') {
                         cabin = '5';
-                    } else {
-                        cabin = 'all';
+                    } else if(cabinCode.toLowerCase() == 'all'){
+                        cabin = '1';
                     }
                 } else {
                     if (cabinCode && cabinCode == '1') {

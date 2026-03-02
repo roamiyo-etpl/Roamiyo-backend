@@ -67,7 +67,9 @@ export class TboSearchService {
                 username: providerCredentials.username,
                 password: providerCredentials.password,
             };
+           
             const endpoint = `${providerCredentials.hotel_url}/Search`;
+
             // console.log('auth in tbo-search.service', auth);
             // console.log('endpoint in tbo-search.service', endpoint);
             // Create search promises for each chunk
