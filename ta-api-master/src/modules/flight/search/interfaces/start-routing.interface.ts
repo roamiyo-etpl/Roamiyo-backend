@@ -165,6 +165,7 @@ export class Segment {
     distance?: string;
     craft?: string;
     inFlightServices?: string;
+    supplierFareClass: string;
 }
 
 export class ArrivalDepartureDate {

@@ -160,6 +160,7 @@ class Segment {
     distance;
     craft;
     inFlightServices;
+    supplierFareClass;
 }
 exports.Segment = Segment;
 class ArrivalDepartureDate {

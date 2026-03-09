@@ -151,6 +151,7 @@ export declare class Segment {
     distance?: string;
     craft?: string;
     inFlightServices?: string;
+    supplierFareClass: string;
 }
 export declare class ArrivalDepartureDate {
     date: string;

@@ -212,14 +212,18 @@ export class TboSearchService {
                 flightRoute.fare = [fare];
 
                 flightJourney.Segments.forEach((segmentArray) => {
+                    // console.log("segmentArray:::::::::::::",segmentArray);
                     let airlineCode: string = '';
                     let hashCode: string = '';
                     let totalDuration = 0;
                     let totalInterval: number = 0;
+                    let supplierFareClass : string = '';
                     segments = [];
                     segmentArray.forEach((segment) => {
+                        // console.log("segment:::::::::::::",segment);
                         fareSourceCode = '';
                         airlineCode = segment.Airline.AirlineCode;
+                        supplierFareClass = segment.SupplierFareClass; 
 
                         /* Creating a time duration */
                         // const result = Generic.convertTimeStringToHoursNew(segment.Duration);
@@ -411,6 +415,7 @@ export class TboSearchService {
         flightSegment.segmentId = segment.SegmentIndicator;
         flightSegment.airlineCode = segment.Airline.AirlineCode;
         flightSegment.airlineName = airlines[segment.Airline.AirlineCode] || segment.Airline;
+        flightSegment.supplierFareClass = segment.SupplierFareClass,
         flightSegment.cabinClass = Generic.convertCabinClassCode('TBO', segment.CabinClass, false);
         flightSegment.flightNumber = segment?.Airline?.FlightNumber;
         flightSegment.noOfSeatAvailable = segment?.NoOfSeatAvailable;
