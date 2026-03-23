@@ -1,4 +1,4 @@
-import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 /**
  * City Entity - represents city data
@@ -47,4 +47,14 @@ export class CityEntity {
     @Index('idx_city_name_normalized', { synchronize: false })
     @Column({ name: 'city_name_normalized', type: 'varchar', length: 100, nullable: true })
     cityNameNormalized: string | null;
+
+    @CreateDateColumn({ name: 'created_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+    createdAt: Date;
+
+    @UpdateDateColumn({ name: 'updated_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+    updatedAt: Date;
+
+    @Column({ name: 'hotel_dump_updated_at', type: 'timestamp', nullable: true })
+    hotelDumpUpdatedAt: Date | null;
 }
+ 

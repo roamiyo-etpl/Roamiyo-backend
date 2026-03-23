@@ -141,6 +141,39 @@ class Http {
             throw error;
         }
     }
+    static async httpRequestTBOHotelStream(method, endpoint, data, auth) {
+        try {
+            const authHeader = 'Basic ' + Buffer.from(`${auth?.username}:${auth?.password}`).toString('base64');
+            const axiosConfig = {
+                method: method,
+                url: endpoint,
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    Authorization: authHeader,
+                },
+                responseType: 'stream',
+                timeout: 300000,
+            };
+            if (data !== null && data !== undefined && Object.keys(data).length > 0) {
+                axiosConfig.data = data;
+            }
+            else if (data) {
+                axiosConfig.data = data;
+            }
+            const response = await (0, axios_1.default)(axiosConfig);
+            return response.data;
+        }
+        catch (error) {
+            if (error.response) {
+                console.error('TBO Hotel Stream API Error - Status:', error.response.status);
+            }
+            else {
+                console.error('TBO Hotel Stream API Setup Error:', error.message);
+            }
+            throw error;
+        }
+    }
 }
 exports.Http = Http;
 //# sourceMappingURL=http.utility.js.map

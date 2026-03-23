@@ -27,10 +27,10 @@ export class TboHotelAdditionalDetailsEntity {
     @Column({ name: 'rating', type: 'int', nullable: true })
     rating: number;
 
-    @Column({ name: 'latitude', type: 'varchar', length: 20, nullable: true })
+    @Column({ name: 'latitude', type: 'varchar', length: 50, nullable: true })
     latitude: string;
 
-    @Column({ name: 'longitude', type: 'varchar', length: 20, nullable: true })
+    @Column({ name: 'longitude', type: 'varchar', length: 50, nullable: true })
     longitude: string;
 
     @Column({ name: 'address', type: 'varchar', length: 500, nullable: true })
@@ -70,7 +70,7 @@ export class TboHotelAdditionalDetailsEntity {
     hotelEmail: string;
 
     @Column({ name: 'hotel_phones', type: 'jsonb', nullable: true })
-    hotelPhones: string[] | [];
+    hotelPhones: any;
 
     @Column({ name: 'board_codes', type: 'jsonb', nullable: true })
     boardCodes: [];
@@ -79,10 +79,13 @@ export class TboHotelAdditionalDetailsEntity {
     websiteUrl: string;
 
     @Column({ name: 'interest_points', type: 'jsonb', nullable: true })
-    interestPoints: string[] | [];
+    interestPoints: any;
 
     @Column({ name: 'terminals', type: 'jsonb', nullable: true })
     terminals: [];
+
+    @Column({ name: 'status', type: 'enum', enum: ['PENDING', 'COMPLETE'], default: 'PENDING' })
+    status: 'PENDING' | 'COMPLETE';
 
     @CreateDateColumn({ name: 'created_at', type: 'timestamptz', nullable: true })
     createdAt: Date;
@@ -100,3 +103,4 @@ export class TboHotelAdditionalDetailsEntity {
     @Column({ name: 'hotel_name_normalized', type: 'varchar', length: 255, nullable: true })
     hotelNameNormalized: string | null = null;
 }
+ 

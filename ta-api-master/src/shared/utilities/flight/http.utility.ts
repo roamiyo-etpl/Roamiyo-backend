@@ -153,4 +153,43 @@ export class Http {
             throw error; // Re-throw for proper error handling
         }
     }
+
+
+     /**
+     * Streams data from TBO Hotel API
+     * @author Qamar Ali - 12-03-2026
+     */
+    static async httpRequestTBOHotelStream(method: string, endpoint: string, data, auth?: { username: string; password: string }) {
+        try {
+            const authHeader = 'Basic ' + Buffer.from(`${auth?.username}:${auth?.password}`).toString('base64');
+            const axiosConfig: any = {
+                method: method,
+                url: endpoint,
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    Authorization: authHeader,
+                },
+                responseType: 'stream',
+                timeout: 300000,
+            };
+
+            if (data !== null && data !== undefined && Object.keys(data).length > 0) {
+                axiosConfig.data = data;
+            } else if (data) {
+                // If it's a primitive or other valid truthy payload
+                axiosConfig.data = data;
+            }
+
+            const response = await Axios(axiosConfig);
+            return response.data;
+        } catch (error) {
+            if (error.response) {
+                console.error('TBO Hotel Stream API Error - Status:', error.response.status);
+            } else {
+                console.error('TBO Hotel Stream API Setup Error:', error.message);
+            }
+            throw error;
+        }
+    }
 }

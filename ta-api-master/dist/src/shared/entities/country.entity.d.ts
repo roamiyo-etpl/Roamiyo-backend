@@ -2,7 +2,7 @@ export declare class CountryEntity {
     countryId: number;
     countryName: string;
     iso3: string | null;
-    iso2: string | null;
+    iso2: string;
     numericCode: string | null;
     phonecode: string | null;
     capital: string | null;
@@ -27,4 +27,6 @@ export declare class CountryEntity {
     latitude: number | null;
     longitude: number | null;
     emojiU: string | null;
+    createdAt: Date;
+    updatedAt: Date;
 }

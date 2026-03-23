@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { Http } from 'src/shared/utilities/flight/http.utility';
 import { AmenityMasterEntity } from './entities/amenity-master.entity';
 import { AmenityMappingEntity } from './entities/amenity-mapping.entity';
@@ -21,12 +21,16 @@ import { TboHotelContentEntity } from './entities/tbo-hotel-content.entity';
 import { TboHotelRoomContentEntity } from './entities/tbo-hotel-room-content.entity';
 import { EntityManager } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
+import { parser } from 'stream-json';
+import { streamArray } from 'stream-json/streamers/StreamArray';
+import { pick } from 'stream-json/filters/Pick';
+
 /**
  * Hotel dump service - handles hotel data dump operations
  * @author Prashant - TBO Integration
  */
 @Injectable()
-export class HotelDumpService implements OnModuleInit {
+export class HotelDumpService {
     private readonly logger = new Logger(HotelDumpService.name);
     private terminalsCache: Map<string, any> = new Map();
 
@@ -332,18 +336,38 @@ export class HotelDumpService implements OnModuleInit {
      * @param headers - Request headers
      * @returns Promise<CommonResponse> - Dump result
      */
-    async addCountryList(headers: Headers): Promise<CommonResponse> {
-        try {
-            this.logger.log('Starting country list dump from TBO API');
 
-            // Get provider credentials
+    async addCountryList(headers: Headers): Promise<any> {
+        this.logger.log(`Initiating country dump check...`);
+
+        // Trigger background process
+        this.processCountriesInBackground(headers).catch(err =>
+            this.logger.error(`Background country dump failed: ${err.message}`, err.stack)
+        );
+
+        return {
+            status: 202,
+            message: "Country dump initiated. Check server logs for progress.",
+            timestamp: new Date().toISOString(),
+        };
+    }
+
+    private async processCountriesInBackground(headers: Headers) {
+        const startTime = Date.now();
+        this.logger.log(`Starting background recursive country dump from CountryList API (Streaming).`);
+
+        let processed = 0;
+        let failed = 0;
+
+        try {
+
             const providersData = await this.supplierCredService.getActiveProviders(headers);
             const tboProvider = providersData.find((p) => p.code === 'TBO');
 
             if (!tboProvider) {
                 throw new BadRequestException('TBO provider not found');
             }
-            console.log(tboProvider.provider_credentials, 'provider_credentials');
+            
 
             const providerCredentials = JSON.parse(tboProvider.provider_credentials);
             const auth = {
@@ -351,958 +375,827 @@ export class HotelDumpService implements OnModuleInit {
                 password: providerCredentials.dump_password,
             };
 
-            console.log(auth);
-            const endpoint = `${providerCredentials.dump_url}/CountryList`;
-
-            // Fetch country list from TBO API
-            const response = await Http.httpRequestTBOHotel('GET', endpoint, null, auth);
-            console.log(response);
-
-            if (!response.CountryList || !Array.isArray(response.CountryList)) {
-                throw new BadRequestException('Invalid country list response from TBO API');
-            }
-
-            // Check if countries already exist
-            const existingCountries = await this.countryRepository
-                .createQueryBuilder('country')
-                .where('country.iso2 IN (:...codes)', {
-                    codes: response.CountryList.map((country) => country.Code),
-                })
-                .getMany();
-
-            if (existingCountries.length > 0) {
-                return {
-                    success: true,
-                    message: 'Country list already exists in database',
-                };
-            }
-
-            // Prepare country entities
-            const countryEntities = response.CountryList.map((country) => {
-                const entity = new CountryEntity();
-                entity.iso2 = country.Code;
-                entity.countryName = country.Name;
-                return entity;
-            });
-
-            // Save countries to database
-            await this.countryRepository.save(countryEntities);
-
-            this.logger.log(`Successfully added ${countryEntities.length} countries`);
-            return {
-                success: true,
-                message: `Country list added successfully: ${countryEntities.length} countries`,
-            };
-        } catch (error) {
-            this.logger.error('Error in addCountryList:', error);
-            if (error instanceof BadRequestException) {
-                throw error;
-            }
-            throw new InternalServerErrorException('Failed to add country list');
-        }
-    }
-
-    /**
-     * Add city list dump from TBO API
-     * @param headers - Request headers
-     * @returns Promise<CommonResponse> - Dump result
-     */
-    async addCityList(headers: Headers): Promise<CommonResponse> {
-        try {
-            this.logger.log('Starting city list dump from TBO API');
-
-            // Get provider credentials
-            const providersData = await this.supplierCredService.getActiveProviders(headers);
-            const tboProvider = providersData.find((p) => p.code === 'TBO');
-
-            if (!tboProvider) {
-                throw new BadRequestException('TBO provider not found');
-            }
-
-            const providerCredentials = JSON.parse(tboProvider.provider_credentials);
-            const auth = {
-                username: providerCredentials.dump_username,
-                password: providerCredentials.dump_password,
-            };
-            const endpoint = `${providerCredentials.dump_url}/CityList`;
-
-            // Check if cities already exist
-            const citiesCount = await this.cityRepository.count();
-            if (citiesCount > 0) {
-                return {
-                    success: true,
-                    message: 'City list already exists in database',
-                };
-            }
-
-            // Get all countries
-            const countries = await this.countryRepository.find();
-            let allCities: CityEntity[] = [];
-
-            // Fetch cities for each country
-            for (const country of countries) {
-                try {
-                    const response = await Http.httpRequestTBOHotel('POST', endpoint, { CountryCode: country.iso2 }, auth);
-
-                    if (!response.CityList || !Array.isArray(response.CityList)) {
-                        this.logger.warn(`No cities found for country ${country.iso2}`);
-                        continue;
-                    }
-
-                    const cities = response.CityList.map((city) => {
-                        const entity = new CityEntity();
-                        entity.cityName = city.Name;
-                        entity.cityCodeTbo = city.Code;
-                        entity.countryId = country.countryId;
-                        entity.countryCode = country.iso2 || '';
-                        entity.countryName = country.countryName;
-                        entity.stateId = 0; // Default state ID
-                        entity.stateCode = ''; // Default state code
-                        entity.stateName = ''; // Default state name
-                        entity.latitude = 0; // Default latitude
-                        entity.longitude = 0; // Default longitude
-                        return entity;
-                    });
-
-                    allCities = allCities.concat(cities);
-                } catch (error) {
-                    this.logger.error(`Failed to fetch cities for country ${country.iso2}:`, error);
-                    continue;
-                }
-            }
-
-            if (allCities.length === 0) {
-                throw new BadRequestException('No cities found in any API response');
-            }
-
-            // Save cities to database
-            await this.cityRepository.save(allCities, { chunk: 100 });
-
-            this.logger.log(`Successfully added ${allCities.length} cities`);
-            return {
-                success: true,
-                message: `City list added successfully: ${allCities.length} cities`,
-            };
-        } catch (error) {
-            this.logger.error('Error in addCityList:', error);
-            if (error instanceof BadRequestException) {
-                throw error;
-            }
-            throw new InternalServerErrorException('Failed to add city list');
-        }
-    }
-
-    /**
-     * Add hotel list dump from TBO API
-     * @param headers - Request headers
-     * @returns Promise<CommonResponse> - Dump result
-     */
-    // async addHotelList(headers: Headers): Promise<CommonResponse> {
-    //     try {
-    //         this.logger.log('Starting hotel list dump from TBO API');
-
-    //         // Get provider credentials
-    //         const providersData = await this.supplierCredService.getActiveProviders(headers);
-    //         const tboProvider = providersData.find((p) => p.code === 'TBO');
-
-    //         if (!tboProvider) {
-    //             throw new BadRequestException('TBO provider not found');
-    //         }
-
-    //         const providerCredentials = JSON.parse(tboProvider.provider_credentials);
-    //         const auth = {
-    //                 username: providerCredentials.dump_username,
-    //                 password: providerCredentials.dump_password,
-    //         };
-    //         const endpoint = `${providerCredentials.dump_url}/HotelCodeList`;
-
-    //         // Fetch hotel codes from TBO API
-    //         const response = await Http.httpRequestTBOHotel('GET', endpoint, null, auth);
-
-    //         // console.log(response,"response");
-
-    //         if (!response.HotelCodes || !Array.isArray(response.HotelCodes)) {
-    //             throw new BadRequestException('Invalid hotel codes response from TBO API');
-    //         }
-
-    //         const hotelCodes = response.HotelCodes;
-
-    //         // Check existing hotels in chunks to avoid parameter limits
-    //         const chunkSize = 1000;
-    //         let existingHotels: HotelMasterEntity[] = [];
-
-    //         for (let i = 0; i < hotelCodes.length; i += chunkSize) {
-    //             const chunk = hotelCodes.slice(i, i + chunkSize);
-    //             const hotels = await this.hotelMasterRepository.createQueryBuilder('hotel').where('hotel.hotelCode IN (:...codes)', { codes: chunk }).select('hotel.hotelCode').getMany();
-    //             existingHotels = existingHotels.concat(hotels);
-    //         }
-
-    //         const existingCodes = new Set(existingHotels.map((h) => h.hotelCode));
-    //         const newHotelCodes = hotelCodes.filter((code: string) => !existingCodes.has(code));
-
-    //         if (newHotelCodes.length === 0) {
-    //             return {
-    //                 success: true,
-    //                 message: 'All hotel codes already exist in database',
-    //             };
-    //         }
-
-    //         // Prepare hotel entities
-    //         const hotelEntities = newHotelCodes.map((code: string) => {
-    //             const entity = new HotelMasterEntity();
-    //             entity.hotelCode = code;
-    //             entity.hotelName = '';
-    //             entity.providerCode = 'TBO';
-    //             entity.isActive = true;
-    //             entity.isDeleted = false;
-    //             return entity;
-    //         });
-
-    //         // Save hotels to database
-    //         await this.hotelMasterRepository.save(hotelEntities, { chunk: 100 });
-
-    //         this.logger.log(`Successfully added ${hotelEntities.length} hotel codes`);
-    //         return {
-    //             success: true,
-    //             message: `Hotel codes added successfully: ${hotelEntities.length} hotels`,
-    //         };
-    //     } catch (error) {
-    //         this.logger.error('Error in addHotelList:', error);
-    //         if (error instanceof BadRequestException) {
-    //             throw error;
-    //         }
-    //         throw new InternalServerErrorException('Failed to add hotel list');
-    //     }
-    // }
-
-    async addHotelList(headers: Headers): Promise<CommonResponse> {
-        try {
-            this.logger.log('Starting hotel list dump from TBO API');
-
-            // Get provider credentials
-            const providersData = await this.supplierCredService.getActiveProviders(headers);
-            const tboProvider = providersData.find((p) => p.code === 'TBO');
-            if (!tboProvider) throw new BadRequestException('TBO provider not found');
-
-            const providerCredentials = JSON.parse(tboProvider.provider_credentials);
-            const auth = {
-                username: providerCredentials.dump_username,
-                password: providerCredentials.dump_password,
-            };
-
-            // const cityCode = '130443'; // Delhi
-            const cityCode = '115936'; // Dubai
-
-
-            // Step 1: Get hotel codes by city
-            const listEndpoint = `${providerCredentials.dump_url}/TBOHotelCodeList`;
-            const hotelListResponse = await Http.httpRequestTBOHotel('POST', listEndpoint, { CityCode: cityCode }, auth);
-            if (!hotelListResponse.Hotels || !Array.isArray(hotelListResponse.Hotels)) {
-                throw new BadRequestException('Invalid hotel codes response from TBO API');
-            }
-
-            const Hotels = hotelListResponse.Hotels;
-
-            // Step 2: Check which hotels already exist to avoid duplicates
-            const chunkSize = 1000;
-            let existingHotels: HotelMasterEntity[] = [];
-
-            for (let i = 0; i < Hotels.length; i += chunkSize) {
-                const chunk = Hotels.slice(i, i + chunkSize).map((h) => h.HotelCode);
-                const hotels = await this.hotelMasterRepository.createQueryBuilder('hotel').where('hotel.hotelCode IN (:...codes)', { codes: chunk }).select('hotel.hotelCode').getMany();
-
-                existingHotels = existingHotels.concat(hotels);
-            }
-
-            const existingCodes = new Set(existingHotels.map((h) => h.hotelCode));
-            const newHotels = Hotels.filter((h) => !existingCodes.has(h.HotelCode));
-
-            if (newHotels.length === 0) {
-                return { success: true, message: 'All hotel codes already exist in database' };
-            }
-
-            // Step 3: For each new hotel, fetch detailed info in parallel
-            const detailEndpoint = `${providerCredentials.dump_url}/Hoteldetails`;
-
-            const detailedResponses = await Promise.all(newHotels.map((hotel) => Http.httpRequestTBOHotel('POST', detailEndpoint, { Hotelcodes: hotel.HotelCode }, auth)));
-
-            // Step 4: Prepare entities from detailed info
-            const hotelEntities: HotelMasterEntity[] = [];
-            const hotelContentEntities: TboHotelContentEntity[] = [];
-            const hotelAdditionalDetailsEntities: TboHotelAdditionalDetailsEntity[] = [];
-            const hotelImagesEntities: TboHotelImagesEntity[] = [];
-
-            for (const detailResp of detailedResponses) {
-                if (detailResp.HotelDetails && detailResp.HotelDetails.length > 0) {
-                    const detail = detailResp.HotelDetails[0];
-
-                    const entity = new HotelMasterEntity();
-                    entity.hotelCode = detail.HotelCode;
-                    entity.hotelName = detail.HotelName || '';
-                    entity.highlightText = detail.Description || '';
-                    entity.address = detail.Address || '';
-                    entity.city = detail.CityName || '';
-                    entity.countryCode = detail.CountryCode || '';
-                    entity.latitude = detail.Map ? detail.Map.split('|')[0] : null;
-                    entity.longitude = detail.Map ? detail.Map.split('|')[1] : null;
-                    entity.starRating = detail.HotelRating || null;
-                    entity.providerCode = 'TBO';
-                    entity.hotelSource = HotelSourceEnum.TBO;
-                    entity.isActive = true;
-                    entity.isDeleted = false;
-                    entity.createdAt = new Date();
-                    // add more fields as needed
-
-                    hotelEntities.push(entity);
-
-
-                    const hotelContent = new TboHotelContentEntity();
-                    hotelContent.hotelCode = detail.HotelCode;
-                    hotelContent.hotelName = detail.HotelName || '';
-                    hotelContent.address = detail.Address || '';
-                    hotelContent.city = detail.CityName || '';
-                    hotelContent.cityCode = cityCode;
-                    hotelContent.countryCode = detail.CountryCode || '';
-                    hotelContent.latitude = detail.Map ? detail.Map.split('|')[0] : null;
-                    hotelContent.longitude = detail.Map ? detail.Map.split('|')[1] : null;
-                    hotelContent.rating = detail.HotelRating || null;
-
-                    // add more fields as needed
-
-                    hotelContentEntities.push(hotelContent);
-
-
-                    // Create HotelAdditionalDetailsEntity to hold additional hotel details
-                    const additionalDetail = new TboHotelAdditionalDetailsEntity();
-
-                    additionalDetail.hotelCode = detail.HotelCode;
-                    additionalDetail.supplierCode = 'TBO'; // Assuming you have a supplier code
-                    additionalDetail.hotelName = detail.HotelName || '';
-                    additionalDetail.rating = detail.HotelRating || null;
-                    additionalDetail.latitude = detail.Map ? detail.Map.split('|')[0] : null;
-                    additionalDetail.longitude = detail.Map ? detail.Map.split('|')[1] : null;
-                    additionalDetail.address = detail.Address || '';
-                    additionalDetail.city = detail.CityName || '';
-                    additionalDetail.state = '';  // Set to empty or pull from detail if available
-                    additionalDetail.country = detail.CountryName || '';
-                    additionalDetail.cityCode = cityCode; // Assuming you might pull this from elsewhere
-                    additionalDetail.stateCode = ''; // Assuming you might pull this from elsewhere
-                    additionalDetail.countryCode = detail.CountryCode || '';
-                    additionalDetail.pincode = detail.PinCode || ''; // Pin code from the API response
-                    additionalDetail.heroImage = detail.Image || ''; // Set the image as heroImage
-                    additionalDetail.amenities = detail.HotelFacilities || []; // Map HotelFacilities to amenities
-                    additionalDetail.description = detail.description; // Add hotel descriptions if available
-                    additionalDetail.hotelEmail = detail.Email || ''; // Add hotel email if available
-                    additionalDetail.hotelPhones = detail.PhoneNumber ? [detail.PhoneNumber] : []; // Add phone numbers if available
-                    additionalDetail.boardCodes = []; // Add board codes if available
-                    additionalDetail.websiteUrl = detail.HotelWebsiteUrl || ''; // Hotel website URL
-                    additionalDetail.interestPoints = detail.Attractions ? Object.values(detail.Attractions) : []; // Attractions as interest points
-                    additionalDetail.terminals = []; // Add terminals if available
-                    additionalDetail.createdAt = new Date();
-                    additionalDetail.updatedAt = new Date();
-                    additionalDetail.hotelVector = ''; // You might generate this or set it based on your data
-                    additionalDetail.hotelNameNormalized = detail.HotelName?.toLowerCase() || null;
-
-                    hotelAdditionalDetailsEntities.push(additionalDetail);
-
-
-
-                    // --- HOTEL IMAGES ---
-                    if (detail.Images && Array.isArray(detail.Images)) {
-                        let order = 1;
-                        for (const imgUrl of detail.Images) {
-                            const imageEntity = new TboHotelImagesEntity();
-                            imageEntity.hotelCode = detail.HotelCode;
-                            imageEntity.supplierCode = 'TBO';
-                            imageEntity.typeCode = 'EXTERIOR'; // or extract from API if available
-                            imageEntity.typeName = ''; //
-                            imageEntity.roomCode = '';
-                            imageEntity.roomType = '';
-                            imageEntity.url = imgUrl;
-                            imageEntity.order = order++;
-                            imageEntity.visualOrder = order;
-                            imageEntity.createdAt = new Date();
-                            imageEntity.updatedAt = new Date();
-
-                            hotelImagesEntities.push(imageEntity);
+            const endpoint = `${providerCredentials?.dump_url}/CountryList`;          
+
+            this.logger.debug(`Fetching countries from ${endpoint}`);
+
+            // Streaming implementation
+            const stream = await Http.httpRequestTBOHotelStream('GET', endpoint, null, auth);
+
+            const pipeline = stream
+                .pipe(parser())
+                .pipe(pick({ filter: 'CountryList' }))
+                .pipe(streamArray());
+
+            await new Promise((resolve, reject) => {
+                const batchSize = 1000;
+                let batch: any[] = [];
+
+                pipeline.on('data', async (data: any) => {
+                    const country = data.value;
+                    batch.push(country);
+
+                    if (batch.length >= batchSize) {
+                        pipeline.pause(); // Pause stream
+                        try {
+                            await this.saveCountryBatch(batch);
+                            processed += batch.length;
+                            batch = []; // Clear batch
+                            this.logger.log(`[CountryDump] Processed ${processed} countries...`);
+                            pipeline.resume(); // Resume stream
+                        } catch (err) {
+                            this.logger.error(`Error saving country batch: ${err.message}`);
+                            failed += batch.length; // Approximate
+                            batch = [];
+                            pipeline.resume();
                         }
-                    }
-                }
-            }
-
-            // Step 5: Save entities in chunks to DB
-            await this.hotelMasterRepository.save(hotelEntities, { chunk: 100 });
-            await this.hotelContentRepository.save(hotelContentEntities, { chunk: 100 });
-            await this.hotelDetailsRepository.save(hotelAdditionalDetailsEntities, { chunk: 100 });
-            await this.hotelImagesRepository.save(hotelImagesEntities, { chunk: 100 });
-
-            this.logger.log(`Successfully added ${hotelEntities.length} hotels with full details`);
-
-            return {
-                success: true,
-                message: `Hotel details added successfully: ${hotelEntities.length} hotels`,
-            };
-        } catch (error) {
-            this.logger.error('Error in addHotelList:', error);
-            if (error instanceof BadRequestException) {
-                throw error;
-            }
-            throw new InternalServerErrorException('Failed to add hotel list');
-        }
-    }
-
-
-
-    async addHotelListProduction(headers: Headers): Promise<CommonResponse> {
-        let successfullyProcessedHotels = 0;
-
-        try {
-            this.logger.log('Starting hotel list dump from TBO API');
-
-            // Get provider credentials
-            const providersData = await this.supplierCredService.getActiveProviders(headers);
-            const tboProvider = providersData.find((p) => p.code === 'TBO');
-            if (!tboProvider) throw new BadRequestException('TBO provider not found');
-
-            const providerCredentials = JSON.parse(tboProvider.provider_credentials);
-            const auth = {
-                username: providerCredentials.dump_username,
-                password: providerCredentials.dump_password,
-            };
-
-            const cityCode = '115936'; // Dubai
-
-            // Step 1: Get hotel codes by city
-            const listEndpoint = `${providerCredentials.dump_url}/hotelcodelist`;
-            const hotelListResponse = await Http.httpRequestTBOHotel('GET', listEndpoint, '', auth);
-            if (!hotelListResponse.HotelCodes || !Array.isArray(hotelListResponse.HotelCodes)) {
-                throw new BadRequestException('Invalid hotel codes response from TBO API');
-            }
-
-            const hotelCodes = hotelListResponse.HotelCodes;
-
-            // Step 2: Check which hotels already exist to avoid duplicates
-            const chunkSize = 1000;
-            let existingHotels: HotelMasterEntity[] = [];
-
-            for (let i = 0; i < hotelCodes.length; i += chunkSize) {
-                const chunk = hotelCodes.slice(i, i + chunkSize);
-                const hotels = await this.hotelMasterRepository.createQueryBuilder('hotel').where('hotel.hotelCode IN (:...codes)', { codes: chunk }).select('hotel.hotelCode').getMany();
-                existingHotels = existingHotels.concat(hotels);
-            }
-
-            const existingCodes = new Set(existingHotels.map((h) => h.hotelCode));
-            const newHotels = hotelCodes.filter((code) => !existingCodes.has(code));
-
-            if (newHotels.length === 0) {
-                return { success: true, message: 'All hotel codes already exist in database' };
-            }
-
-            // Step 3: Fetch hotel details in batches of 100
-            const batchSize = 100;
-            const detailEndpoint = `${providerCredentials.dump_url}/Hoteldetails`;
-
-            // Fetch hotel details in batches
-            const fetchHotelDetailsInBatches = async (): Promise<any[]> => {
-                const hotelDetails: any[] = [];
-                for (let i = 0; i < newHotels.length; i += batchSize) {
-                    const batch = newHotels.slice(i, i + batchSize);
-                    try {
-                        const batchResponses = await Promise.all(batch.map(code =>
-                            Http.httpRequestTBOHotel('POST', detailEndpoint, { Hotelcodes: code }, auth)
-                        ));
-                        hotelDetails.push(...batchResponses);
-                        console.log(`Batch processed: ${batch.length} hotels`);
-                    } catch (error) {
-                        // If batch fails, log the failure and continue with the next
-                        this.logger.error(`Failed to fetch batch for hotel codes ${batch.join(', ')}`, error);
-                        continue;
-                    }
-                }
-                // console.log(hotelDetails,"hotelDetails");
-                return hotelDetails;
-            };
-
-            const detailedResponses = await fetchHotelDetailsInBatches();
-            console.log(detailedResponses, "hotelDetails");
-
-            // Step 4: Prepare entities from hotel details
-            const hotelEntities: HotelMasterEntity[] = [];
-            const hotelContentEntities: TboHotelContentEntity[] = [];
-            const hotelAdditionalDetailsEntities: TboHotelAdditionalDetailsEntity[] = [];
-            const hotelImagesEntities: TboHotelImagesEntity[] = [];
-
-            // Step 5: Handle the data in batches and commit each batch into the database fully
-            for (const detailResp of detailedResponses) {
-                console.log(detailResp)
-                if (detailResp.HotelDetails && detailResp.HotelDetails.length > 0) {
-                    const detail = detailResp.HotelDetails[0];
-                    console.log(detail, "details");
-
-                    // Create HotelMasterEntity
-                    const hotelEntity = new HotelMasterEntity();
-                    hotelEntity.hotelCode = detail.HotelCode;
-                    hotelEntity.hotelName = detail.HotelName || '';
-                    hotelEntity.highlightText = detail.Description || '';
-                    hotelEntity.address = detail.Address || '';
-                    hotelEntity.city = detail.CityName || '';
-                    hotelEntity.countryCode = detail.CountryCode || '';
-                    hotelEntity.latitude = detail.Map ? detail.Map.split('|')[0] : null;
-                    hotelEntity.longitude = detail.Map ? detail.Map.split('|')[1] : null;
-                    hotelEntity.starRating = detail.HotelRating || null;
-                    hotelEntity.providerCode = 'TBO';
-                    hotelEntity.hotelSource = HotelSourceEnum.TBO;
-                    hotelEntity.isActive = true;
-                    hotelEntity.isDeleted = false;
-                    hotelEntity.createdAt = new Date();
-                    hotelEntities.push(hotelEntity);
-
-                    // TboHotelContentEntity
-                    const hotelContent = new TboHotelContentEntity();
-                    hotelContent.hotelCode = detail.HotelCode;
-                    hotelContent.hotelName = detail.HotelName || '';
-                    hotelContent.address = detail.Address || '';
-                    hotelContent.city = detail.CityName || '';
-                    hotelContent.cityCode = cityCode;
-                    hotelContent.countryCode = detail.CountryCode || '';
-                    hotelContent.latitude = detail.Map ? detail.Map.split('|')[0] : null;
-                    hotelContent.longitude = detail.Map ? detail.Map.split('|')[1] : null;
-                    hotelContent.rating = detail.HotelRating || null;
-                    hotelContentEntities.push(hotelContent);
-
-                    // TboHotelAdditionalDetailsEntity
-                    const additionalDetail = new TboHotelAdditionalDetailsEntity();
-                    additionalDetail.hotelCode = detail.HotelCode;
-                    additionalDetail.supplierCode = 'TBO';
-                    additionalDetail.hotelName = detail.HotelName || '';
-                    additionalDetail.rating = detail.HotelRating || null;
-                    additionalDetail.latitude = detail.Map ? detail.Map.split('|')[0] : null;
-                    additionalDetail.longitude = detail.Map ? detail.Map.split('|')[1] : null;
-                    additionalDetail.address = detail.Address || '';
-                    additionalDetail.city = detail.CityName || '';
-                    additionalDetail.state = '';
-                    additionalDetail.country = detail.CountryName || '';
-                    additionalDetail.cityCode = cityCode;
-                    additionalDetail.stateCode = '';
-                    additionalDetail.countryCode = detail.CountryCode || '';
-                    additionalDetail.pincode = detail.PinCode || '';
-                    additionalDetail.heroImage = detail.Image || '';
-                    additionalDetail.amenities = detail.HotelFacilities || [];
-                    additionalDetail.description = detail.Description;
-                    additionalDetail.hotelEmail = detail.Email || '';
-                    additionalDetail.hotelPhones = detail.PhoneNumber ? [detail.PhoneNumber] : [];
-                    additionalDetail.websiteUrl = detail.HotelWebsiteUrl || '';
-                    additionalDetail.interestPoints = detail.Attractions ? Object.values(detail.Attractions) : [];
-                    additionalDetail.terminals = [];
-                    additionalDetail.createdAt = new Date();
-                    additionalDetail.updatedAt = new Date();
-                    additionalDetail.hotelNameNormalized = detail.HotelName?.toLowerCase() || null;
-                    hotelAdditionalDetailsEntities.push(additionalDetail);
-
-                    // Hotel Images
-                    if (detail.Images && Array.isArray(detail.Images)) {
-                        let order = 1;
-                        for (const imgUrl of detail.Images) {
-                            const imageEntity = new TboHotelImagesEntity();
-                            imageEntity.hotelCode = detail.HotelCode;
-                            imageEntity.supplierCode = 'TBO';
-                            imageEntity.typeCode = 'EXTERIOR';
-                            imageEntity.url = imgUrl;
-                            imageEntity.order = order++;
-                            imageEntity.visualOrder = order;
-                            imageEntity.createdAt = new Date();
-                            imageEntity.updatedAt = new Date();
-                            hotelImagesEntities.push(imageEntity);
-                        }
-                    }
-
-                    successfullyProcessedHotels++;
-                }
-
-                // Start transaction for each batch
-                const entityManager: EntityManager = this.hotelMasterRepository.manager;
-
-                await entityManager.transaction(async (transactionalEntityManager) => {
-                    try {
-                        // Save HotelMasterEntity batch
-                        await transactionalEntityManager.save(HotelMasterEntity, hotelEntities);
-                        console.log(`Batch processed successfully: ${hotelEntities.length} hotels`);
-
-                        // Save related entities after committing the master entity save
-                        await transactionalEntityManager.save(TboHotelContentEntity, hotelContentEntities);
-                        await transactionalEntityManager.save(TboHotelAdditionalDetailsEntity, hotelAdditionalDetailsEntities);
-                        await transactionalEntityManager.save(TboHotelImagesEntity, hotelImagesEntities);
-
-                        console.log(`Successfully saved related entities for this batch`);
-
-                        // Clear entities after each batch to prepare for the next batch
-                        hotelEntities.length = 0;
-                        hotelContentEntities.length = 0;
-                        hotelAdditionalDetailsEntities.length = 0;
-                        hotelImagesEntities.length = 0;
-                    } catch (error) {
-                        this.logger.error('Error during transaction commit:', error);
-                        throw new Error('Transaction failed');
                     }
                 });
 
-                console.log(`Batch of 100 hotels committed successfully.`);
-            }
+                pipeline.on('end', async () => {
+                    // Process remaining
+                    if (batch.length > 0) {
+                        try {
+                            await this.saveCountryBatch(batch);
+                            processed += batch.length;
+                        } catch (err) {
+                            this.logger.error(`Error saving final country batch: ${err.message}`);
+                            failed += batch.length;
+                        }
+                    }
+                    resolve({ processed, failed });
+                });
 
-            return {
-                success: true,
-                message: `Hotel details added successfully: ${successfullyProcessedHotels} hotels`,
-            };
-
-        } catch (error) {
-            this.logger.error('Error in addHotelList:', error);
-            throw new InternalServerErrorException('Failed to add hotel list');
-        }
-    }
-
-    // 🧠 Automatically runs when app/module loads
-    // async onModuleInit() {
-    //     this.logger.log('⏳ HotelMasterService initialized — starting auto hotel sync...');
-    //     await this.syncAllHotelCodes();
-    // }
-
-    // async syncAllHotelCodes(): Promise<void> {
-    //     this.logger.log('🚀 Starting full hotel code sync...');
-
-    //     try {
-    //         this.logger.log('Starting hotel list dump from TBO API');
-    //         const headers = {}
-
-    //         // 🔹 Step 1: Get provider credentials
-    //         const providersData = await this.supplierCredService.getActiveProviders(headers);
-    //         const tboProvider = providersData.find((p) => p.code === 'TBO');
-    //         if (!tboProvider) throw new BadRequestException('TBO provider not found');
-
-    //         const providerCredentials = JSON.parse(tboProvider.provider_credentials);
-
-    //         const auth = {
-    //             username: providerCredentials.dump_username,
-    //             password: providerCredentials.dump_password,
-    //         };
-    //         // console.log(auth)
-
-    //         // 🔹 Step 3: Get hotel codes from TBO API
-    //         const listEndpoint = `${providerCredentials.dump_url}/hotelcodelist`;
-    //         const hotelListResponse = await Http.httpRequestTBOHotel('GET', listEndpoint, '', auth);
-
-    //         if (!hotelListResponse.HotelCodes || !Array.isArray(hotelListResponse.HotelCodes)) {
-    //             throw new BadRequestException('Invalid hotel codes response from TBO API');
-    //         }
-
-    //         const hotelCodes: (number | string)[] = hotelListResponse.HotelCodes;
-    //         this.logger.log(`📦 Received ${hotelCodes.length} hotel codes from API`);
-
-    //         // 🧠 Fetch existing codes once (for deduplication before insert)
-    //         const existingCodes = new Set(
-    //             (await this.hotelMasterRepository.find({ select: ['hotelCode'] })).map((h) => h.hotelCode),
-    //         );
-
-    //         const newCodes = hotelCodes.filter((code) => !existingCodes.has(String(code)));
-    //         this.logger.log(
-    //             `🧾 Skipping ${existingCodes.size} existing codes, inserting ${newCodes.length} new ones.`,
-    //         );
-
-    //         if (!newCodes.length) {
-    //             this.logger.log('✅ No new codes to insert. Sync complete.');
-    //             return;
-    //         }
-
-    //         if (!hotelCodes.length) return;
-
-    //         // 🔹 Step 4: Insert in Chunks
-    //         const chunkSize = 5000;
-    //         let totalInserted = 0;
-
-    //         for (let i = 0; i < newCodes.length; i += chunkSize) {
-    //             const chunk = newCodes.slice(i, i + chunkSize);
-
-    //             try {
-    //                 const hotelEntities = chunk.map((code) =>
-    //                     this.hotelMasterRepository.create({
-    //                         hotelCode: String(code),
-    //                         hotelSource: HotelSourceEnum.TBO,
-    //                         createdAt: new Date(),
-    //                     }),
-    //                 );
-
-    //                 await this.hotelMasterRepository
-    //                     .createQueryBuilder()
-    //                     .insert()
-    //                     .into(HotelMasterEntity)
-    //                     .values(hotelEntities)
-    //                     .onConflict(`("hotel_code") DO NOTHING`)
-    //                     .execute();
-
-    //                 totalInserted += hotelEntities.length;
-    //                 this.logger.log(`✅ Inserted ${i + chunk.length} / ${hotelCodes.length}`);
-    //             } catch (chunkError) {
-    //                 this.logger.error(`❌ Error inserting chunk ${i} - ${(chunkError as Error).message}`);
-    //             }
-    //         }
-
-    //         this.logger.log(`🏁 All hotel codes synced successfully. Total inserted: ${totalInserted}`);
-
-    //     } catch (error) {
-    //         // 🔹 Step 6: Handle API or logic-level errors
-    //         this.logger.error(`❌ Failed to sync hotel codes: ${(error as Error).message}`, (error as Error).stack);
-    //         // throw new InternalServerErrorException('Failed to add hotel list');
-    //     }
-    // }
-
-
-
-
-    // 🔹 Automatically runs once when the app/module starts
-    async onModuleInit() {
-        this.logger.log('🏁 HotelMasterService initialized — running initial sync...');
-        // await this.safeSyncSequence();
-    }
-
-    // 🕑 CRON JOB — Runs automatically every day at 2:00 AM (IST)
-    @Cron('0 2 * * *', { timeZone: 'Asia/Kolkata' })
-    async handleDailyHotelSync(): Promise<void> {
-        this.logger.log('🌙 Daily hotel sync started at 2:00 AM...');
-        // await this.safeSyncSequence();
-    }
-
-    // 🔹 Safe wrapper to handle sequence with error protection
-    private async safeSyncSequence() {
-        try {
-            await this.syncAllHotelCodes();
-            await this.syncInactiveHotelsFromDB();
-            this.logger.log('✅ Hotel auto-sync sequence complete');
-        } catch (error) {
-            this.logger.error(`❌ Sync sequence failed: ${(error as Error).message}`);
-        }
-    }
-
-
-    // 🔹 Step 1: Fetch all hotel codes from TBO and insert new ones
-    async syncAllHotelCodes(): Promise<void> {
-        this.logger.log('🚀 Starting full hotel code sync...');
-        try {
-            const headers = {
-                providerCode: 'TBO',
-                moduleType: 'Hotel',
-            }
-            const providersData = await this.supplierCredService.getActiveProviders(headers);
-            const tboProvider = providersData.find(p => p.code === 'TBO');
-            if (!tboProvider) throw new BadRequestException('TBO provider not found');
-
-            const providerCredentials = JSON.parse(tboProvider.provider_credentials);
-            const auth = {
-                username: providerCredentials.dump_username,
-                password: providerCredentials.dump_password,
-            };
-
-            const listEndpoint = `${providerCredentials.dump_url}/hotelcodelist`;
-            const hotelListResponse = await Http.httpRequestTBOHotel('GET', listEndpoint, '', auth);
-
-            if (!hotelListResponse.HotelCodes || !Array.isArray(hotelListResponse.HotelCodes))
-                throw new BadRequestException('Invalid hotel codes response from TBO API');
-
-            const hotelCodes: (number | string)[] = hotelListResponse.HotelCodes;
-            this.logger.log(`📦 Received ${hotelCodes.length} hotel codes`);
-
-            const existingCodes = new Set(
-                (await this.hotelMasterRepository.find({ select: ['hotelCode'] }))
-                    .map(h => h.hotelCode),
-            );
-
-            const newCodes = hotelCodes.filter(code => !existingCodes.has(String(code)));
-            this.logger.log(`🧾 ${existingCodes.size} existing codes skipped, ${newCodes.length} new to insert`);
-
-            if (!newCodes.length) {
-                this.logger.log('✅ No new codes to insert. Sync complete.');
-                return;
-            }
-
-            const chunkSize = 5000;
-            let totalInserted = 0;
-
-            for (let i = 0; i < newCodes.length; i += chunkSize) {
-                const chunk = newCodes.slice(i, i + chunkSize);
-                const entities = chunk.map(code => this.hotelMasterRepository.create({
-                    hotelCode: String(code),
-                    hotelSource: HotelSourceEnum.TBO,
-                    createdAt: new Date(),
-                    isActive: false, // 👈 default inactive until details synced
-                }));
-
-                await this.hotelMasterRepository
-                    .createQueryBuilder()
-                    .insert()
-                    .into(HotelMasterEntity)
-                    .values(entities)
-                    .onConflict(`("hotel_code") DO NOTHING`)
-                    .execute();
-
-                totalInserted += entities.length;
-                this.logger.log(`✅ Inserted ${i + chunk.length} / ${hotelCodes.length}`);
-            }
-
-            this.logger.log(`🏁 Hotel codes synced. Total inserted: ${totalInserted}`);
-        } catch (error) {
-            this.logger.error(`❌ Failed to sync hotel codes: ${error.message}`, error.stack);
-        }
-    }
-
-    // 🔹 Step 2: Process inactive hotels (from DB) and fetch their details
-    async syncInactiveHotelsFromDB(): Promise<void> {
-        this.logger.log('🚀 Starting inactive hotel sync...');
-        try {
-            const headers = {
-                providerCode: 'TBO',
-                moduleType: 'Hotel',
-            }
-            const providersData = await this.supplierCredService.getActiveProviders(headers);
-            const tboProvider = providersData.find(p => p.code === 'TBO');
-            if (!tboProvider) throw new BadRequestException('TBO provider not found');
-
-            const providerCredentials = JSON.parse(tboProvider.provider_credentials);
-            const auth = {
-                username: providerCredentials.dump_username,
-                password: providerCredentials.dump_password,
-            };
-
-            const detailEndpoint = `${providerCredentials.dump_url}/Hoteldetails`;
-            const inactiveHotels = await this.hotelMasterRepository.find({
-                where: { isActive: false },
-                select: ['hotelCode'],
-                take: 2000,
+                pipeline.on('error', (err) => {
+                    this.logger.error(`Stream error during country dump: ${err.message}`);
+                    reject(err);
+                });
             });
 
-            if (!inactiveHotels.length) {
-                this.logger.log('✅ No inactive hotels found.');
-                return;
+            const duration = Date.now() - startTime;
+            this.logger.log(`Background Country dump completed in ${duration}ms. Processed: ${processed}, Failed: ${failed}`);
+
+        } catch (error: any) {
+            const duration = Date.now() - startTime;
+            this.logger.error(`Error during background country dump: ${error.message}`, error.stack);
+        }
+    }
+
+    private async saveCountryBatch(countries: any[]) {
+        for (const country of countries) {
+            try {
+                const countryCode = country.Code;
+                const countryName = country.Name;
+
+                const existing = await this.countryRepository.findOne({ where: { iso2: countryCode } });
+
+                if (existing) {
+                    existing.iso2 = countryCode;
+                    existing.countryName = countryName;
+                    await this.countryRepository.save(existing);
+                } else {
+                    const newCountry = this.countryRepository.create({
+                        iso2: countryCode,
+                        countryName: countryName,
+                    });
+                    await this.countryRepository.save(newCountry);
+                }
+            } catch (e) {
+                this.logger.error(`Error saving country struct: ${e.message}`);
+                throw e;
+            }
+        }
+    }
+
+
+
+    async addCityList(headers: Headers, countryCode?: string): Promise<any> {
+        this.logger.log(`Initiating destination dump check...`);
+
+        // Determine countries count
+        let countriesCount = 0;
+        if (countryCode) {
+            countriesCount = 1;
+        } else {
+            countriesCount = await this.countryRepository.count();
+        }
+
+        // Trigger background process
+        this.processDestinationsInBackground(headers, countryCode).catch(err =>
+            this.logger.error(`Background destination dump failed: ${err.message}`, err.stack)
+        );
+
+        return {
+            status: 202,
+            message: `Destination dump initiated. Processing destinations for approximately ${countriesCount} countries. Check server logs for progress.`,
+            totalCountries: countriesCount,
+            timestamp: new Date().toISOString(),
+        };
+    }
+
+    private async processDestinationsInBackground(headers: Headers, countryCode?: string) {
+        const startTime = Date.now();
+        this.logger.log(`Starting background recursive destination dump from CityList API (Streaming).`);
+
+        let processed = 0;
+        let failed = 0;
+        let totalRecords = 0;
+
+        try {
+
+            const providersData = await this.supplierCredService.getActiveProviders(headers);
+            const tboProvider = providersData.find((p) => p.code === 'TBO');
+
+            if (!tboProvider) {
+                throw new BadRequestException('TBO provider not found');
+            }
+           
+
+            const providerCredentials = JSON.parse(tboProvider.provider_credentials);
+            const auth = {
+                username: providerCredentials.dump_username,
+                password: providerCredentials.dump_password,
+            };
+
+            const endpoint = `${providerCredentials?.dump_url}/CityList`;
+
+            // Determine countries to process
+            let countriesToProcess: {  iso2: string, countryId: number, countryName: string }[] = [];
+
+            if (countryCode) {
+                const selectCountry = await this.countryRepository.findOne({
+                    where: { iso2: countryCode },
+                    select: ['iso2', 'countryId', 'countryName']
+                    });
+                    if (selectCountry) {
+                countriesToProcess.push({  iso2: countryCode, countryId: selectCountry?.countryId , countryName: selectCountry?.countryName });
+                    }
+            } else {
+                const allCountries = await this.countryRepository.find({ select: ['iso2', 'countryId', 'countryName'] });
+                countriesToProcess = allCountries.map((c) => ({ iso2: c.iso2 , countryId: c.countryId, countryName: c.countryName}));
             }
 
-            this.logger.log(`📦 Found ${inactiveHotels.length} inactive hotels to process`);
+            this.logger.log(`Processing destinations for ${countriesToProcess.length} countries`);
 
-            for (const h of inactiveHotels) {
+            // Loop through countries
+            for (const country of countriesToProcess) {
                 try {
-                    await this.updateSingleHotelFromTBO(h.hotelCode, detailEndpoint, auth);
-                } catch (e) {
-                    this.logger.error(`❌ Failed hotel ${h.hotelCode}: ${e.message}`);
+                    const existingCityCount = await this.cityRepository.count({ where: { countryCode: country.iso2 } });
+                    if (existingCityCount > 0 && !countryCode) {
+                        this.logger.log(`[DestinationDump] Skipping country ${country.iso2} as cities already exist.`);
+                        continue;
+                    }
+
+                    const payload = {
+                        CountryCode: country.iso2,
+                    };
+
+                    this.logger.debug(`Fetching cities for country: ${country.iso2}`);
+
+                    const stream = await Http.httpRequestTBOHotelStream('POST', endpoint, payload, auth);
+
+                    const pipeline = stream
+                        .pipe(parser())
+                        .pipe(pick({ filter: 'CityList' }))
+                        .pipe(streamArray());
+
+                    await new Promise((resolve, reject) => {
+                        const batchSize = 1000;
+                        let batch: any[] = [];
+
+                        pipeline.on('data', async (data: any) => {
+                            const city = data.value;
+                            batch.push(city);
+                            totalRecords++;
+
+                            if (batch.length >= batchSize) {
+                                pipeline.pause();
+                                try {
+                                    await this.saveCityBatch(batch, country);
+                                    processed += batch.length;
+                                    this.logger.log(`[DestinationDump] Country ${country.iso2}: Processed ${processed} destinations...`);
+                                    batch = [];
+                                    pipeline.resume();
+                                } catch (err) {
+                                    this.logger.error(`Error saving city batch for ${country.iso2}: ${err.message}`);
+                                    failed += batch.length;
+                                    batch = [];
+                                    pipeline.resume();
+                                }
+                            }
+                        });
+
+                        pipeline.on('end', async () => {
+                            if (batch.length > 0) {
+                                try {
+                                    await this.saveCityBatch(batch, country);
+                                    processed += batch.length;
+                                } catch (err) {
+                                    this.logger.error(`Error saving final city batch for ${country.iso2}: ${err.message}`);
+                                    failed += batch.length;
+                                }
+                            }
+                            resolve(true);
+                        });
+
+                        pipeline.on('error', (err) => {
+                            this.logger.error(`Stream error during city dump for ${country.iso2}: ${err.message}`);
+                            // Don't reject the main loop, just log and resolve to continue to next country
+                            resolve(false);
+                        });
+                    });
+
+                } catch (err) {
+                    this.logger.error(`Error processing country ${country.iso2}: ${err.message}`);
+                    failed++;
                 }
             }
 
-            this.logger.log('🏁 Inactive hotel sync complete');
-        } catch (error) {
-            this.logger.error(`❌ Inactive hotel sync failed: ${error.message}`);
+            const duration = Date.now() - startTime;
+            this.logger.log(`Background Destination dump completed in ${duration}ms. Processed: ${processed}, Failed: ${failed}`);
+
+        } catch (error: any) {
+            const duration = Date.now() - startTime;
+            this.logger.error(`Error during background destination dump: ${error.message}`, error.stack);
         }
     }
 
-    // 🔹 Step 3: Update one hotel and its child entities
-    private async updateSingleHotelFromTBO(
-        hotelCode: string,
-        endpoint: string,
-        auth: any,
-    ): Promise<void> {
-        const detailResp = await Http.httpRequestTBOHotel('POST', endpoint, { Hotelcodes: hotelCode }, auth);
-        if (!detailResp?.HotelDetails?.length) {
-            this.logger.warn(`⚠️ No details found for hotel ${hotelCode}`);
-            return;
+    private async saveCityBatch(cities: any[], country: {countryId: number,countryName: string, iso2: string }) {
+        for (const city of cities) {
+            try {
+                const cityCode = city.Code;
+                const cityName = city.Name;
+
+                const existing = await this.cityRepository.findOne({ where: { cityCodeTbo: cityCode } });
+
+                if (existing) {
+                    existing.cityName = cityName;
+                    existing.countryCode = country.iso2;
+                    existing.countryCode = country.iso2;
+                    await this.cityRepository.save(existing);
+                } else {
+                    const newCity = this.cityRepository.create({
+                        cityName : cityName,
+                        cityCodeTbo : cityCode,
+                        countryId : country.countryId,
+                        countryCode : country.iso2|| '',
+                        countryName : country.countryName,
+                        stateId : 0,
+                        stateCode : '', 
+                        stateName : '', 
+                        latitude : 0, 
+                        longitude: 0,
+                    });
+                    await this.cityRepository.save(newCity);
+                }
+            } catch (innerErr) {
+                this.logger.error(`Error saving city ${city.Code}: ${innerErr.message}`);
+            }
         }
-
-        const detail = detailResp.HotelDetails[0];
-
-        await this.hotelMasterRepository.update(
-            { hotelCode },
-            {
-                hotelName: detail.HotelName || '',
-                highlightText: detail.Description || '',
-                address: detail.Address || '',
-                city: detail.CityName || '',
-                postalCode: detail.PinCode || '',
-                countryCode: detail.CountryCode.toUpperCase() || '',
-                heroImage: detail.Image,
-                latitude: detail.Map ? detail.Map.split('|')[0] : null,
-                longitude: detail.Map ? detail.Map.split('|')[1] : null,
-                starRating: detail.HotelRating || null,
-                providerCode: 'TBO',
-                isActive: true,
-                updatedAt: new Date(),
-            },
-        );
-
-        // Update related child tables
-        const hotelContent = new TboHotelContentEntity();
-
-        hotelContent.hotelCode = detail.HotelCode;
-        hotelContent.hotelName = detail.HotelName || '';
-        hotelContent.address = detail.Address || '';
-        hotelContent.city = detail.CityName || '';
-        hotelContent.cityCode = detail.CityId || '';
-        hotelContent.countryCode = detail.CountryCode.toUpperCase() || '';
-        hotelContent.country = detail.CountryName || ''
-        hotelContent.pincode = detail.PinCode || ''
-        hotelContent.latitude = detail.Map ? detail.Map.split('|')[0] : null;
-        hotelContent.longitude = detail.Map ? detail.Map.split('|')[1] : null;
-        hotelContent.rating = detail.HotelRating || null;
-        hotelContent.heroImage = detail.Image || null;
-        hotelContent.rating = detail.HotelRating || null;
-        hotelContent.hotelNameNormalized = detail.HotelName?.toLowerCase() || null;
-
-        await this.hotelMasterRepository.manager.save(hotelContent);
-
-        const additional = new TboHotelAdditionalDetailsEntity();
-
-        additional.hotelName = detail.HotelName || '';
-        additional.hotelCode = detail.HotelCode;
-        additional.supplierCode = 'TBO';
-        additional.address = detail.Address || '';
-        additional.city = detail.CityName || '';
-        additional.country = detail.CountryName || '';
-        additional.countryCode = detail.CountryCode || '';
-        additional.rating = detail.HotelRating || null;
-        additional.latitude = detail.Map ? detail.Map.split('|')[0] : null;
-        additional.longitude = detail.Map ? detail.Map.split('|')[1] : null;
-        additional.address = detail.Address || '';
-        additional.city = detail.CityName || '';
-        additional.cityCode = detail.CityId || '';
-        additional.state = '';  // Set to empty or pull from detail if available
-        additional.stateCode = ''; // Assuming you might pull this from elsewhere
-        additional.countryCode = detail.CountryCode || '';
-        additional.pincode = detail.PinCode || ''; // Pin code from the API response
-        additional.heroImage = detail.Image || ''; // Set the image as heroImage
-        additional.amenities = detail.HotelFacilities || []; // Map HotelFacilities to amenities
-        additional.description = detail.Description; // Add hotel descriptions if available
-        additional.hotelEmail = detail.Email || ''; // Add hotel email if available
-        additional.hotelPhones = detail.PhoneNumber ? [detail.PhoneNumber] : []; // Add phone numbers if available
-        additional.boardCodes = []; // Add board codes if available         
-        additional.hotelEmail = detail.Email || '';
-        additional.websiteUrl = detail.HotelWebsiteUrl || ''; // Hotel website URL
-        additional.interestPoints = detail.Attractions ? Object.values(detail.Attractions) : []; // Attractions as interest points
-        additional.terminals = []; // Add terminals if available
-        additional.createdAt = new Date();
-        additional.updatedAt = new Date();
-        additional.hotelVector = ''; // You might generate this or set it based on your data
-        additional.hotelNameNormalized = detail.HotelName?.toLowerCase() || null;
-
-        await this.hotelMasterRepository.manager.save(additional);
-
-        await this.hotelMasterRepository.manager.delete(TboHotelImagesEntity, { hotelCode });
-        if (Array.isArray(detail.Images)) {
-            const images = detail.Images.map((url, i) => ({
-                hotelCode,
-                supplierCode: 'TBO',
-                typeCode: 'EXTERIOR',
-                url,
-                order: i + 1,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            }));
-            await this.hotelMasterRepository.manager.save(TboHotelImagesEntity, images);
-        }
-
-        this.logger.log(`✅ Hotel ${hotelCode} fully updated`);
     }
+
+
+    /**
+     * Dumps hotel basic details from TBOHotelCodeList API
+     * @param headers - HTTP headers
+     * @param cityCode - Optional city code to filter hotels
+     * @returns Promise with dump results
+     */
+    async dumpHotelBasicDetails(headers: Headers, cityCode?: string): Promise<any> {
+        this.logger.log(`Initiating hotel basic details dump check...`);
+
+        try {
+            // Determine cities count
+            let citiesCount = 0;
+            if (cityCode) {
+                citiesCount = 1;
+            } else {
+                citiesCount = await this.cityRepository.count();
+            }
+
+            // Trigger background process
+            this.processHotelBasicDetailsInBackground(headers, cityCode).catch(err =>
+                this.logger.error(`Background hotel basic details dump failed: ${err.message}`, err.stack)
+            );
+
+            return {
+                status: 202,
+                message: `Hotel basic details dump initiated. Processing hotels for approximately ${citiesCount} cities. Check server logs for progress.`,
+                totalCities: citiesCount,
+                timestamp: new Date().toISOString(),
+            };
+        } catch (error: any) {
+            this.logger.error(`Error initiating hotel basic details dump: ${error.message}`, error.stack);
+            throw new BadRequestException(`Failed to initiate dump: ${error.message}`);
+        }
+    }
+
+    private async processHotelBasicDetailsInBackground(headers: Headers, cityCode?: string) {
+        const startTime = Date.now();
+        this.logger.log(`Starting background hotel basic details dump from TBOHotelCodeList API (Streaming).`);
+
+        let processed = 0;
+        let failed = 0;
+        let totalRecords = 0;
+
+        try {          
+
+            const providersData = await this.supplierCredService.getActiveProviders(headers);
+            const tboProvider = providersData.find((p) => p.code === 'TBO');
+
+            if (!tboProvider) {
+                throw new BadRequestException('TBO provider not found');
+            }
+
+            const providerCredentials = JSON.parse(tboProvider.provider_credentials);
+            const auth = {
+                username: providerCredentials.dump_username,
+                password: providerCredentials.dump_password,
+            };
+
+            const endpoint = `${providerCredentials?.dump_url}/TBOHotelCodeList`;
+
+            // Determine cities to process
+            let citiesToProcess: { code: string, hotelDumpUpdatedAt?: Date | null }[] = [];
+
+            if (cityCode) {
+                const specificCity = await this.cityRepository.findOne({ where: { cityCodeTbo: cityCode }, select: ['cityCodeTbo', 'hotelDumpUpdatedAt'] });
+                if (specificCity) {
+                   citiesToProcess.push({ code: specificCity.cityCodeTbo, hotelDumpUpdatedAt: specificCity.hotelDumpUpdatedAt });
+                } else {
+                   citiesToProcess.push({ code: cityCode });
+                }
+            } else {
+                this.logger.log('Fetching all destinations from database...');
+                const allCities = await this.cityRepository.find({ select: ['cityCodeTbo', 'hotelDumpUpdatedAt'] });
+                citiesToProcess = allCities.map((c) => ({ code: c.cityCodeTbo, hotelDumpUpdatedAt: c.hotelDumpUpdatedAt }));
+            }
+
+            this.logger.log(`Processing hotels for ${citiesToProcess.length} cities`);
+
+            // Loop through cities
+            for (const city of citiesToProcess) {
+                try {
+                    if (city.hotelDumpUpdatedAt && !cityCode) {
+                        const oneWeekAgo = new Date();
+                        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+                        if (city.hotelDumpUpdatedAt > oneWeekAgo) {
+                            this.logger.log(`[HotelBasicDump] Skipping city ${city.code} as it was dumped within the last 1 week.`);
+                            continue;
+                        }
+                    }
+
+                    const payload = {
+                        CityCode: city.code,
+                    };
+
+                    this.logger.debug(`Fetching hotels for city: ${city.code}`);
+
+                    const stream = await Http.httpRequestTBOHotelStream('POST', endpoint, payload, auth);
+
+                    const pipeline = stream
+                        .pipe(parser())
+                        .pipe(pick({ filter: 'Hotels' }))
+                        .pipe(streamArray());
+
+                    await new Promise((resolve, reject) => {
+                        const batchSize = 1000;
+                        let batch: any[] = [];
+
+                        pipeline.on('data', async (data: any) => {
+                            const hotel = data.value;
+                            batch.push(hotel);
+                            totalRecords++;
+
+                            if (batch.length >= batchSize) {
+                                pipeline.pause();
+                                try {
+                                    await this.saveHotelBasicBatch(batch, city.code);
+                                    processed += batch.length;
+                                    this.logger.log(`[HotelBasicDump] City ${city.code}: Processed ${processed} hotels...`);
+                                    batch = [];
+                                    pipeline.resume();
+                                } catch (err) {
+                                    this.logger.error(`Error saving hotel batch for city ${city.code}: ${err.message}`);
+                                    failed += batch.length;
+                                    batch = [];
+                                    pipeline.resume();
+                                }
+                            }
+                        });
+
+                        pipeline.on('end', async () => {
+                            if (batch.length > 0) {
+                                try {
+                                    await this.saveHotelBasicBatch(batch, city.code);
+                                    processed += batch.length;
+                                } catch (err) {
+                                    this.logger.error(`Error saving final hotel batch for city ${city.code}: ${err.message}`);
+                                    failed += batch.length;
+                                }
+                            }
+                            
+                            try {
+                                await this.cityRepository.update({ cityCodeTbo: city.code }, { hotelDumpUpdatedAt: new Date() });
+                            } catch (updateErr) {
+                                this.logger.error(`Error updating hotelDumpUpdatedAt for city ${city.code}: ${updateErr.message}`);
+                            }
+
+                            resolve(true);
+                        });
+
+                        pipeline.on('error', (err) => {
+                            this.logger.error(`Stream error during hotel dump for city ${city.code}: ${err.message}`);
+                            resolve(false);
+                        });
+                    });
+
+                } catch (err) {
+                    this.logger.error(`Error processing city ${city.code}: ${err.message}`);
+                    failed++;
+                }
+            }
+
+            const duration = Date.now() - startTime;
+            this.logger.log(`Background Hotel dump completed in ${duration}ms. Processed: ${processed}, Failed: ${failed}`);
+
+        } catch (error: any) {
+            const duration = Date.now() - startTime;
+            this.logger.error(`Error during background hotel dump: ${error.message}`, error.stack);
+        }
+    }
+
+
+    private async saveHotelBasicBatch(hotels: any[], cityCode: string) {
+        const hotelCodes = hotels.map(h => String(h.HotelCode));
+
+        const existingMaster = await this.hotelMasterRepository.find({ where: { hotelCode: In(hotelCodes) }, select: ['hotelCode'] });
+        const existingMasterSet = new Set(existingMaster.map(e => e.hotelCode));
+
+        const hotelEntities: HotelMasterEntity[] = [];
+        const hotelContentEntities: TboHotelContentEntity[] = [];
+        const hotelAdditionalDetailsEntities: TboHotelAdditionalDetailsEntity[] = [];
+
+        for (const hotel of hotels) {
+            try {
+                const hotelCode = String(hotel.HotelCode);
+
+                if (!existingMasterSet.has(hotelCode)) {
+                    const hotelName = hotel.HotelName || '';
+                    const lat = hotel.Latitude || null;
+                    const lng = hotel.Longitude || null;
+                    const address = hotel.Address || '';
+                    const rating = this.parseHotelRating(hotel.HotelRating);
+                    const country = hotel.CountryName || '';
+                    const countryCode = hotel.CountryCode || '';
+                    const city = hotel.CityName || '';
+
+                    const master = new HotelMasterEntity();
+                    master.hotelCode = hotelCode;
+                    master.hotelSource = HotelSourceEnum.TBO;
+                    master.providerCode = 'TBO';
+                    master.hotelName = hotelName;
+                    master.address = address;
+                    master.city = city;
+                    master.countryCode = countryCode;
+                    master.latitude = lat;
+                    master.longitude = lng;
+                    master.starRating = (rating ? String(rating) : null) as any;
+                    master.isActive = true;
+                    master.isDeleted = false;
+                    master.createdAt = new Date();
+                    hotelEntities.push(master);
+
+                    const content = new TboHotelContentEntity();
+                    content.hotelCode = hotelCode;
+                    content.hotelName = hotelName;
+                    content.address = address;
+                    content.city = city;
+                    content.cityCode = cityCode;
+                    content.countryCode = countryCode;
+                    content.latitude = lat;
+                    content.longitude = lng;
+                    content.rating = (rating ? String(rating) : null) as any;
+                    hotelContentEntities.push(content);
+
+                    const detail = new TboHotelAdditionalDetailsEntity();
+                    detail.hotelCode = hotelCode;
+                    detail.supplierCode = 'TBO';
+                    detail.hotelName = hotelName;
+                    detail.latitude = lat;
+                    detail.longitude = lng;
+                    detail.rating = (rating ? String(rating) : null) as any;
+                    detail.address = address;
+                    detail.country = country;
+                    detail.countryCode = countryCode;
+                    detail.city = city;
+                    detail.cityCode = cityCode;
+                    detail.status = 'PENDING';
+                    hotelAdditionalDetailsEntities.push(detail);
+
+                    existingMasterSet.add(hotelCode);
+                }
+            } catch (innerErr) {
+                this.logger.error(`Error processing hotel basic batch for code ${hotel?.HotelCode}: ${innerErr.message}`);
+            }
+        }
+
+        if (hotelEntities.length > 0) {
+            try {
+                const entityManager: EntityManager = this.hotelMasterRepository.manager;
+                await entityManager.transaction(async (transactionalEntityManager) => {
+                    await transactionalEntityManager.save(HotelMasterEntity, hotelEntities);
+                    await transactionalEntityManager.save(TboHotelContentEntity, hotelContentEntities);
+                    await transactionalEntityManager.save(TboHotelAdditionalDetailsEntity, hotelAdditionalDetailsEntities);
+                });
+            } catch (err) {
+                 this.logger.error(`Error in bulk save transaction for basic details: ${err.message}`);
+            }
+        }
+    }
+
+
+    async dumpHotelInfo(headers: Headers): Promise<any> {
+        this.logger.log(`Initiating hotel details dump check...`);
+
+        try {
+            // Check pending count
+            const totalPending = await this.hotelDetailsRepository.count({
+                where: { status: 'PENDING' },
+            });
+
+            if (totalPending === 0) {
+                return {
+                    status: 200,
+                    message: "No pending hotels found. All hotels are already processed.",
+                    totalPending: 0,
+                    timestamp: new Date().toISOString()
+                };
+            }
+
+            // Trigger background process
+            this.processHotelInfoInBackground(headers).catch(err =>
+                this.logger.error(`Background hotel info dump failed: ${err.message}`, err.stack)
+            );
+
+            return {
+                status: 202,
+                message: `Hotel details dump initiated. ${totalPending} hotels remaining to process. Check server logs for progress.`,
+                totalPending: totalPending,
+                timestamp: new Date().toISOString(),
+            };
+        } catch (error: any) {
+            this.logger.error(`Error initiating hotel details dump: ${error.message}`, error.stack);
+            throw new BadRequestException(`Failed to initiate dump: ${error.message}`);
+        }
+    }
+
+
+    private async processHotelInfoInBackground(headers: Headers) {
+        const startTime = Date.now();
+        this.logger.log(`Starting background hotel details dump from TBOHotelDetails API.`);
+
+        let processed = 0;
+        let failed = 0;
+
+        try {
+
+            const providersData = await this.supplierCredService.getActiveProviders(headers);
+            const tboProvider = providersData.find((p) => p.code === 'TBO');
+
+            if (!tboProvider) {
+                throw new BadRequestException('TBO provider not found');
+            }
+
+            const providerCredentials = JSON.parse(tboProvider.provider_credentials);
+            const auth = {
+                username: providerCredentials.dump_username,
+                password: providerCredentials.dump_password,
+            };
+
+            const endpoint = `${providerCredentials?.dump_url}/Hoteldetails`;
+
+            //  Fetch ALL PENDING hotels (only codes)
+            const pendingHotels = await this.hotelDetailsRepository.find({
+                where: { status: 'PENDING' },
+                select: ['hotelCode', 'supplierCode'],
+            });
+
+            this.logger.log(`Found ${pendingHotels.length} pending hotels to process`);
+
+            // Process in chunks of 50
+            const chunkSize = 50; // Using 50 to avoid overloading TBO with concurrent requests
+            const retryChunkSize = 10;
+
+            for (let i = 0; i < pendingHotels.length; i += chunkSize) {
+                const chunk = pendingHotels.slice(i, i + chunkSize);
+
+                // Try processing large batch
+                const result = await this.fetchAndProcessHotels(chunk, endpoint, auth);
+
+                if (!result.success) {
+                    this.logger.warn(`Batch starting at ${i} failed. Retrying in smaller chunks of ${retryChunkSize}...`);
+
+                    // Retry in smaller chunks
+                    for (let j = 0; j < chunk.length; j += retryChunkSize) {
+                        const subChunk = chunk.slice(j, j + retryChunkSize);
+                        const subResult = await this.fetchAndProcessHotels(subChunk, endpoint, auth);
+
+                        if (subResult.success) {
+                            processed += subResult.processed;
+                            failed += subResult.failed;
+                        } else {
+                            this.logger.error(`Sub-chunk starting at ${i + j} failed. Skipping.`);
+                            failed += subChunk.length;
+                        }
+                    }
+                } else {
+                    processed += result.processed;
+                    failed += result.failed;
+                }
+
+                this.logger.log(`[HotelDetailDump] Processed ${processed}/${pendingHotels.length} hotels. (Chunk ${i + 1}-${Math.min(i + chunkSize, pendingHotels.length)})`);
+            }
+
+            const duration = Date.now() - startTime;
+            this.logger.log(`Background Hotel details dump completed in ${duration}ms. Processed: ${processed}, Failed: ${failed}`);
+
+        } catch (error: any) {
+            const duration = Date.now() - startTime;
+            this.logger.error(`Error during background hotel details dump: ${error.message}`, error.stack);
+        }
+    }
+
+
+    private async fetchAndProcessHotels(hotels: any[], endpoint: string, auth: any): Promise<{ success: boolean; processed: number; failed: number }> {
+        let localProcessed = 0;
+        let localFailed = 0;
+        try {
+            const requestedCodes = hotels.map((h) => String(h.hotelCode));
+            const batchResponses = await Promise.all(
+                requestedCodes.map(code => 
+                    Http.httpRequestTBOHotel('POST', endpoint, { Hotelcodes: code, Language: 'en' }, auth)
+                    .catch(e => null)
+                )
+            );
+
+            const allDetails = batchResponses
+                .filter(res => res && res.HotelDetails && Array.isArray(res.HotelDetails) && res.HotelDetails.length > 0)
+                .map(res => res.HotelDetails[0]);
+
+            if (allDetails.length === 0) {
+                return { success: false, processed: 0, failed: requestedCodes.length };
+            }
+
+            localFailed += requestedCodes.length - allDetails.length;
+
+            const codes = allDetails.map(d => String(d.HotelCode));
+            const existingMasters = await this.hotelMasterRepository.find({ where: { hotelCode: In(codes) } });
+            const existingContents = await this.hotelContentRepository.find({ where: { hotelCode: In(codes) } });
+            const existingDetails = await this.hotelDetailsRepository.find({ where: { hotelCode: In(codes) } });
+
+            const mastersMap = new Map(existingMasters.map(e => [e.hotelCode, e]));
+            const contentsMap = new Map(existingContents.map(e => [e.hotelCode, e]));
+            const detailsMap = new Map(existingDetails.map(e => [e.hotelCode, e]));
+
+            const hotelEntities: HotelMasterEntity[] = [];
+            const hotelContentEntities: TboHotelContentEntity[] = [];
+            const hotelAdditionalDetailsEntities: TboHotelAdditionalDetailsEntity[] = [];
+            const hotelImagesEntities: TboHotelImagesEntity[] = [];
+
+            for (const details of allDetails) {
+                try {
+                    const hotelCode = String(details.HotelCode);
+                    
+                    const master = mastersMap.get(hotelCode) || new HotelMasterEntity();
+                    const content = contentsMap.get(hotelCode) || new TboHotelContentEntity();
+                    const additional = detailsMap.get(hotelCode) || new TboHotelAdditionalDetailsEntity();
+
+                    // 1. HotelMasterEntity
+                    master.hotelCode = hotelCode;
+                    master.hotelName = details.HotelName || '';
+                    master.highlightText = details.Description || '';
+                    master.address = details.Address || '';
+                    master.city = details.CityName || '';
+                    master.countryCode = details.CountryCode || '';
+                    master.latitude = details.Map ? details.Map.split('|')[0] : null;
+                    master.longitude = details.Map ? details.Map.split('|')[1] : null;
+                    master.starRating = details.HotelRating || null;
+                    master.providerCode = 'TBO';
+                    master.hotelSource = HotelSourceEnum.TBO;
+                    master.isActive = true;
+                    master.isDeleted = false;
+                    master.updatedAt = new Date();
+                    hotelEntities.push(master);
+
+                    // 2. TboHotelContentEntity
+                    content.hotelCode = hotelCode;
+                    content.hotelName = details.HotelName || '';
+                    content.address = details.Address || '';
+                    content.city = details.CityName || '';
+                    if (!content.cityCode) content.cityCode = additional.cityCode || '';
+                    content.countryCode = details.CountryCode || '';
+                    content.latitude = details.Map ? details.Map.split('|')[0] : null;
+                    content.longitude = details.Map ? details.Map.split('|')[1] : null;
+                    content.rating = details.HotelRating || null;
+                    hotelContentEntities.push(content);
+
+                    // 3. TboHotelAdditionalDetailsEntity
+                    additional.hotelCode = hotelCode;
+                    additional.supplierCode = 'TBO';
+                    additional.hotelName = details.HotelName || '';
+                    additional.rating = details.HotelRating || null;
+                    additional.latitude = details.Map ? details.Map.split('|')[0] : null;
+                    additional.longitude = details.Map ? details.Map.split('|')[1] : null;
+                    additional.address = details.Address || '';
+                    additional.city = details.CityName || '';
+                    additional.country = details.CountryName || '';
+                    additional.countryCode = details.CountryCode || '';
+                    additional.pincode = details.PinCode || '';
+                    additional.heroImage = details.Image || '';
+                    additional.amenities = details.HotelFacilities || [];
+                    additional.description = details.Description || '';
+                    additional.hotelEmail = details.Email || '';
+                    additional.hotelPhones = details.PhoneNumber ? [details.PhoneNumber] : [];
+                    if (details.FaxNumber) {
+                        additional.hotelPhones.push(details.FaxNumber);
+                    }
+                    additional.websiteUrl = details.HotelWebsiteUrl || '';
+                    additional.interestPoints = details.Attractions ? Object.values(details.Attractions) : [];
+                    additional.status = 'COMPLETE';
+                    additional.updatedAt = new Date();
+                    additional.hotelNameNormalized = details.HotelName?.toLowerCase() || null;
+                    hotelAdditionalDetailsEntities.push(additional);
+
+                    // 4. TboHotelImagesEntity
+                    if (details.Images && Array.isArray(details.Images)) {
+                        let order = 1;
+                        for (const imgUrl of details.Images) {
+                            const img = new TboHotelImagesEntity();
+                            img.hotelCode = hotelCode;
+                            img.supplierCode = 'TBO';
+                            img.typeCode = 'EXTERIOR';
+                            img.url = imgUrl;
+                            img.order = order++;
+                            img.visualOrder = order++;
+                            img.createdAt = new Date();
+                            img.updatedAt = new Date();
+                            hotelImagesEntities.push(img);
+                        }
+                    }
+
+                    localProcessed++;
+                } catch (innerErr) {
+                    this.logger.error(`Error processing details for hotel ${details.HotelCode}: ${innerErr.message}`);
+                    localFailed++;
+                }
+            }
+
+            const entityManager: EntityManager = this.hotelMasterRepository.manager;
+            await entityManager.transaction(async (transactionalEntityManager) => {
+                if (codes.length > 0) {
+                    await transactionalEntityManager.delete(TboHotelImagesEntity, { hotelCode: In(codes) });
+                }
+
+                if (hotelEntities.length > 0) {
+                     await transactionalEntityManager.save(HotelMasterEntity, hotelEntities);
+                }
+                if (hotelContentEntities.length > 0) {
+                     await transactionalEntityManager.save(TboHotelContentEntity, hotelContentEntities);
+                }
+                if (hotelAdditionalDetailsEntities.length > 0) {
+                     await transactionalEntityManager.save(TboHotelAdditionalDetailsEntity, hotelAdditionalDetailsEntities);
+                }
+                if (hotelImagesEntities.length > 0) {
+                     await transactionalEntityManager.save(TboHotelImagesEntity, hotelImagesEntities);
+                }
+            });
+
+            return { success: true, processed: localProcessed, failed: localFailed };
+        } catch (e) {
+            this.logger.warn(`API call failed for batch: ${e.message}`);
+            return { success: false, processed: 0, failed: 0 };
+        }
+    }
+
+    private parseHotelRating(rating: string): number {
+        switch (rating) {
+            case 'OneStar':
+                return 1;
+            case 'TwoStar':
+                return 2;
+            case 'ThreeStar':
+                return 3;
+            case 'FourStar':
+                return 4;
+            case 'FiveStar':
+                return 5;
+            default:
+                return 0;
+        }
+    } 
+
+ 
 
 
     private createAmenitiesCode(name) {

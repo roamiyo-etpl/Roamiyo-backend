@@ -37,6 +37,7 @@ let TboHotelAdditionalDetailsEntity = class TboHotelAdditionalDetailsEntity {
     websiteUrl;
     interestPoints;
     terminals;
+    status;
     createdAt;
     updatedAt;
     images;
@@ -65,11 +66,11 @@ __decorate([
     __metadata("design:type", Number)
 ], TboHotelAdditionalDetailsEntity.prototype, "rating", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'latitude', type: 'varchar', length: 20, nullable: true }),
+    (0, typeorm_1.Column)({ name: 'latitude', type: 'varchar', length: 50, nullable: true }),
     __metadata("design:type", String)
 ], TboHotelAdditionalDetailsEntity.prototype, "latitude", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'longitude', type: 'varchar', length: 20, nullable: true }),
+    (0, typeorm_1.Column)({ name: 'longitude', type: 'varchar', length: 50, nullable: true }),
     __metadata("design:type", String)
 ], TboHotelAdditionalDetailsEntity.prototype, "longitude", void 0);
 __decorate([
@@ -122,7 +123,7 @@ __decorate([
 ], TboHotelAdditionalDetailsEntity.prototype, "hotelEmail", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'hotel_phones', type: 'jsonb', nullable: true }),
-    __metadata("design:type", Array)
+    __metadata("design:type", Object)
 ], TboHotelAdditionalDetailsEntity.prototype, "hotelPhones", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'board_codes', type: 'jsonb', nullable: true }),
@@ -134,12 +135,16 @@ __decorate([
 ], TboHotelAdditionalDetailsEntity.prototype, "websiteUrl", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'interest_points', type: 'jsonb', nullable: true }),
-    __metadata("design:type", Array)
+    __metadata("design:type", Object)
 ], TboHotelAdditionalDetailsEntity.prototype, "interestPoints", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'terminals', type: 'jsonb', nullable: true }),
     __metadata("design:type", Array)
 ], TboHotelAdditionalDetailsEntity.prototype, "terminals", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'status', type: 'enum', enum: ['PENDING', 'COMPLETE'], default: 'PENDING' }),
+    __metadata("design:type", String)
+], TboHotelAdditionalDetailsEntity.prototype, "status", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamptz', nullable: true }),
     __metadata("design:type", Date)

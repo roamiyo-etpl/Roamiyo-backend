@@ -19,11 +19,12 @@ export declare class TboHotelAdditionalDetailsEntity {
     amenities: [];
     description: [];
     hotelEmail: string;
-    hotelPhones: string[] | [];
+    hotelPhones: any;
     boardCodes: [];
     websiteUrl: string;
-    interestPoints: string[] | [];
+    interestPoints: any;
     terminals: [];
+    status: 'PENDING' | 'COMPLETE';
     createdAt: Date;
     updatedAt: Date;
     images: TboHotelImagesEntity[];

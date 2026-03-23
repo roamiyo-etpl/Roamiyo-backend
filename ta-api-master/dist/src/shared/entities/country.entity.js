@@ -34,6 +34,8 @@ let CountryEntity = class CountryEntity {
     latitude;
     longitude;
     emojiU;
+    createdAt;
+    updatedAt;
 };
 exports.CountryEntity = CountryEntity;
 __decorate([
@@ -49,8 +51,8 @@ __decorate([
     __metadata("design:type", Object)
 ], CountryEntity.prototype, "iso3", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'iso2', type: 'varchar', length: 10, nullable: true }),
-    __metadata("design:type", Object)
+    (0, typeorm_1.Column)({ name: 'iso2', type: 'varchar', length: 10 }),
+    __metadata("design:type", String)
 ], CountryEntity.prototype, "iso2", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'numeric_code', type: 'varchar', length: 10, nullable: true }),
@@ -134,6 +136,14 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'emojiU', type: 'varchar', length: 20, nullable: true }),
     __metadata("design:type", Object)
 ], CountryEntity.prototype, "emojiU", void 0);
+__decorate([
+    (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' }),
+    __metadata("design:type", Date)
+], CountryEntity.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.UpdateDateColumn)({ name: 'updated_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' }),
+    __metadata("design:type", Date)
+], CountryEntity.prototype, "updatedAt", void 0);
 exports.CountryEntity = CountryEntity = __decorate([
     (0, typeorm_1.Entity)('country')
 ], CountryEntity);

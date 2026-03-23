@@ -25,6 +25,9 @@ let CityEntity = class CityEntity {
     longitude;
     cityVector;
     cityNameNormalized;
+    createdAt;
+    updatedAt;
+    hotelDumpUpdatedAt;
 };
 exports.CityEntity = CityEntity;
 __decorate([
@@ -81,6 +84,18 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'city_name_normalized', type: 'varchar', length: 100, nullable: true }),
     __metadata("design:type", Object)
 ], CityEntity.prototype, "cityNameNormalized", void 0);
+__decorate([
+    (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' }),
+    __metadata("design:type", Date)
+], CityEntity.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.UpdateDateColumn)({ name: 'updated_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' }),
+    __metadata("design:type", Date)
+], CityEntity.prototype, "updatedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'hotel_dump_updated_at', type: 'timestamp', nullable: true }),
+    __metadata("design:type", Object)
+], CityEntity.prototype, "hotelDumpUpdatedAt", void 0);
 exports.CityEntity = CityEntity = __decorate([
     (0, typeorm_1.Entity)('city')
 ], CityEntity);

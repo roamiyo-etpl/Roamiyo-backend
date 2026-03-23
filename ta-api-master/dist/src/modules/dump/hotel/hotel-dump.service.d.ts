@@ -1,4 +1,3 @@
-import { OnModuleInit } from '@nestjs/common';
 import { AmenityMasterEntity } from './entities/amenity-master.entity';
 import { AmenityMappingEntity } from './entities/amenity-mapping.entity';
 import { BoardCodeMasterEntity } from './entities/board-code-master.entity';
@@ -17,7 +16,7 @@ import { TboHotelImagesEntity } from './entities/tbo-hotel-images.entity';
 import { TboHotelAdditionalDetailsEntity } from './entities/tbo-hotel-additional-details.entity';
 import { TboHotelContentEntity } from './entities/tbo-hotel-content.entity';
 import { TboHotelRoomContentEntity } from './entities/tbo-hotel-room-content.entity';
-export declare class HotelDumpService implements OnModuleInit {
+export declare class HotelDumpService {
     private readonly amenityMasterRepository;
     private readonly amenityMappingRepository;
     private readonly boardCodeMasterRepository;
@@ -38,15 +37,18 @@ export declare class HotelDumpService implements OnModuleInit {
     transferDataToHotelContent(transferData: TransferDataToHotelContent): Promise<CommonResponse>;
     getHotelRoomContent(hotelCode: string): Promise<any>;
     bulkInsertHotelContent(hotelData: any[]): Promise<CommonResponse>;
-    addCountryList(headers: Headers): Promise<CommonResponse>;
-    addCityList(headers: Headers): Promise<CommonResponse>;
-    addHotelList(headers: Headers): Promise<CommonResponse>;
-    addHotelListProduction(headers: Headers): Promise<CommonResponse>;
-    onModuleInit(): Promise<void>;
-    handleDailyHotelSync(): Promise<void>;
-    private safeSyncSequence;
-    syncAllHotelCodes(): Promise<void>;
-    syncInactiveHotelsFromDB(): Promise<void>;
-    private updateSingleHotelFromTBO;
+    addCountryList(headers: Headers): Promise<any>;
+    private processCountriesInBackground;
+    private saveCountryBatch;
+    addCityList(headers: Headers, countryCode?: string): Promise<any>;
+    private processDestinationsInBackground;
+    private saveCityBatch;
+    dumpHotelBasicDetails(headers: Headers, cityCode?: string): Promise<any>;
+    private processHotelBasicDetailsInBackground;
+    private saveHotelBasicBatch;
+    dumpHotelInfo(headers: Headers): Promise<any>;
+    private processHotelInfoInBackground;
+    private fetchAndProcessHotels;
+    private parseHotelRating;
     private createAmenitiesCode;
 }

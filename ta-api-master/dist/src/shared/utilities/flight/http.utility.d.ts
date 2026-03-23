@@ -8,4 +8,8 @@ export declare class Http {
         username: string;
         password: string;
     }): Promise<any>;
+    static httpRequestTBOHotelStream(method: string, endpoint: string, data: any, auth?: {
+        username: string;
+        password: string;
+    }): Promise<any>;
 }

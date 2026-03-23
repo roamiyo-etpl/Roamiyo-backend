@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 /**
  * Country Entity - represents country data
@@ -15,8 +15,8 @@ export class CountryEntity {
     @Column({ name: 'iso3', type: 'varchar', length: 10, nullable: true })
     iso3: string | null;
 
-    @Column({ name: 'iso2', type: 'varchar', length: 10, nullable: true })
-    iso2: string | null;
+    @Column({ name: 'iso2', type: 'varchar', length: 10 })
+    iso2: string;
 
     @Column({ name: 'numeric_code', type: 'varchar', length: 10, nullable: true })
     numericCode: string | null;
@@ -89,4 +89,11 @@ export class CountryEntity {
 
     @Column({ name: 'emojiU', type: 'varchar', length: 20, nullable: true })
     emojiU: string | null;
+
+    @CreateDateColumn({ name: 'created_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+    createdAt: Date;
+
+    @UpdateDateColumn({ name: 'updated_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+    updatedAt: Date;
 }
+ 

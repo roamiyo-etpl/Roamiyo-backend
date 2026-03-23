@@ -12,4 +12,7 @@ export declare class CityEntity {
     longitude: number;
     cityVector: string | null;
     cityNameNormalized: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    hotelDumpUpdatedAt: Date | null;
 }

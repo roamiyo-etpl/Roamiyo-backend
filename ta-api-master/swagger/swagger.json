@@ -1343,7 +1343,7 @@
       }
     },
     "/dump/hotel/country-list": {
-      "post": {
+      "get": {
         "operationId": "HotelDumpController_addCountryList",
         "parameters": [
           {
@@ -1401,7 +1401,7 @@
       }
     },
     "/dump/hotel/city-list": {
-      "post": {
+      "get": {
         "operationId": "HotelDumpController_addCityList",
         "parameters": [
           {
@@ -1433,6 +1433,14 @@
                 "v1"
               ]
             }
+          },
+          {
+            "name": "countryCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1458,9 +1466,75 @@
         ]
       }
     },
-    "/dump/hotel/hotel-list": {
-      "post": {
-        "operationId": "HotelDumpController_addHotelList",
+    "/dump/hotel/hotel-basic-details": {
+      "get": {
+        "operationId": "HotelDumpController_dumpHotelBasicDetails",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          },
+          {
+            "name": "cityCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Entity not found"
+          },
+          "422": {
+            "description": "Unprocessable entity"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Add hotel basic details list dump from TBO API",
+        "tags": [
+          "Hotel Dump"
+        ]
+      }
+    },
+    "/dump/hotel/update-hotel-details": {
+      "get": {
+        "operationId": "HotelDumpController_dumpHotelInfo",
         "parameters": [
           {
             "name": "Currency-Preference",
@@ -1510,7 +1584,7 @@
             "description": "Internal server error"
           }
         },
-        "summary": "Add hotel list dump from TBO API",
+        "summary": "update hotel information details from TBO API",
         "tags": [
           "Hotel Dump"
         ]

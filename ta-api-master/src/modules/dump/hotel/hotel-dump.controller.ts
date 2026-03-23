@@ -21,7 +21,7 @@ import {
     SWG_HEADER_LANGUAGE_PREFERENCE_MANDATE,
 } from 'src/shared/constants/standard-api-headers.constant';
 
-import { ApiHeaders, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiHeaders, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { RequiredHeaders } from 'src/shared/decorators/common/custom-header.decorator';
 import { HotelAutocompleteDto } from './dtos/hotel-autocomplete.dto';
 import {
@@ -114,10 +114,11 @@ export class HotelDumpController {
     @ApiResponse(SWG_BAD_REQUEST_RESPONSE)
     @ApiResponse(SWG_UNPROCESSABLE_RESPONSE)
     @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
-    @Post('country-list')
+    @Get('country-list')
     @HttpCode(HttpStatus.OK)
-    async addCountryList(@Headers() headers: Headers): Promise<CommonResponse> {
+    async addCountryList(@Headers() headers: Headers){
         try {
+            // return await this.hotelDumpService.addCountryList(headers);
             return await this.hotelDumpService.addCountryList(headers);
         } catch (error) {
             throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
@@ -130,29 +131,72 @@ export class HotelDumpController {
     @ApiResponse(SWG_BAD_REQUEST_RESPONSE)
     @ApiResponse(SWG_UNPROCESSABLE_RESPONSE)
     @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
-    @Post('city-list')
+    @Get('city-list')
+    @ApiQuery({
+        name: 'countryCode',
+        required: false,
+    })
     @HttpCode(HttpStatus.OK)
-    async addCityList(@Headers() headers: Headers): Promise<CommonResponse> {
+    async addCityList(@Headers() headers: Headers, @Query('countryCode') countryCode?: string) {
         try {
-            return await this.hotelDumpService.addCityList(headers);
+            return await this.hotelDumpService.addCityList(headers, countryCode);
         } catch (error) {
             throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
-    @ApiOperation({ summary: 'Add hotel list dump from TBO API' })
+    // @ApiOperation({ summary: 'Add hotel list dump from TBO API' })
+    // @ApiResponse(SWG_SUCCESS_RESPONSE)
+    // @ApiResponse(SWG_NOT_FOUND_RESPONSE)
+    // @ApiResponse(SWG_BAD_REQUEST_RESPONSE)
+    // @ApiResponse(SWG_UNPROCESSABLE_RESPONSE)
+    // @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
+    // @Post('hotel-list')
+    // @HttpCode(HttpStatus.OK)
+    // async addHotelList(@Headers() headers: Headers): Promise<CommonResponse> {
+    //     try {
+    //         return await this.hotelDumpService.addHotelList(headers);
+    //     } catch (error) {
+    //         throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+    //     }
+    // }
+
+
+    @ApiOperation({ summary: 'Add hotel basic details list dump from TBO API' })
     @ApiResponse(SWG_SUCCESS_RESPONSE)
     @ApiResponse(SWG_NOT_FOUND_RESPONSE)
     @ApiResponse(SWG_BAD_REQUEST_RESPONSE)
     @ApiResponse(SWG_UNPROCESSABLE_RESPONSE)
     @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
-    @Post('hotel-list')
+    @Get('hotel-basic-details')
+    @ApiQuery({
+        name: 'cityCode',
+        required: false,
+    })
     @HttpCode(HttpStatus.OK)
-    async addHotelList(@Headers() headers: Headers): Promise<CommonResponse> {
+    async dumpHotelBasicDetails(@Headers() headers: Headers, @Query('cityCode') cityCode?: string) {
         try {
-            return await this.hotelDumpService.addHotelList(headers);
+            return await this.hotelDumpService.dumpHotelBasicDetails(headers, cityCode);
         } catch (error) {
             throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+
+    @ApiOperation({ summary: 'update hotel information details from TBO API' })
+    @ApiResponse(SWG_SUCCESS_RESPONSE)
+    @ApiResponse(SWG_NOT_FOUND_RESPONSE)
+    @ApiResponse(SWG_BAD_REQUEST_RESPONSE)
+    @ApiResponse(SWG_UNPROCESSABLE_RESPONSE)
+    @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
+    @Get('update-hotel-details')
+    async dumpHotelInfo(@Headers() headers: Headers) {
+         try {
+            return await this.hotelDumpService.dumpHotelInfo(headers);
+        } catch (error) {
+            throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
 }
+ 

@@ -12,7 +12,8 @@ export declare class HotelDumpController {
     getHotelDetails(hotelDetailRequestDto: HotelDetailRequestDto, headers: Headers): Promise<HotelDetailResponse>;
     getHotelRoomContent(hotelDetailRequestDto: HotelDetailRequestDto, headers: Headers): Promise<any>;
     transferDataToHotelContent(transferData: TransferDataToHotelContent, headers: Headers): Promise<CommonResponse>;
-    addCountryList(headers: Headers): Promise<CommonResponse>;
-    addCityList(headers: Headers): Promise<CommonResponse>;
-    addHotelList(headers: Headers): Promise<CommonResponse>;
+    addCountryList(headers: Headers): Promise<any>;
+    addCityList(headers: Headers, countryCode?: string): Promise<any>;
+    dumpHotelBasicDetails(headers: Headers, cityCode?: string): Promise<any>;
+    dumpHotelInfo(headers: Headers): Promise<any>;
 }

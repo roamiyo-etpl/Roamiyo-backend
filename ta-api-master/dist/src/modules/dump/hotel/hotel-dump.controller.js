@@ -67,17 +67,25 @@ let HotelDumpController = class HotelDumpController {
             throw new common_1.HttpException(error.message, error.status || common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
-    async addCityList(headers) {
+    async addCityList(headers, countryCode) {
         try {
-            return await this.hotelDumpService.addCityList(headers);
+            return await this.hotelDumpService.addCityList(headers, countryCode);
         }
         catch (error) {
             throw new common_1.HttpException(error.message, error.status || common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
-    async addHotelList(headers) {
+    async dumpHotelBasicDetails(headers, cityCode) {
         try {
-            return await this.hotelDumpService.addHotelList(headers);
+            return await this.hotelDumpService.dumpHotelBasicDetails(headers, cityCode);
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, error.status || common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async dumpHotelInfo(headers) {
+        try {
+            return await this.hotelDumpService.dumpHotelInfo(headers);
         }
         catch (error) {
             throw new common_1.HttpException(error.message, error.status || common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -152,7 +160,7 @@ __decorate([
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_BAD_REQUEST_RESPONSE),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_UNPROCESSABLE_RESPONSE),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_INTERNAL_SERVER_ERROR_RESPONSE),
-    (0, common_1.Post)('country-list'),
+    (0, common_1.Get)('country-list'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Headers)()),
     __metadata("design:type", Function),
@@ -166,27 +174,50 @@ __decorate([
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_BAD_REQUEST_RESPONSE),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_UNPROCESSABLE_RESPONSE),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_INTERNAL_SERVER_ERROR_RESPONSE),
-    (0, common_1.Post)('city-list'),
+    (0, common_1.Get)('city-list'),
+    (0, swagger_1.ApiQuery)({
+        name: 'countryCode',
+        required: false,
+    }),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Headers)()),
+    __param(1, (0, common_1.Query)('countryCode')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], HotelDumpController.prototype, "addCityList", null);
 __decorate([
-    (0, swagger_1.ApiOperation)({ summary: 'Add hotel list dump from TBO API' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Add hotel basic details list dump from TBO API' }),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_SUCCESS_RESPONSE),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_NOT_FOUND_RESPONSE),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_BAD_REQUEST_RESPONSE),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_UNPROCESSABLE_RESPONSE),
     (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_INTERNAL_SERVER_ERROR_RESPONSE),
-    (0, common_1.Post)('hotel-list'),
+    (0, common_1.Get)('hotel-basic-details'),
+    (0, swagger_1.ApiQuery)({
+        name: 'cityCode',
+        required: false,
+    }),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Headers)()),
+    __param(1, (0, common_1.Query)('cityCode')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], HotelDumpController.prototype, "dumpHotelBasicDetails", null);
+__decorate([
+    (0, swagger_1.ApiOperation)({ summary: 'update hotel information details from TBO API' }),
+    (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_SUCCESS_RESPONSE),
+    (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_NOT_FOUND_RESPONSE),
+    (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_BAD_REQUEST_RESPONSE),
+    (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_UNPROCESSABLE_RESPONSE),
+    (0, swagger_1.ApiResponse)(standard_api_responses_constant_1.SWG_INTERNAL_SERVER_ERROR_RESPONSE),
+    (0, common_1.Get)('update-hotel-details'),
     __param(0, (0, common_1.Headers)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
-], HotelDumpController.prototype, "addHotelList", null);
+], HotelDumpController.prototype, "dumpHotelInfo", null);
 exports.HotelDumpController = HotelDumpController = __decorate([
     (0, swagger_1.ApiTags)('Hotel Dump'),
     (0, swagger_1.ApiHeaders)([standard_api_headers_constant_1.SWG_HEADER_CURRENCY_PREFERENCE, standard_api_headers_constant_1.SWG_HEADER_IP_MANDATE, standard_api_headers_constant_1.SWG_HEADER_API_VERSION_MANDATE]),
