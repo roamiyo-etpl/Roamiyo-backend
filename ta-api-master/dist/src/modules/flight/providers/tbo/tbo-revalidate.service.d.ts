@@ -1,11 +1,11 @@
-import { GenericRepo } from 'src/shared/utilities/flight/generic-repo.utility';
-import { TboAuthTokenService } from './tbo-auth-token.service';
-import { s3BucketService } from 'src/shared/utilities/flight/s3bucket.utility';
-import { CancellationFareRule, FareRules, RevalidateResponse } from '../../revalidate/interfaces/revalidate.interface';
-import { Fare, Segment } from '../../search/interfaces/start-routing.interface';
-import { RevalidateResponseEntity } from 'src/shared/entities/revalidate-response.entity';
-import { Repository } from 'typeorm';
-import { SupplierLogUtility } from 'src/shared/utilities/flight/supplier-log.utility';
+import { GenericRepo } from "src/shared/utilities/flight/generic-repo.utility";
+import { TboAuthTokenService } from "./tbo-auth-token.service";
+import { s3BucketService } from "src/shared/utilities/flight/s3bucket.utility";
+import { CancellationFareRule, FareRules, RevalidateResponse } from "../../revalidate/interfaces/revalidate.interface";
+import { Fare, Segment } from "../../search/interfaces/start-routing.interface";
+import { RevalidateResponseEntity } from "src/shared/entities/revalidate-response.entity";
+import { Repository } from "typeorm";
+import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
 export declare class TboRevalidateService {
     private readonly tboAuthToken;
     private readonly s3BucketService;
