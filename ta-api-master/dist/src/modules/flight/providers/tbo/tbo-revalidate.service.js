@@ -288,6 +288,15 @@ let TboRevalidateService = class TboRevalidateService {
                 error: false,
                 message: "success",
                 route: flightRoutes[0],
+                IsBookableIfSeatNotAvailable: results?.Response?.Results?.IsBookableIfSeatNotAvailable,
+                IsExclusiveFare: results?.Response?.Results?.IsExclusiveFare,
+                IsFreeMealAvailable: results?.Response?.Results?.IsFreeMealAvailable,
+                IsHoldAllowedWithSSR: results?.Response?.Results?.IsHoldAllowedWithSSR,
+                IsHoldMandatoryWithSSR: results?.Response?.Results?.IsHoldMandatoryWithSSR,
+                IssuanceType: results?.Response?.Results?.IssuanceType,
+                IsLCC: results?.Response?.Results?.IsLCC,
+                IsRefundable: results?.Response?.Results?.IsRefundable,
+                IsCouponAppilcable: results?.Response?.Results?.IsCouponAppilcable,
                 passportRequired: results?.Response?.Results?.IsPassportRequiredAtTicket ||
                     results?.Response?.Results?.IsPassportFullDetailRequiredAtBook ||
                     false,
