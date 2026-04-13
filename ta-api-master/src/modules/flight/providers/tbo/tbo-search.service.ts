@@ -111,12 +111,14 @@ export class TboSearchService {
 
         const params = {
             EndUserIp: headers['ip-address'],
+            // EndUserIp: '20.244.28.12',
             TokenId: searchRequest.authToken,
             AdultCount: adultCount,
             ChildCount: childCount,
             InfantCount: infantCount,
             DirectFlight: false,
             OneStopFlight: false,
+            ResultFareType: searchReq.ResultFareType,
             JourneyType: Generic.getTripTypeTbo(searchReq.travelPreferences[0].airTripType),
             PreferredAirlines: null,
             Segments: searchAirLegs,

@@ -41,7 +41,7 @@ export class TravelPreference {
     @ApiProperty({
         description: 'Cabin class preference',
         example: 'Economy',
-        enum: ['Economy', 'Business', 'First', 'All'],
+        enum: ['Economy', 'Business', 'First', 'All', 'Premium_Economy'],
     })
     @IsString()
     cabinClass: string;

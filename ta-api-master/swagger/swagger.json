@@ -3137,7 +3137,8 @@
               "Economy",
               "Business",
               "First",
-              "All"
+              "All",
+              "Premium_Economy"
             ]
           },
           "airTripType": {

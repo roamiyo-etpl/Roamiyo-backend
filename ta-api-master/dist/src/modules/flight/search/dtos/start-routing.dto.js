@@ -67,7 +67,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Cabin class preference',
         example: 'Economy',
-        enum: ['Economy', 'Business', 'First', 'All'],
+        enum: ['Economy', 'Business', 'First', 'All', 'Premium_Economy'],
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

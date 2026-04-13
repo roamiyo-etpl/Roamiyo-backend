@@ -14,6 +14,7 @@ export declare class TboSearchService {
         InfantCount: number;
         DirectFlight: boolean;
         OneStopFlight: boolean;
+        ResultFareType: any;
         JourneyType: any;
         PreferredAirlines: null;
         Segments: any[];

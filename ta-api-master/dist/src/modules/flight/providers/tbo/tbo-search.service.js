@@ -109,6 +109,7 @@ let TboSearchService = class TboSearchService {
             InfantCount: infantCount,
             DirectFlight: false,
             OneStopFlight: false,
+            ResultFareType: searchReq.ResultFareType,
             JourneyType: generic_utility_1.Generic.getTripTypeTbo(searchReq.travelPreferences[0].airTripType),
             PreferredAirlines: null,
             Segments: searchAirLegs,
