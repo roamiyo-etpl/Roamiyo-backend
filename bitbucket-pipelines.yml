@@ -1,0 +1,144 @@
+# Monorepo layout: builds from ./ta-api-master. If your Bitbucket repo root is only ta-api-master,
+# remove every `cd ta-api-master` line and use `image-name.txt` instead of `../image-name.txt`.
+#
+# Bitbucket: Repository settings → Pipelines → Repository variables (secured where noted)
+#   ACR_LOGIN_SERVER   e.g. myregistry.azurecr.io
+#   ACR_USERNAME, ACR_PASSWORD
+#   AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID
+#   AZURE_SUBSCRIPTION_ID  (required for deploy — use az account set after login)
+# Deploy uses --allow-no-subscriptions on az login when the SP has no default directory subscriptions.
+# Optional: NPM_TOKEN (private npm, e.g. @emmvee scope)
+#
+# RBAC: Grant Contributor (or a role that includes Microsoft.App/containerApps/write) on the
+# resource group or subscription to this pipeline's *service principal* (AZURE_CLIENT_ID), not only your user.
+#
+# Container App names and resource groups are hardcoded below (edit to match your Azure resources).
+# Optional: keep deployment: on deploy steps for Bitbucket approvals/history — no deployment variables required.
+#
+# Images (same ACR, mutable tags; latest push wins per tag).
+# ACR repository: travel-app-travel-tek
+#   .../travel-app-travel-tek:dev
+#   .../travel-app-travel-tek:testing
+#   .../travel-app-travel-tek:production
+#
+# Branch → Container Apps (API only; this repo has no worker image):
+#   dev (resource group: rg-roamiyo-dev-resource):
+#     API: ca-roamiyo-travel-tek-dev
+#   testing / production: edit names below to match your Azure apps for this service.
+
+definitions:
+  services:
+    docker:
+      memory: 3072
+
+  steps:
+    - step: &build-and-push-dev
+        name: Build and push image (dev)
+        services:
+          - docker
+        script:
+          - cd ta-api-master
+          - export IMAGE_TAG=dev
+          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
+          - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
+          - docker push "${IMAGE_NAME}"
+          - echo "${IMAGE_NAME}" > ../image-name.txt
+        artifacts:
+          - image-name.txt
+
+    - step: &build-and-push-testing
+        name: Build and push image (testing)
+        services:
+          - docker
+        script:
+          - cd ta-api-master
+          - export IMAGE_TAG=testing
+          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
+          - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
+          - docker push "${IMAGE_NAME}"
+          - echo "${IMAGE_NAME}" > ../image-name.txt
+        artifacts:
+          - image-name.txt
+
+    - step: &build-and-push-production
+        name: Build and push image (production)
+        services:
+          - docker
+        script:
+          - cd ta-api-master
+          - export IMAGE_TAG=production
+          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
+          - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
+          - docker push "${IMAGE_NAME}"
+          - echo "${IMAGE_NAME}" > ../image-name.txt
+        artifacts:
+          - image-name.txt
+
+    - step: &deploy-azure-dev
+        name: Deploy to Azure Container Apps (dev)
+        image: mcr.microsoft.com/azure-cli:2.73.0
+        script:
+          - export IMAGE_NAME=$(cat image-name.txt)
+          - export AZURE_RESOURCE_GROUP=rg-roamiyo-dev-resource
+          - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
+          - az account list --output table
+          - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
+          - az extension add --name containerapp --upgrade -y
+          - az containerapp update --name ca-roamiyo-travel-tek-dev --resource-group "${AZURE_RESOURCE_GROUP}" --image "${IMAGE_NAME}"
+
+    - step: &deploy-azure-testing
+        name: Deploy to Azure Container Apps (testing)
+        image: mcr.microsoft.com/azure-cli:2.73.0
+        script:
+          - export IMAGE_NAME=$(cat image-name.txt)
+          - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
+          - az account list --output table
+          - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
+          - az extension add --name containerapp --upgrade -y
+          - az containerapp update --name roamiyo-login-testing --resource-group rg-roamiyo-login-testing --image "${IMAGE_NAME}"
+
+    - step: &deploy-azure-production
+        name: Deploy to Azure Container Apps (production)
+        image: mcr.microsoft.com/azure-cli:2.73.0
+        script:
+          - export IMAGE_NAME=$(cat image-name.txt)
+          - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
+          - az account list --output table
+          - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
+          - az extension add --name containerapp --upgrade -y
+          - az containerapp update --name roamiyo-login-production --resource-group rg-roamiyo-login-production --image "${IMAGE_NAME}"
+
+pipelines:
+  branches:
+    dev:
+      - step:
+          <<: *build-and-push-dev
+      - step:
+          <<: *deploy-azure-dev
+          deployment: development
+
+    testing:
+      - step:
+          <<: *build-and-push-testing
+      - step:
+          <<: *deploy-azure-testing
+          deployment: testing
+
+    production:
+      - step:
+          <<: *build-and-push-production
+      - step:
+          <<: *deploy-azure-production
+          deployment: production
+
+  default:
+    - step:
+        name: Build only (no deploy)
+        services:
+          - docker
+        script:
+          - cd ta-api-master
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t travel-app-travel-tek:ci .
