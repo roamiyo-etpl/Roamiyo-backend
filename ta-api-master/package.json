@@ -1,0 +1,103 @@
+{
+    "name": "api-master",
+    "version": "0.0.1",
+    "description": "",
+    "author": "",
+    "private": true,
+    "license": "UNLICENSED",
+    "engines": {
+        "node": "22.*"
+    },
+    "scripts": {
+        "preinstall": "node scripts/check-engine.js",
+        "check-engine": "node scripts/check-engine.js",
+        "prebuild": "npm run check-engine && rimraf dist",
+        "prestart": "npm run check-engine",
+        "build": "nest build",
+        "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+        "start": "NODE_ENV=production nest start",
+        "prestart:dev": "npm run check-engine",
+        "start:dev": "NODE_ENV=development nest start --watch",
+        "prestart:debug": "npm run check-engine",
+        "start:debug": "NODE_ENV=development nest start --debug --watch",
+        "prestart:prod": "npm run check-engine",
+        "start:prod": "NODE_ENV=production node dist/main",
+        "forever:dev": "NODE_ENV=development forever start dist/src/main.js --uid=emmvee-api-backend-dev",
+        "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+        "test": "jest",
+        "test:watch": "jest --watch",
+        "test:cov": "jest --coverage",
+        "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+        "test:e2e": "jest --config ./test/jest-e2e.json"
+    },
+    "dependencies": {
+        "@aws-sdk/client-s3": "^3.893.0",
+        "@azure/storage-blob": "^12.28.0",
+        "@css-inline/css-inline-darwin-arm64": "^0.20.0",
+        "@nestjs-modules/mailer": "^2.0.2",
+        "@nestjs/common": "^11.0.1",
+        "@nestjs/config": "^4.0.2",
+        "@nestjs/core": "^11.0.1",
+        "@nestjs/platform-express": "^11.0.1",
+        "@nestjs/schedule": "^6.0.1",
+        "@nestjs/swagger": "^11.2.0",
+        "@nestjs/typeorm": "^11.0.0",
+        "axios": "^1.11.0",
+        "cacheable": "^2.1.1",
+        "class-transformer": "^0.5.1",
+        "class-validator": "^0.14.2",
+        "crypto-js": "^4.2.0",
+        "joi": "^18.0.1",
+        "md5": "^2.3.0",
+        "moment": "^2.30.1",
+        "moment-timezone": "^0.6.0",
+        "mysql": "^2.18.1",
+        "pg": "^8.16.3",
+        "reflect-metadata": "^0.2.2",
+        "rimraf": "^6.0.1",
+        "rxjs": "^7.8.1",
+        "stream-json": "^1.9.1"
+    },
+    "devDependencies": {
+        "@eslint/eslintrc": "^3.2.0",
+        "@eslint/js": "^9.18.0",
+        "@nestjs/cli": "^11.0.0",
+        "@nestjs/schematics": "^11.0.0",
+        "@nestjs/testing": "^11.0.1",
+        "@types/express": "^5.0.0",
+        "@types/jest": "^30.0.0",
+        "@types/md5": "^2.3.6",
+        "@types/node": "^22.10.7",
+        "@types/supertest": "^6.0.2",
+        "eslint": "^9.18.0",
+        "eslint-config-prettier": "^10.0.1",
+        "eslint-plugin-prettier": "^5.2.2",
+        "globals": "^16.0.0",
+        "jest": "^30.0.0",
+        "source-map-support": "^0.5.21",
+        "supertest": "^7.0.0",
+        "ts-jest": "^29.2.5",
+        "ts-loader": "^9.5.2",
+        "ts-node": "^10.9.2",
+        "tsconfig-paths": "^4.2.0",
+        "typescript": "^5.7.3",
+        "typescript-eslint": "^8.20.0"
+    },
+    "jest": {
+        "moduleFileExtensions": [
+            "js",
+            "json",
+            "ts"
+        ],
+        "rootDir": "src",
+        "testRegex": ".*\\.spec\\.ts$",
+        "transform": {
+            "^.+\\.(t|j)s$": "ts-jest"
+        },
+        "collectCoverageFrom": [
+            "**/*.(t|j)s"
+        ],
+        "coverageDirectory": "../coverage",
+        "testEnvironment": "node"
+    }
+}
