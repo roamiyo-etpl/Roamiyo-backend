@@ -21,7 +21,7 @@
         "prestart:debug": "npm run check-engine",
         "start:debug": "NODE_ENV=development nest start --debug --watch",
         "prestart:prod": "npm run check-engine",
-        "start:prod": "NODE_ENV=production node dist/main",
+        "start:prod": "NODE_ENV=production node dist/src/main.js",
         "forever:dev": "NODE_ENV=development forever start dist/src/main.js --uid=emmvee-api-backend-dev",
         "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
         "test": "jest",
