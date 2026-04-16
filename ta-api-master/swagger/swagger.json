@@ -3724,7 +3724,10 @@
               ]
             ],
             "items": {
-              "type": "array"
+              "type": "array",
+              "items": {
+                "type": "a"
+              }
             },
             "type": "array"
           },
@@ -3936,7 +3939,10 @@
               ]
             ],
             "items": {
-              "type": "array"
+              "type": "array",
+              "items": {
+                "type": "a"
+              }
             },
             "type": "array"
           }
