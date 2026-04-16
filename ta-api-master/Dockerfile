@@ -14,7 +14,7 @@ ARG NPM_TOKEN
 RUN if [ -n "$NPM_TOKEN" ]; then \
       printf '%s\n' "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc; \
     fi \
-    && npm ci \
+    && npm ci --no-audit --no-fund --loglevel=info \
     && rm -f .npmrc
 
 COPY tsconfig.json ./
