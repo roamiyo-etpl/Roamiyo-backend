@@ -8,6 +8,8 @@ RUN apk add --no-cache git
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+# preinstall runs check-engine.js; it must exist before npm ci
+COPY scripts ./scripts/
 
 # Optional: pass from CI for private npm scopes — docker build --build-arg NPM_TOKEN=$NPM_TOKEN
 ARG NPM_TOKEN
