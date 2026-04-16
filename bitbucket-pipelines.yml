@@ -87,7 +87,7 @@ definitions:
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name ca-roamiyo-travel-tek-dev --resource-group "${AZURE_RESOURCE_GROUP}" --image "${IMAGE_NAME}"
+          - az containerapp update --name ca-roamiyo-travel-tek-dev --resource-group "${AZURE_RESOURCE_GROUP}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
 
     - step: &deploy-azure-testing
         name: Deploy to Azure Container Apps (testing)
@@ -98,7 +98,7 @@ definitions:
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name roamiyo-login-testing --resource-group rg-roamiyo-login-testing --image "${IMAGE_NAME}"
+          - az containerapp update --name roamiyo-login-testing --resource-group rg-roamiyo-login-testing --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
 
     - step: &deploy-azure-production
         name: Deploy to Azure Container Apps (production)
@@ -109,7 +109,7 @@ definitions:
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name roamiyo-login-production --resource-group rg-roamiyo-login-production --image "${IMAGE_NAME}"
+          - az containerapp update --name roamiyo-login-production --resource-group rg-roamiyo-login-production --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
 
 pipelines:
   branches:
