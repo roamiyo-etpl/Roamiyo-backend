@@ -36,7 +36,6 @@ ENV SERVER_PORT=5002
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/migrations ./migrations
 
 EXPOSE 5002
 
