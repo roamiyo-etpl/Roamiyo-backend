@@ -33,7 +33,6 @@
     "dependencies": {
         "@aws-sdk/client-s3": "^3.893.0",
         "@azure/storage-blob": "^12.28.0",
-        "@css-inline/css-inline-darwin-arm64": "^0.20.0",
         "@nestjs-modules/mailer": "^2.3.4",
         "@nestjs/common": "^11.0.1",
         "@nestjs/config": "^4.0.2",
