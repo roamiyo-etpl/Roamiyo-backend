@@ -35,10 +35,12 @@ export class TboSearchService {
   /** [@Description: This method is used to search the flights]
    * @author: Prashant Joshi at 13-10-2025 **/
   async search(searchRequest): Promise<StartRoutingResponse> {
+    console.log("searchRequest:::::::::", searchRequest);
     const { providerCred, searchReqId, searchReq } = searchRequest;
     const authToken =
       await this.tboAuthTokenService.getAuthToken(searchRequest);
     searchRequest.authToken = authToken;
+    
 
     try {
       console.log("Azure URL:", process.env.AZURE_BLOB_SAS_LINK);
@@ -63,7 +65,7 @@ export class TboSearchService {
         supplierResponse: searchResult,
       };
 
-      console.log("searchResult::::::::::",searchResult);
+      // console.log("searchResult::::::::::",searchResult);
       Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
 
       /* Convert the response to our standard format */
