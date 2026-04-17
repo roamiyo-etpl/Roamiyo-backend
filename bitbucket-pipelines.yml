@@ -40,7 +40,7 @@ definitions:
           - cd ta-api-master
           - export IMAGE_TAG=dev
           - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
-          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} --build-arg NODE_ENV=development -t "${IMAGE_NAME}" .
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
           - docker push "${IMAGE_NAME}"
           - echo "${IMAGE_NAME}" > ../image-name.txt
@@ -55,7 +55,7 @@ definitions:
           - cd ta-api-master
           - export IMAGE_TAG=testing
           - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
-          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} --build-arg NODE_ENV=production -t "${IMAGE_NAME}" .
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
           - docker push "${IMAGE_NAME}"
           - echo "${IMAGE_NAME}" > ../image-name.txt
@@ -70,7 +70,7 @@ definitions:
           - cd ta-api-master
           - export IMAGE_TAG=production
           - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
-          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} --build-arg NODE_ENV=production -t "${IMAGE_NAME}" .
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
           - docker push "${IMAGE_NAME}"
           - echo "${IMAGE_NAME}" > ../image-name.txt
@@ -90,7 +90,7 @@ definitions:
           - az extension add --name containerapp --upgrade -y
           - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
           - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
-          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5002) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5002 --transport auto
+          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5050) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5050 --transport auto
 
     - step: &deploy-azure-testing
         name: Deploy to Azure Container Apps (testing)
@@ -105,7 +105,7 @@ definitions:
           - az extension add --name containerapp --upgrade -y
           - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
           - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
-          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5002) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5002 --transport auto
+          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5050) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5050 --transport auto
 
     - step: &deploy-azure-production
         name: Deploy to Azure Container Apps (production)
@@ -120,7 +120,7 @@ definitions:
           - az extension add --name containerapp --upgrade -y
           - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
           - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
-          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5002) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5002 --transport auto
+          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5050) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5050 --transport auto
 
 pipelines:
   branches:

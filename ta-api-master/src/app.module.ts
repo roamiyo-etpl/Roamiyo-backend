@@ -19,7 +19,7 @@ import { BookingStatusUpdateScheduler } from './shared/schedulers/flight/booking
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
-            envFilePath: `${process.cwd()}/config/env/.env.${process.env.NODE_ENV}`,
+            envFilePath: `${process.cwd()}/config/env/.env.${process.env.NODE_ENV ?? 'development'}`,
             load: [Configuration],
             validationSchema,
         }),
