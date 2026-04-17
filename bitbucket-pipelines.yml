@@ -40,7 +40,7 @@ definitions:
           - cd ta-api-master
           - export IMAGE_TAG=dev
           - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
-          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} --build-arg NODE_ENV=development -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
           - docker push "${IMAGE_NAME}"
           - echo "${IMAGE_NAME}" > ../image-name.txt

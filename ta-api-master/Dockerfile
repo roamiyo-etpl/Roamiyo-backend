@@ -29,13 +29,16 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-# Nest listens on SERVER_PORT (see config/configuration.ts); align EXPOSE with ingress.
+# ConfigModule reads config/env/.env.${NODE_ENV}; dev builds pass --build-arg NODE_ENV=development.
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
 ENV SERVER_PORT=5002
 
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/config/env ./config/env
+RUN mkdir -p /app/swagger
 
 EXPOSE 5002
 
