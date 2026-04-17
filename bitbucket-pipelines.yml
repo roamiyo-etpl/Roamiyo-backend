@@ -83,33 +83,44 @@ definitions:
         script:
           - export IMAGE_NAME=$(cat image-name.txt)
           - export AZURE_RESOURCE_GROUP=rg-roamiyo-dev-resource
+          - export ACA_NAME=ca-roamiyo-travel-tek-dev
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name ca-roamiyo-travel-tek-dev --resource-group "${AZURE_RESOURCE_GROUP}" --image "${IMAGE_NAME}"
+          - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
+          - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
+          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5050) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5050 --transport auto
 
     - step: &deploy-azure-testing
         name: Deploy to Azure Container Apps (testing)
         image: mcr.microsoft.com/azure-cli:2.73.0
         script:
           - export IMAGE_NAME=$(cat image-name.txt)
+          - export ACA_NAME=roamiyo-login-testing
+          - export AZURE_RESOURCE_GROUP=rg-roamiyo-login-testing
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name roamiyo-login-testing --resource-group rg-roamiyo-login-testing --image "${IMAGE_NAME}"
+          - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
+          - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
+          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5050) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5050 --transport auto
 
     - step: &deploy-azure-production
         name: Deploy to Azure Container Apps (production)
         image: mcr.microsoft.com/azure-cli:2.73.0
         script:
           - export IMAGE_NAME=$(cat image-name.txt)
+          - export ACA_NAME=roamiyo-login-production
+          - export AZURE_RESOURCE_GROUP=rg-roamiyo-login-production
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name roamiyo-login-production --resource-group rg-roamiyo-login-production --image "${IMAGE_NAME}"
+          - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
+          - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
+          - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5050) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5050 --transport auto
 
 pipelines:
   branches:

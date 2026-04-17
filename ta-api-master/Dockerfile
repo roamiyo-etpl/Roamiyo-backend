@@ -21,22 +21,19 @@ RUN if [ -n "$NPM_TOKEN" ]; then \
 
 COPY tsconfig.json ./
 COPY . .
+COPY json ./json
 
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev \
+    && test -f json/currency.json && test -f json/airline_en.json && test -f json/airport_en.json
 
 # ---- Runtime ----
 FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-# Nest listens on SERVER_PORT (see config/configuration.ts); align EXPOSE with ingress.
-ENV SERVER_PORT=5002
-
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-
-EXPOSE 5002
+COPY --from=builder /app/ ./
+COPY --from=builder /app/json ./json
+RUN mkdir -p /app/swagger \
+    && test -f json/currency.json && test -f json/airline_en.json && test -f json/airport_en.json
 
 CMD ["node", "dist/src/main.js"]
