@@ -21,16 +21,19 @@ RUN if [ -n "$NPM_TOKEN" ]; then \
 
 COPY tsconfig.json ./
 COPY . .
+COPY json ./json
 
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev \
+    && test -f json/currency.json && test -f json/airline_en.json && test -f json/airport_en.json
 
 # ---- Runtime ----
 FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-# Full project tree (same layout as builder after build + prune): dist, prod node_modules, src, config, json, swagger, test, scripts, etc.
 COPY --from=builder /app/ ./
-RUN mkdir -p /app/swagger
+COPY --from=builder /app/json ./json
+RUN mkdir -p /app/swagger \
+    && test -f json/currency.json && test -f json/airline_en.json && test -f json/airport_en.json
 
 CMD ["node", "dist/src/main.js"]
