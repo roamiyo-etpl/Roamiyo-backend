@@ -29,10 +29,8 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/config/env ./config/env
+# Full project tree (same layout as builder after build + prune): dist, prod node_modules, src, config, json, swagger, test, scripts, etc.
+COPY --from=builder /app/ ./
 RUN mkdir -p /app/swagger
 
 CMD ["node", "dist/src/main.js"]
