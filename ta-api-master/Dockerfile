@@ -32,7 +32,7 @@ WORKDIR /app
 # ConfigModule reads config/env/.env.${NODE_ENV}; dev builds pass --build-arg NODE_ENV=development.
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
-ENV SERVER_PORT=5002
+ENV SERVER_PORT=5050
 
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
@@ -40,6 +40,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/config/env ./config/env
 RUN mkdir -p /app/swagger
 
-EXPOSE 5002
+EXPOSE 5050
 
 CMD ["node", "dist/src/main.js"]
