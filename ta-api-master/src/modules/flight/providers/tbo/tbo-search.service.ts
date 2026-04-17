@@ -63,6 +63,7 @@ export class TboSearchService {
         supplierResponse: searchResult,
       };
 
+      console.log("searchResult::::::::::",searchResult);
       Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
 
       /* Convert the response to our standard format */
