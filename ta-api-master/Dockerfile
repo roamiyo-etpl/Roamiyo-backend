@@ -22,7 +22,8 @@ RUN if [ -n "$NPM_TOKEN" ]; then \
 COPY tsconfig.json ./
 COPY . .
 
-RUN npm run build && npm prune --omit=dev
+# RUN npm run build && npm prune --omit=dev
+RUN npm run start:dev
 
 # ---- Runtime ----
 FROM node:22-alpine AS runtime
