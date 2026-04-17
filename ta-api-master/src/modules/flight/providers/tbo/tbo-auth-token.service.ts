@@ -59,7 +59,7 @@ export class TboAuthTokenService {
             const endpoint = `${providerCred.auth_url}/SharedData.svc/rest/Authenticate`;
 
             
-            // prod endpoint
+            // prod endpoint is 
             // const endpoint = `${providerCred.auth_url}/rest/Authenticate`;
             console.log("endpoint:::::::::",endpoint);
 
