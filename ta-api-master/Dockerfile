@@ -39,4 +39,4 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 5002
 
-CMD ["npm", "run start:dev"]
+CMD ["node", "dist/src/main.js"]
