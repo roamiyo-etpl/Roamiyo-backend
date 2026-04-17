@@ -22,8 +22,7 @@ RUN if [ -n "$NPM_TOKEN" ]; then \
 COPY tsconfig.json ./
 COPY . .
 
-# RUN npm run build && npm prune --omit=dev
-RUN npm run start:dev
+RUN npm run build && npm prune --omit=dev
 
 # ---- Runtime ----
 FROM node:22-alpine AS runtime
@@ -40,4 +39,4 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 5002
 
-CMD ["node", "dist/src/main.js"]
+CMD ["npm", "run start:dev"]
