@@ -47,10 +47,20 @@ export class BookService {
           infant: infantCount,
         },
       ];
+
+      console.log("===== BOOK INITIATE START =====");
+      console.log("searchReqId:", bookReq.searchReqId);
+      console.log("solutionId:", bookReq.solutionId);
+      console.log("tripType:", bookReq.airTripType);
+
       /* Call revalidate service to revalidate the booking */
       const revalidateResult = await this.revalidateService.revalidate(
         bookReq,
         headers,
+      );
+      console.log(
+        "REVALIDATE RESPONSE:",
+        revalidateResult?.error ? "FAILED" : "SUCCESS",
       );
       if (revalidateResult.error) {
         return {
@@ -86,23 +96,31 @@ export class BookService {
       fare = revalidateResult.route?.fare as unknown as Fare[];
 
       fare = fare.map((f) => {
-  const updatedSearchTotalFare =
-    (f.searchTotalFare ?? 0) + mealFare + seatFare + baggageFare;
+        const updatedSearchTotalFare =
+          (f.searchTotalFare ?? 0) + mealFare + seatFare + baggageFare;
 
-  return {
-    ...f,
+        return {
+          ...f,
 
-    mealFare: mealFare || 0,
-    seatFare: seatFare || 0,
-    baggageFare: baggageFare || 0,
+          mealFare: mealFare || 0,
+          seatFare: seatFare || 0,
+          baggageFare: baggageFare || 0,
 
-    searchTotalFare: updatedSearchTotalFare,
-    totalFare: updatedSearchTotalFare, // optional override
-  };
-});
+          searchTotalFare: updatedSearchTotalFare,
+          totalFare: updatedSearchTotalFare, // optional override
+        };
+      });
+
+      console.log("FARE BREAKDOWN:", {
+        mealFare,
+        seatFare,
+        baggageFare,
+        total: fare?.[0]?.searchTotalFare,
+      });
 
       const mwrLogId = Generic.generateRandomString(10);
 
+      console.log("Saving booking in DB...");
       const booking = await this.bookRepository.insertBooking({
         booking: bookReq,
         userId,
@@ -121,6 +139,7 @@ export class BookService {
         bookingLogId: bookingLog.id,
         data: { originalBookRequest: bookReq },
       });
+      console.log("===== BOOK INITIATE SUCCESS =====");
 
       return {
         error: false,
@@ -150,28 +169,34 @@ export class BookService {
     const { bookReq, headers } = reqParams;
     let booking: Booking = new Booking();
     try {
+      console.log("===== BOOK CONFIRMATION START =====");
+      console.log("bookingId:", bookReq.bookingId);
+      console.log("bookingLogId:", bookReq.bookingLogId);
+
       /* Get booking from database */
       booking = await this.bookRepository.getBookingByBookingId({
         bookingId: bookReq.bookingId,
       });
-    //   console.log("Booking found:", booking.booking_id);
+      //   console.log("Booking found:", booking.booking_id);
 
       /* Get booking log from database */
-      console.log("bookReq.bookingLogId", bookReq.bookingLogId);
+      console.log("Booking fetched:", booking?.booking_id);
       const bookingLog = await this.bookRepository.getBookingLogByBookingLogId({
         bookingLogId: bookReq.bookingLogId,
       });
-    //   console.log("Booking log found:", bookingLog.id);
+      //   console.log("Booking log found:", bookingLog.id);
       /* Verify booking log */
       await this.bookRepository.verifyBookingLog({
         bookingLogId: bookReq.bookingLogId,
       });
       // Retrieve original booking request from booking log
       const originalBookRequest: BookDto = bookingLog.data?.originalBookRequest;
-    //   console.log("originalBookRequest", originalBookRequest);
+      //   console.log("originalBookRequest", originalBookRequest);
       if (!originalBookRequest) {
         throw new Error("Original booking request not found in booking log");
       }
+
+      console.log("Calling PROVIDER BOOK API (TBO)...");
 
       /* Call provider API to confirm booking */
       const supplierDetails = await this.providerBookService.providerBook({
@@ -179,7 +204,13 @@ export class BookService {
         headers,
         logId: bookReq.bookingLogId,
       });
-    //   console.log("supplierDetails", supplierDetails);
+      //   console.log("supplierDetails", supplierDetails);
+
+      console.log(
+        "TBO BOOK RESPONSE:",
+        supplierDetails?.error ? "FAILED" : "SUCCESS",
+      );
+      console.log("OrderDetails:", supplierDetails?.orderDetail);
 
       const response = new BookResponse();
       Object.assign(response, {
@@ -191,6 +222,8 @@ export class BookService {
         orderDetail: supplierDetails.orderDetail ?? [],
         // orderDetails: supplierDetails.orderDetails ?? null,
       });
+
+      console.log("Updating booking with supplier response...");
 
       /* Update booking with supplier details including order details and original request */
       await this.bookRepository.updateBookingWithSupplierDetails({
@@ -210,6 +243,7 @@ export class BookService {
       if (response.error) {
         await this.bookRepository.BookingStatusFailed(booking.booking_id);
       }
+      console.log("===== BOOK CONFIRMATION END =====");
       return response;
     } catch (error) {
       console.error("Booking confirmation error:", error);

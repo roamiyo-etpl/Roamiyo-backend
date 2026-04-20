@@ -44,6 +44,7 @@ export class TboRevalidateService {
     requestData,
   ): Promise<RevalidateResponse | RevalidateResponse[]> {
     const { providerCred, revalidateReq } = requestData;
+    console.log("requestData::::::::::",requestData);
 
     Object.assign(requestData, { tokenReqData: revalidateReq });
     // For domestic roundTrip pass solutionID with( ||| )
@@ -160,10 +161,12 @@ export class TboRevalidateService {
 
       let result = convertedResultArray[0];
 
+      console.log("convertedResultArray:::::::",convertedResultArray);
+
       // ✅ HANDLE ONEWAY (ADD THIS BLOCK)
 
       if (convertedResultArray.length === 1) {
-        const fareA = convertedResultArray[0]?.route?.fare[0];
+        const fareA = convertedResultArray[0]?.route?.fare[0]; 
 
         const legs: any[] = [];
 
