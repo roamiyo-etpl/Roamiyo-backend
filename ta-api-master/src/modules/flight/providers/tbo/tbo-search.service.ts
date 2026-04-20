@@ -35,12 +35,11 @@ export class TboSearchService {
   /** [@Description: This method is used to search the flights]
    * @author: Prashant Joshi at 13-10-2025 **/
   async search(searchRequest): Promise<StartRoutingResponse> {
-    console.log("searchRequest:::::::::", searchRequest);
+    // console.log("searchRequest:::::::::", searchRequest);
     const { providerCred, searchReqId, searchReq } = searchRequest;
     const authToken =
       await this.tboAuthTokenService.getAuthToken(searchRequest);
     searchRequest.authToken = authToken;
-    
 
     try {
       console.log("Azure URL:", process.env.AZURE_BLOB_SAS_LINK);
@@ -66,7 +65,11 @@ export class TboSearchService {
       };
 
       // console.log("searchResult::::::::::",searchResult);
-      Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
+      // Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
+
+      if (process.env.ENABLE_LOCAL_LOGS === "true") {
+        Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
+      }
 
       /* Convert the response to our standard format */
       const searchResponse = await this.convertingResponse(
@@ -89,7 +92,10 @@ export class TboSearchService {
         logsWithRes.supplierResponseTime,
       );
       console.log("ConvertTime", logsWithRes.ApiResponseTime);
-      Generic.generateLogFile(searchReqId + "-TBO", logsWithRes, "search");
+      // Generic.generateLogFile(searchReqId + "-TBO", logsWithRes, "search");
+      if (process.env.ENABLE_LOCAL_LOGS === "true") {
+        Generic.generateLogFile(searchReqId + "-TBO", logsWithRes, "search");
+      }
 
       return searchResponse;
     } catch (error) {

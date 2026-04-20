@@ -125,16 +125,29 @@ export class TboRevalidateService {
         };
         // await this.s3BucketService.generateS3LogFile(revalidateReq.searchReqId + ' ' + i + '-' + this.logDate + '-TBO', logsWithRes, 'revalidate');
         // this.supplierLogs.updateSupplierLogs(revalidateReq.searchReqId, logsWithRes, 'TBO', 'revalidate', storedLog?.logId);
-        await this.supplierLogUtility.generateLogFile({
-          fileName:
-            revalidateReq.searchReqId + " " + i + "-" + this.logDate + "-TBO",
-          logData: logsWithRes,
-          folderName: "revalidate",
-          logId: null,
-          title: "FareQuote-TBO",
-          searchReqId: revalidateReq.searchReqId,
-          bookingReferenceId: null,
-        });
+        // await this.supplierLogUtility.generateLogFile({
+        //   fileName:
+        //     revalidateReq.searchReqId + " " + i + "-" + this.logDate + "-TBO",
+        //   logData: logsWithRes,
+        //   folderName: "revalidate",
+        //   logId: null,
+        //   title: "FareQuote-TBO",
+        //   searchReqId: revalidateReq.searchReqId,
+        //   bookingReferenceId: null,
+        // });
+
+        if (process.env.ENABLE_LOCAL_LOGS === "true") {
+          await this.supplierLogUtility.generateLogFile({
+            fileName:
+              revalidateReq.searchReqId + " " + i + "-" + this.logDate + "-TBO",
+            logData: logsWithRes,
+            folderName: "revalidate",
+            logId: null,
+            title: "FareQuote-TBO",
+            searchReqId: revalidateReq.searchReqId,
+            bookingReferenceId: null,
+          });
+        }
         /* Adding Supplier response too, for creating booking request */
         Object.assign(convertedResult, { supplierRes: revalidateResult });
         convertedResultArray.push(convertedResult);
