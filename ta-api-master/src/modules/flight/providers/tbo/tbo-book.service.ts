@@ -461,7 +461,7 @@ export class TboBookService {
 
     console.log("TICKETING STATUS:", ticketingResult?.Response?.ResponseStatus);
     console.log("PNR:", ticketingResult?.Response?.Response?.PNR);
-    
+
     const endTime = Date.now();
     const responseTimeMs = endTime - startTime;
 
@@ -585,6 +585,13 @@ export class TboBookService {
 
       // get pex fare from DB fare breakdown
       const fare = fareBreakDown?.find((f) => f?.PassengerType === pexT);
+      console.log("👤 Passenger Fare Breakdown:", {
+        passengerName: element?.passengerDetail?.firstName,
+        passengerType: element?.passengerType,
+        baseFare: fare?.BaseFare,
+        passengerCount: fare?.PassengerCount,
+        dividedFare: fare?.BaseFare / (fare?.PassengerCount || 1),
+      });
 
       return {
         Title: element?.passengerDetail?.title || "Mr",

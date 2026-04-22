@@ -39,6 +39,13 @@ export class BookService {
         (p) => p.passengerType === "INF",
       ).length;
 
+      console.log("👥 Passenger Summary:", {
+        totalPassengers: bookReq.passengers.length,
+        adults: adultCount,
+        children: childrenCount,
+        infants: infantCount,
+      });
+
       // Build paxes array with the correct counts
       bookReq.paxes = [
         {
@@ -110,6 +117,17 @@ export class BookService {
           totalFare: updatedSearchTotalFare, // optional override
         };
       });
+      console.log(
+        "💰 RAW FARE FROM REVALIDATE:",
+        JSON.stringify(revalidateResult.route?.fare, null, 2),
+      );
+
+      console.log("💰 FINAL FARE ARRAY:", JSON.stringify(fare, null, 2));
+
+      console.log(
+        "💰 FINAL TOTAL FARE (searchTotalFare):",
+        fare?.[0]?.searchTotalFare,
+      );
 
       console.log("FARE BREAKDOWN:", {
         mealFare,
