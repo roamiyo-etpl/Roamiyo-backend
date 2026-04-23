@@ -1040,6 +1040,20 @@
         ]
       }
     },
+    "/flight/ssr/seat-map": {
+      "post": {
+        "operationId": "SsrController_getSeatMap",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Ssr"
+        ]
+      }
+    },
     "/dump/hotel/autocomplete": {
       "get": {
         "operationId": "HotelDumpController_getHotelAutocomplete",

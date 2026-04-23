@@ -12,6 +12,7 @@ import { BalanceCheckModule } from './balance-check/balance-check.module';
 import { CancelModule } from './cancel/cancel.module';
 import { AirlineModule } from './airline/airline.module';
 import { AirportModule } from './airport/airport.module';
+import { SsrModule } from './ssr/ssr.module';
 
 @Module({
     imports: [
@@ -25,6 +26,7 @@ import { AirportModule } from './airport/airport.module';
         CancelModule,
         AirlineModule,
         AirportModule,
+        SsrModule
     ],
     controllers: [],
     providers: [],
