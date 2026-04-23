@@ -626,17 +626,27 @@ export class TboBookService {
         FFNumber: null,
         Fare: {
           Currency: fare?.Currency,
-          BaseFare: fare?.BaseFare / (fare?.PassengerCount || 1) || 0,
-          Tax: fare?.Tax / (fare?.PassengerCount || 1) || 0,
-          YQTax: fare?.YQTax / (fare?.PassengerCount || 1) || 0,
-          AdditionalTxnFeeOfrd:
-            fare?.AdditionalTxnFeeOfrd / (fare?.PassengerCount || 1) || 0,
-          AdditionalTxnFeePubL:
-            fare?.AdditionalTxnFeePubL / (fare?.PassengerCount || 1) || 0,
-          PGCharge: fare?.PGCharge / (fare?.PassengerCount || 1) || 0,
+          BaseFare: fare?.BaseFare || 0,
+          Tax: fare?.Tax || 0,
+          YQTax: fare?.YQTax || 0,
+          AdditionalTxnFeeOfrd: fare?.AdditionalTxnFeeOfrd || 0,
+          AdditionalTxnFeePubL: fare?.AdditionalTxnFeePubL || 0,
+          PGCharge: fare?.PGCharge || 0,
         },
+        // Fare: {
+        //   Currency: fare?.Currency,
+        //   BaseFare: fare?.BaseFare / (fare?.PassengerCount || 1) || 0,
+        //   Tax: fare?.Tax / (fare?.PassengerCount || 1) || 0,
+        //   YQTax: fare?.YQTax / (fare?.PassengerCount || 1) || 0,
+        //   AdditionalTxnFeeOfrd:
+        //     fare?.AdditionalTxnFeeOfrd / (fare?.PassengerCount || 1) || 0,
+        //   AdditionalTxnFeePubL:
+        //     fare?.AdditionalTxnFeePubL / (fare?.PassengerCount || 1) || 0,
+        //   PGCharge: fare?.PGCharge / (fare?.PassengerCount || 1) || 0,
+        // },
       };
     });
+    console.log("🚀 FINAL PASSENGER PAYLOAD:", JSON.stringify(passengerArray, null, 2));
 
     const authToken = await this.tboAuthTokenService.getAuthToken(bookRequest);
     let obj: any = {};
