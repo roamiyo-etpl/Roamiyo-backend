@@ -525,6 +525,18 @@ export class BookDto {
     @ValidateNested()
     @Type(() => GSTDetails)
     gst?: GSTDetails;
+
+    @ApiPropertyOptional({
+  description: 'SSR data (Seat, Meal, Baggage)',
+  example: {
+    "0": {
+      MealDynamic: [{ Code: "ML1", Price: 200 }],
+      SeatDynamic: [{ Code: "S1", Price: 300 }],
+    },
+  },
+})
+@IsOptional()
+ssr?: any;
 }
 
 export class BookConfirmationDto {

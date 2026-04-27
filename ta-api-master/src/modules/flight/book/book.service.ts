@@ -145,6 +145,70 @@ export class BookService {
         mwrLogId,
       });
 
+      // NEW SSR HANDLING (Passenger → Standard SSR format)
+
+      let formattedSSR: any = {};
+
+      if (bookReq.Passengers && Array.isArray(bookReq.Passengers)) {
+        formattedSSR = bookReq.Passengers.reduce((acc, pax, index) => {
+          if (!pax) return acc;
+
+          acc[index] = {};
+
+          // BAGGAGE → store full object
+          if (Array.isArray(pax.Baggage) && pax.Baggage.length > 0) {
+            const baggage = pax.Baggage[0];
+
+            if (baggage && baggage.Code !== "NoBaggage") {
+              acc[index].Baggage = [baggage];
+            }
+          }
+
+          // MEAL → store full object
+          if (Array.isArray(pax.MealDynamic) && pax.MealDynamic.length > 0) {
+            const meal = pax.MealDynamic[0];
+
+            if (meal && meal.Code !== "NoMeal") {
+              acc[index].MealDynamic = [meal];
+            }
+          }
+
+          // SEAT → store full object
+          if (Array.isArray(pax.SeatDynamic) && pax.SeatDynamic.length > 0) {
+            const seat = pax.SeatDynamic[0];
+
+            if (seat && seat.Code !== "NoSeat") {
+              acc[index].SeatDynamic = [seat];
+            }
+          }
+
+          // remove empty
+          if (Object.keys(acc[index]).length === 0) {
+            delete acc[index];
+          }
+
+          return acc;
+        }, {});
+      }
+
+      // STORE ONLY IF SSR EXISTS
+      if (Object.keys(formattedSSR).length > 0) {
+        console.log("Formatted SSR:", JSON.stringify(formattedSSR));
+
+        if (Object.keys(formattedSSR).length > 0) {
+          console.log("Formatted SSR:", JSON.stringify(formattedSSR));
+
+          await this.bookRepository.update(
+            { booking_id: booking.booking_id },
+            { ssr_response: formattedSSR },
+          );
+
+          // console.log("SSR stored in BOOKING table:", booking.booking_id);
+        }
+
+        // console.log("SSR stored in DB for booking:", booking.booking_id);
+      }
+
       /* Store booking log with original booking request in data field */
       const bookingLog = await this.bookRepository.storeBookingLog({
         bookingRefId: booking.booking_reference_id,
@@ -155,7 +219,7 @@ export class BookService {
       // Store original booking request in booking log for later use
       await this.bookRepository.updateBookingLogData({
         bookingLogId: bookingLog.id,
-        data: { originalBookRequest: bookReq },
+        data: { originalBookRequest: bookReq, ssr: bookReq.ssr || {}, },
       });
       console.log("===== BOOK INITIATE SUCCESS =====");
 
@@ -216,12 +280,28 @@ export class BookService {
 
       console.log("Calling PROVIDER BOOK API (TBO)...");
 
-      /* Call provider API to confirm booking */
+      // ===== FETCH SSR FROM DB =====
+      const ssrData = booking?.ssr_response;
+      console.log("SSR fetched from DB:", JSON.stringify(ssrData));
+
+      // ===== ADD SSR INTO REQUEST =====
+      const updatedBookRequest = {
+        ...originalBookRequest,
+        ssr: ssrData,
+      };
+
       const supplierDetails = await this.providerBookService.providerBook({
-        bookReq: originalBookRequest,
+        bookReq: updatedBookRequest,
         headers,
         logId: bookReq.bookingLogId,
       });
+
+      /* Call provider API to confirm booking */
+      // const supplierDetails = await this.providerBookService.providerBook({
+      //   bookReq: originalBookRequest,
+      //   headers,
+      //   logId: bookReq.bookingLogId,
+      // });
       //   console.log("supplierDetails", supplierDetails);
 
       console.log(

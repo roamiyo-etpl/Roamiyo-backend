@@ -46,6 +46,7 @@ export class TboBookService {
   async book(bookRequest): Promise<BookResponse | void> {
     const { bookReq }: { bookReq: BookDto } = bookRequest;
     console.log("===== TBO BOOK START =====");
+    console.log("SSR AT TBO ENTRY:", JSON.stringify(bookReq.ssr));
     console.log("TripType:", bookReq.airTripType);
     console.log("SolutionId:", bookReq.solutionId);
     const bookResponse = new BookResponse();
@@ -57,7 +58,11 @@ export class TboBookService {
     const collectedLogs: SupplierLogEntry[] = [];
     const addLogEntry: SupplierLogCollector = (entry) => {
       collectedLogs.push({
-        apiRequest: bookRequest.bookReq,
+        // apiRequest: bookRequest.bookReq,
+        apiRequest: {
+          ...bookRequest.bookReq,
+          ssr: bookRequest.bookReq?.ssr || {},
+        },
         ...entry,
       });
     };
@@ -173,12 +178,43 @@ export class TboBookService {
             response: data?.ticketingResult,
           });
 
+          // new code
+          const publishedFare =
+            data.ticketingResult.Response?.Response?.FlightItinerary?.Fare
+              ?.PublishedFare || 0;
+
+          const ssr = bookRequest.bookReq?.ssr || {};
+
+          const ssrTotal = Object.values(ssr).reduce(
+            (sum: number, pax: any) => {
+              if (!pax) return sum;
+
+              const baggageTotal =
+                pax.Baggage?.reduce((s, b) => s + (b?.Price || 0), 0) || 0;
+
+              const mealTotal =
+                pax.MealDynamic?.reduce((s, m) => s + (m?.Price || 0), 0) || 0;
+
+              const seatTotal =
+                pax.SeatDynamic?.reduce((s, s1) => s + (s1?.Price || 0), 0) ||
+                0;
+
+              return sum + baggageTotal + mealTotal + seatTotal;
+            },
+            0,
+          );
+
+          console.log("SSR used for pricing:", JSON.stringify(ssr));
+          console.log("Final SSR Total:", ssrTotal);
+          // till here
+
           /* Check if Ticketing is successful and Setting order details */
           if (data?.ticketingResult?.Response?.ResponseStatus === 1) {
             order.orderNo = data.ticketingResult.Response?.Response?.BookingId;
-            order.supplierBaseAmount =
-              data.ticketingResult.Response?.Response?.FlightItinerary?.Fare
-                ?.PublishedFare || 0;
+            order.supplierBaseAmount = publishedFare + ssrTotal;
+            // order.supplierBaseAmount =
+            //   data.ticketingResult.Response?.Response?.FlightItinerary?.Fare
+            //     ?.PublishedFare || 0;
             // order.supplierBaseAmount = data.ticketingResult.Response?.Response?.FlightItinerary?.Fare?.BaseFare || 0;
             // order.orderAmount = bookReq?.paymentDetails?.totalFare;
             // order.currency = bookReq?.paymentDetails?.currencyCode;
@@ -326,6 +362,10 @@ export class TboBookService {
       // dev
       const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Book`;
 
+      console.log(
+        "SSR BEFORE BOOK API:",
+        JSON.stringify(bookRequest.bookReq?.ssr),
+      );
       console.log("Calling TBO BOOK API...");
 
       // prod url
@@ -466,6 +506,11 @@ export class TboBookService {
     const responseTimeMs = endTime - startTime;
 
     console.log(
+      "SSR IN FINAL TICKET REQUEST:",
+      JSON.stringify(bookRequest.bookReq?.ssr),
+    );
+
+    console.log(
       "requestBodyTicketing \n",
       JSON.stringify(requestBodyTicketing),
       "\n",
@@ -574,8 +619,32 @@ export class TboBookService {
 
     const passengers = bookReq.passengers;
 
+    // ===== SSR START =====
+    const ssr = bookReq.ssr || {};
+    console.log("SSR inside createBookRequest:", JSON.stringify(ssr));
+
+    // calculate SSR total (optional debug)
+    const ssrTotal = Object.values(ssr).reduce((sum: number, pax: any) => {
+      if (!pax) return sum;
+
+      const baggageTotal =
+        pax.Baggage?.reduce((s, b) => s + (b?.Price || 0), 0) || 0;
+
+      const mealTotal =
+        pax.MealDynamic?.reduce((s, m) => s + (m?.Price || 0), 0) || 0;
+
+      const seatTotal =
+        pax.SeatDynamic?.reduce((s, s1) => s + (s1?.Price || 0), 0) || 0;
+
+      return sum + baggageTotal + mealTotal + seatTotal;
+    }, 0);
+
+    console.log("SSR Total:", ssrTotal);
+
     /* Create passenger array */
     const passengerArray = passengers.map((element, index) => {
+      const passengerSSR = ssr[index] || {};
+      console.log(`Passenger ${index} SSR:`, JSON.stringify(passengerSSR));
       const pexT =
         element?.passengerType === "ADT"
           ? 1
@@ -635,9 +704,24 @@ export class TboBookService {
             fare?.AdditionalTxnFeePubL / (fare?.PassengerCount || 1) || 0,
           PGCharge: fare?.PGCharge / (fare?.PassengerCount || 1) || 0,
         },
+        // ===== SSR INJECTION =====
+        ...(passengerSSR?.MealDynamic && {
+          MealDynamic: passengerSSR.MealDynamic,
+        }),
+
+        ...(passengerSSR?.SeatDynamic && {
+          SeatDynamic: passengerSSR.SeatDynamic,
+        }),
+
+        ...(passengerSSR?.Baggage && {
+          Baggage: passengerSSR.Baggage,
+        }),
       };
     });
-    console.log("🚀 FINAL PASSENGER PAYLOAD:", JSON.stringify(passengerArray, null, 2));
+    console.log(
+      "🚀 FINAL PASSENGER PAYLOAD:",
+      JSON.stringify(passengerArray, null, 2),
+    );
 
     const authToken = await this.tboAuthTokenService.getAuthToken(bookRequest);
     let obj: any = {};

@@ -3759,6 +3759,26 @@
                 "$ref": "#/components/schemas/GSTDetails"
               }
             ]
+          },
+          "ssr": {
+            "type": "object",
+            "description": "SSR data (Seat, Meal, Baggage)",
+            "example": {
+              "0": {
+                "MealDynamic": [
+                  {
+                    "Code": "ML1",
+                    "Price": 200
+                  }
+                ],
+                "SeatDynamic": [
+                  {
+                    "Code": "S1",
+                    "Price": 300
+                  }
+                ]
+              }
+            }
           }
         },
         "required": [

@@ -20,6 +20,7 @@ export class ProviderBookService {
   async providerBook(reqParams): Promise<BookResponse> {
     const { bookReq, headers, logId } = reqParams;
     console.log("===== PROVIDER BOOK START =====");
+    console.log("SSR RECEIVED IN PROVIDER:", JSON.stringify(bookReq.ssr));
     console.log("Provider:", bookReq.providerCode);
 
     const providerConfig = await this.configService.getConfiguration({
