@@ -21,7 +21,6 @@ RUN if [ -n "$NPM_TOKEN" ]; then \
 
 COPY tsconfig.json ./
 COPY . .
-COPY json ./json
 
 RUN npm run build && npm prune --omit=dev \
     && test -f json/currency.json && test -f json/airline_en.json && test -f json/airport_en.json
