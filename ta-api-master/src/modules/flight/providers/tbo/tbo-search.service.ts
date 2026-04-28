@@ -49,7 +49,7 @@ export class TboSearchService {
 
       // prod endpoint
       // const endpoint = `${providerCred.url}/rest/Search`;
-      // console.log("endpoint:::::::::",endpoint);
+      console.log("endpoint:::::::::",endpoint);
       const startTime = Date.now();
       const searchResult = await Http.httpRequestTBO(
         "POST",
