@@ -667,6 +667,7 @@ export class TboBookService {
         FirstName: element?.passengerDetail?.firstName.trim(),
         LastName: element?.passengerDetail?.lastName.trim(),
         PaxType: pexT,
+        PassengerInformation: "NN",
         DateOfBirth: moment(element?.dateOfBirth, "YYYY-MM-DD").format(
           "YYYY-MM-DDTHH:mm:ss",
         ),
