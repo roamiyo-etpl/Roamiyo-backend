@@ -729,7 +729,7 @@ export class TboBookService {
 
         ...(Array.isArray(passengerSSR?.Baggage) &&
           passengerSSR.Baggage.length > 0 && {
-            MealDynamic: passengerSSR.Baggage,
+            Baggage: passengerSSR.Baggage,
           }),
       };
     });
