@@ -515,6 +515,11 @@ export class TboBookService {
       JSON.stringify(requestBodyTicketing),
       "\n",
     );
+
+    console.log(
+      "FINAL TBO REQUEST:",
+      JSON.stringify(requestBodyTicketing, null, 2),
+    );
     console.log("TICKITING RESULT \n", JSON.stringify(ticketingResult), "\n");
 
     logCollector?.({
@@ -642,9 +647,14 @@ export class TboBookService {
     console.log("SSR Total:", ssrTotal);
 
     /* Create passenger array */
-    const passengerArray = passengers.map((element, index) => {
-      const passengerSSR = ssr[index] || {};
-      console.log(`Passenger ${index} SSR:`, JSON.stringify(passengerSSR));
+    // const passengerArray = passengers.map((element, index) => {
+    const passengerArray = passengers.map((element, passengerIndex) => {
+      // const passengerSSR = ssr[index] || {};
+      const passengerSSR = ssr[passengerIndex] || {};
+      console.log(
+        `Passenger ${passengerIndex} SSR:`,
+        JSON.stringify(passengerSSR),
+      );
       const pexT =
         element?.passengerType === "ADT"
           ? 1
@@ -690,7 +700,7 @@ export class TboBookService {
         ContactNo: element.mobile.replace("+", "").trim(),
         CellCountryCode: element?.mobileCountryCode,
         Email: element?.email || bookReq?.contact?.email,
-        IsLeadPax: index === 0,
+        IsLeadPax: passengerIndex === 0,
         FFAirlineCode: null,
         FFAirline: null,
         FFNumber: null,
@@ -706,17 +716,21 @@ export class TboBookService {
           PGCharge: fare?.PGCharge / (fare?.PassengerCount || 1) || 0,
         },
         // ===== SSR INJECTION =====
-        ...(passengerSSR?.MealDynamic && {
-          MealDynamic: passengerSSR.MealDynamic,
-        }),
 
-        ...(passengerSSR?.SeatDynamic && {
-          SeatDynamic: passengerSSR.SeatDynamic,
-        }),
+        ...(Array.isArray(passengerSSR?.MealDynamic) &&
+          passengerSSR.MealDynamic.length > 0 && {
+            MealDynamic: passengerSSR.MealDynamic,
+          }),
 
-        ...(passengerSSR?.Baggage && {
-          Baggage: passengerSSR.Baggage,
-        }),
+        ...(Array.isArray(passengerSSR?.SeatDynamic) &&
+          passengerSSR.SeatDynamic.length > 0 && {
+            SeatDynamic: passengerSSR.SeatDynamic,
+          }),
+
+        ...(Array.isArray(passengerSSR?.Baggage) &&
+          passengerSSR.Baggage.length > 0 && {
+            MealDynamic: passengerSSR.Baggage,
+          }),
       };
     });
     console.log(
