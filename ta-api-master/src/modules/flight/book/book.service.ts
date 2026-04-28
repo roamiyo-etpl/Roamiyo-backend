@@ -80,43 +80,46 @@ export class BookService {
         };
       }
 
-      let mealFare = 0;
-      let seatFare = 0;
-      let baggageFare = 0;
+      // let mealFare = 0;
+      // let seatFare = 0;
+      // let baggageFare = 0;
 
-      if (bookReq.Passengers?.length) {
-        bookReq.Passengers.forEach((pax) => {
-          pax.MealDynamic?.forEach((meal) => {
-            mealFare += meal.Price || 0;
-          });
+      // if (bookReq.Passengers?.length) {
+      //   bookReq.Passengers.forEach((pax) => {
+      //     pax.MealDynamic?.forEach((meal) => {
+      //       mealFare += meal.Price || 0;
+      //     });
 
-          pax.SeatDynamic?.forEach((seat) => {
-            seatFare += seat.Price || 0;
-          });
+      //     pax.SeatDynamic?.forEach((seat) => {
+      //       seatFare += seat.Price || 0;
+      //     });
 
-          pax.Baggage?.forEach((bag) => {
-            baggageFare += bag.Price || 0;
-          });
-        });
-      }
+      //     pax.Baggage?.forEach((bag) => {
+      //       baggageFare += bag.Price || 0;
+      //     });
+      //   });
+      // }
 
       fare = revalidateResult.route?.fare as unknown as Fare[];
 
-      fare = fare.map((f) => {
-        const updatedSearchTotalFare =
-          (f.searchTotalFare ?? 0) + mealFare + seatFare + baggageFare;
+      // fare = fare.map((f) => {
+      //   const updatedSearchTotalFare =
+      //     (f.searchTotalFare ?? 0) + mealFare + seatFare + baggageFare;
 
-        return {
-          ...f,
+      //   return {
+      //     ...f,
 
-          mealFare: mealFare || 0,
-          seatFare: seatFare || 0,
-          baggageFare: baggageFare || 0,
+      //     mealFare: mealFare || 0,
+      //     seatFare: seatFare || 0,
+      //     baggageFare: baggageFare || 0,
 
-          searchTotalFare: updatedSearchTotalFare,
-          totalFare: updatedSearchTotalFare, // optional override
-        };
-      });
+      //     searchTotalFare: updatedSearchTotalFare,
+      //     totalFare: updatedSearchTotalFare, // optional override
+      //   };
+      // });
+      fare = fare.map((f) => ({
+        ...f,
+      }));
       console.log(
         "💰 RAW FARE FROM REVALIDATE:",
         JSON.stringify(revalidateResult.route?.fare, null, 2),
@@ -129,12 +132,12 @@ export class BookService {
         fare?.[0]?.searchTotalFare,
       );
 
-      console.log("FARE BREAKDOWN:", {
-        mealFare,
-        seatFare,
-        baggageFare,
-        total: fare?.[0]?.searchTotalFare,
-      });
+      // console.log("FARE BREAKDOWN:", {
+      //   mealFare,
+      //   seatFare,
+      //   baggageFare,
+      //   total: fare?.[0]?.searchTotalFare,
+      // });
 
       const mwrLogId = Generic.generateRandomString(10);
 
@@ -161,20 +164,17 @@ export class BookService {
 
           // BAGGAGE → store full object
           if (Array.isArray(pax.Baggage) && pax.Baggage.length > 0) {
-            const baggage = pax.Baggage[0];
-            acc[index].Baggage = [baggage];
+            acc[index].Baggage = pax.Baggage;
           }
 
           // MEAL → store full object
           if (Array.isArray(pax.MealDynamic) && pax.MealDynamic.length > 0) {
-            const meal = pax.MealDynamic[0];
-            acc[index].MealDynamic = [meal];
+            acc[index].MealDynamic = pax.MealDynamic;
           }
 
           // SEAT → store full object
           if (Array.isArray(pax.SeatDynamic) && pax.SeatDynamic.length > 0) {
-            const seat = pax.SeatDynamic[0];
-            acc[index].SeatDynamic = [seat];
+            acc[index].SeatDynamic = pax.SeatDynamic;
           }
 
           // remove empty
@@ -208,7 +208,8 @@ export class BookService {
       // Store original booking request in booking log for later use
       await this.bookRepository.updateBookingLogData({
         bookingLogId: bookingLog.id,
-        data: { originalBookRequest: bookReq, ssr: bookReq.ssr || {} },
+        // data: { originalBookRequest: bookReq, ssr: bookReq.ssr || {} },
+        data: { originalBookRequest: bookReq },
       });
       console.log("===== BOOK INITIATE SUCCESS =====");
 
@@ -271,7 +272,10 @@ export class BookService {
 
       // ===== FETCH SSR FROM DB =====
       const ssrData = booking?.ssr_response;
-      console.log("SSR fetched from DB:::::::::::::::", JSON.stringify(ssrData));
+      console.log(
+        "SSR fetched from DB:::::::::::::::",
+        JSON.stringify(ssrData),
+      );
 
       // ===== ADD SSR INTO REQUEST =====
       const updatedBookRequest = {
