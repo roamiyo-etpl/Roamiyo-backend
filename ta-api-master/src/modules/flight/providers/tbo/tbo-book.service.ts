@@ -157,23 +157,209 @@ export class TboBookService {
     return catalog.find((m) => m.Code === selected.Code);
   }
 
+  private seatFlightOdKey(s: any): string {
+    return `${s?.Code ?? ""}|${String(s?.FlightNumber ?? "").trim()}|${s?.Origin ?? ""}|${s?.Destination ?? ""}`;
+  }
+
+  private seatMatchesFlightAndOd(catalogSeat: any, selected: any): boolean {
+    if (selected?.FlightNumber != null && String(selected.FlightNumber).trim() !== "") {
+      if (
+        String(catalogSeat?.FlightNumber ?? "").trim() !==
+        String(selected.FlightNumber).trim()
+      ) {
+        return false;
+      }
+    }
+    if (selected?.Origin && catalogSeat?.Origin !== selected.Origin) return false;
+    if (selected?.Destination && catalogSeat?.Destination !== selected.Destination)
+      return false;
+    return true;
+  }
+
   private pickSeatFromCatalog(
     selected: any,
     catalog: any[],
   ): any | undefined {
     if (!Array.isArray(catalog) || catalog.length === 0) return undefined;
-    if (selected.Code) {
-      const byCode = catalog.find((s) => s.Code === selected.Code);
-      if (byCode) return byCode;
+    if (selected?.Code) {
+      const byCode = catalog.filter((s) => s.Code === selected.Code);
+      if (byCode.length === 1) return byCode[0];
+      if (byCode.length > 1) {
+        const od = byCode.find((s) => this.seatMatchesFlightAndOd(s, selected));
+        if (od) return od;
+        return byCode[0];
+      }
     }
     if (selected.SeatNo != null) {
-      return catalog.find((s) => {
-        if (s.SeatNo !== selected.SeatNo) return false;
+      const rowMatch = (s: any) => {
+        if (String(s.SeatNo) !== String(selected.SeatNo)) return false;
         if (selected.RowNo == null || selected.RowNo === "") return true;
         return String(s.RowNo) === String(selected.RowNo);
-      });
+      };
+      const rowCandidates = catalog.filter(
+        (s) => rowMatch(s) && this.seatMatchesFlightAndOd(s, selected),
+      );
+      if (rowCandidates.length === 1) return rowCandidates[0];
+      if (rowCandidates.length > 1 && selected.Code) {
+        const byCode = rowCandidates.find((s) => s.Code === selected.Code);
+        if (byCode) return byCode;
+        return rowCandidates[0];
+      }
+      if (rowCandidates.length > 0) return rowCandidates[0];
+      return catalog.find(rowMatch);
     }
     return undefined;
+  }
+
+  /**
+   * When SSR catalog mapping drops seats (SSR failure, shape mismatch, or strict
+   * catalog diff), still attach client `SeatDynamic` so LCC Ticket satisfies
+   * carriers like 6E that require seat data on the request.
+   */
+  private mergeUserSeatPassthrough(
+    userSSR: SsrPassengerSelections[],
+    mapped: Record<number, any>,
+  ): Record<number, any> {
+    const out: Record<number, any> = { ...mapped };
+    userSSR.forEach((pax, index) => {
+      if (!pax?.SeatDynamic?.length) return;
+      const cur =
+        out[index] && typeof out[index] === "object" ? { ...out[index] } : {};
+      const mappedSeats = Array.isArray(cur.SeatDynamic) ? cur.SeatDynamic : [];
+      if (mappedSeats.length >= pax.SeatDynamic.length) return;
+
+      if (mappedSeats.length === 0) {
+        cur.SeatDynamic = pax.SeatDynamic.map((s) => ({ ...s }));
+      } else {
+        const keys = new Set(mappedSeats.map((s) => this.seatFlightOdKey(s)));
+        const extras = pax.SeatDynamic.filter(
+          (s) => !keys.has(this.seatFlightOdKey(s)),
+        );
+        if (extras.length) {
+          cur.SeatDynamic = [
+            ...mappedSeats,
+            ...extras.map((s) => ({ ...s })),
+          ];
+        }
+      }
+      out[index] = cur;
+    });
+    return out;
+  }
+
+  private canonicalAirlineFlightKey(airline: any, flightNum: any): string | null {
+    const ac = String(airline ?? "").trim().toUpperCase();
+    let fn = String(flightNum ?? "").trim().toUpperCase();
+    if (!ac || !fn) return null;
+    fn = fn.replace(/^[A-Z0-9]{2,3}\s*-\s*/i, "").replace(/\s+/g, "");
+    const digits = fn.replace(/\D/g, "");
+    if (digits.length >= 2) return `${ac}|${digits}`;
+    return `${ac}|${fn}`;
+  }
+
+  private extractAllowedFlightKeysFromFareQuote(fareQuoteParsed: any): Set<string> {
+    const keys = new Set<string>();
+    const addSeg = (seg: any) => {
+      const k = this.canonicalAirlineFlightKey(
+        seg?.Airline?.AirlineCode,
+        seg?.Airline?.FlightNumber,
+      );
+      if (k) keys.add(k);
+    };
+    const results = fareQuoteParsed?.Response?.Results;
+    if (!results) return keys;
+    const journeys = Array.isArray(results) ? results : [results];
+    for (const journey of journeys) {
+      const segs = journey?.Segments;
+      if (!Array.isArray(segs)) continue;
+      for (const segmentArray of segs) {
+        if (
+          segmentArray &&
+          typeof segmentArray === "object" &&
+          segmentArray.Airline
+        ) {
+          addSeg(segmentArray);
+          continue;
+        }
+        if (!Array.isArray(segmentArray)) continue;
+        for (const seg of segmentArray) addSeg(seg);
+      }
+    }
+    return keys;
+  }
+
+  private filterSsrByAllowedFlights(
+    userSSR: SsrPassengerSelections[],
+    allowed: Set<string>,
+  ): SsrPassengerSelections[] {
+    if (!allowed.size) return userSSR;
+    const keep = (item: any): boolean => {
+      const k = this.canonicalAirlineFlightKey(
+        item?.AirlineCode ?? item?.airline,
+        item?.FlightNumber ?? item?.flightNum,
+      );
+      if (k == null) return true;
+      return allowed.has(k);
+    };
+    return userSSR.map((pax) => {
+      const out: SsrPassengerSelections = { ...pax };
+      if (pax.SeatDynamic?.length) out.SeatDynamic = pax.SeatDynamic.filter(keep);
+      if (pax.MealDynamic?.length)
+        out.MealDynamic = pax.MealDynamic.filter(keep);
+      if (pax.Baggage?.length) out.Baggage = pax.Baggage.filter(keep);
+      return out;
+    });
+  }
+
+  /** If mapping left no seats/meals, copy from `Passengers` for flights on this fare. */
+  private injectClientSsrWhenMissing(bookReq: any, fareQuoteParsed: any): void {
+    const allowed = this.extractAllowedFlightKeysFromFareQuote(fareQuoteParsed);
+    const allowFn = (item: any): boolean => {
+      const k = this.canonicalAirlineFlightKey(
+        item?.AirlineCode ?? item?.airline,
+        item?.FlightNumber ?? item?.flightNum,
+      );
+      if (!allowed.size) return true;
+      if (k == null) return true;
+      return allowed.has(k);
+    };
+    const caps = bookReq?.Passengers;
+    if (!Array.isArray(caps) || caps.length === 0) return;
+    bookReq.ssr =
+      bookReq.ssr && typeof bookReq.ssr === "object" ? { ...bookReq.ssr } : {};
+    caps.forEach((pax, i) => {
+      const key = String(i);
+      const prev =
+        bookReq.ssr[key] && typeof bookReq.ssr[key] === "object"
+          ? bookReq.ssr[key]
+          : {};
+      let cur = { ...prev };
+      if (pax?.SeatDynamic?.length) {
+        const filtered = pax.SeatDynamic.filter(allowFn);
+        const have = Array.isArray(cur.SeatDynamic) ? cur.SeatDynamic.length : 0;
+        if (filtered.length > 0 && have === 0) {
+          cur = {
+            ...cur,
+            SeatDynamic: filtered.map((s: any) => ({ ...s })),
+          };
+        }
+      }
+      if (pax?.MealDynamic?.length) {
+        const filtered = pax.MealDynamic.filter(allowFn);
+        const have = Array.isArray(cur.MealDynamic)
+          ? cur.MealDynamic.length
+          : 0;
+        if (filtered.length > 0 && have === 0) {
+          cur = {
+            ...cur,
+            MealDynamic: filtered.map((m: any) => ({ ...m })),
+          };
+        }
+      }
+      if (Object.keys(cur).length > 0) {
+        bookReq.ssr[key] = { ...prev, ...cur };
+      }
+    });
   }
 
   /** [@Description: This method is used to book the flights]
@@ -469,7 +655,8 @@ export class TboBookService {
       TraceId: res.Response.TraceId,
       ResultIndex: res.Response.Results.ResultIndex,
     };
-    console.log("🔥 CALLING SSR API WITH:", ssrPayload);
+    // const ssrEndpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SSR`;
+    // console.log("🔥 CALLING SSR API WITH:", ssrPayload, "url:", ssrEndpoint);
     const ssrResponse = await Http.httpRequestTBO(
       "POST",
       `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
@@ -479,11 +666,21 @@ export class TboBookService {
 
     console.log("🔥 SSR RESPONSE:", JSON.stringify(ssrResponse));
 
-    const userSSR = this.buildUserSsrPassengersList(bookReq);
+    const fareFlightKeys = this.extractAllowedFlightKeysFromFareQuote(res);
+    const userSSRRaw = this.buildUserSsrPassengersList(bookReq);
+    const userSSR =
+      fareFlightKeys.size > 0
+        ? this.filterSsrByAllowedFlights(userSSRRaw, fareFlightKeys)
+        : userSSRRaw;
     const mappedSSR = this.mapSSR(userSSR, ssrResponse);
+    const mappedWithSeatFallback = this.mergeUserSeatPassthrough(
+      userSSR,
+      mappedSSR,
+    );
     const priorSsr =
       bookReq.ssr && typeof bookReq.ssr === "object" ? bookReq.ssr : {};
-    bookReq.ssr = this.mergeSsrByPassengerIndex(priorSsr, mappedSSR);
+    bookReq.ssr = this.mergeSsrByPassengerIndex(priorSsr, mappedWithSeatFallback);
+    this.injectClientSsrWhenMissing(bookReq, res);
 
     console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(bookReq.ssr));
 
