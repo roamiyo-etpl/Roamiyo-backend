@@ -183,38 +183,38 @@ export class TboBookService {
             data.ticketingResult.Response?.Response?.FlightItinerary?.Fare
               ?.PublishedFare || 0;
 
-          const ssr = bookRequest.bookReq?.ssr || {};
+          // const ssr = bookRequest.bookReq?.ssr || {};
 
-          const ssrTotal = Object.values(ssr).reduce(
-            (sum: number, pax: any) => {
-              if (!pax) return sum;
+          // const ssrTotal = Object.values(ssr).reduce(
+          //   (sum: number, pax: any) => {
+          //     if (!pax) return sum;
 
-              const baggageTotal =
-                pax.Baggage?.reduce((s, b) => s + (b?.Price || 0), 0) || 0;
+          //     const baggageTotal =
+          //       pax.Baggage?.reduce((s, b) => s + (b?.Price || 0), 0) || 0;
 
-              const mealTotal =
-                pax.MealDynamic?.reduce((s, m) => s + (m?.Price || 0), 0) || 0;
+          //     const mealTotal =
+          //       pax.MealDynamic?.reduce((s, m) => s + (m?.Price || 0), 0) || 0;
 
-              const seatTotal =
-                pax.SeatDynamic?.reduce((s, s1) => s + (s1?.Price || 0), 0) ||
-                0;
+          //     const seatTotal =
+          //       pax.SeatDynamic?.reduce((s, s1) => s + (s1?.Price || 0), 0) ||
+          //       0;
 
-              return sum + baggageTotal + mealTotal + seatTotal;
-            },
-            0,
-          );
+          //     return sum + baggageTotal + mealTotal + seatTotal;
+          //   },
+          //   0,
+          // );
 
-          console.log("SSR used for pricing:", JSON.stringify(ssr));
-          console.log("Final SSR Total:", ssrTotal);
+          // console.log("SSR used for pricing:", JSON.stringify(ssr));
+          // console.log("Final SSR Total:", ssrTotal);
           // till here
 
           /* Check if Ticketing is successful and Setting order details */
           if (data?.ticketingResult?.Response?.ResponseStatus === 1) {
             order.orderNo = data.ticketingResult.Response?.Response?.BookingId;
-            order.supplierBaseAmount = publishedFare + ssrTotal;
-            // order.supplierBaseAmount =
-            //   data.ticketingResult.Response?.Response?.FlightItinerary?.Fare
-            //     ?.PublishedFare || 0;
+            // order.supplierBaseAmount = publishedFare + ssrTotal;
+            order.supplierBaseAmount =
+              data.ticketingResult.Response?.Response?.FlightItinerary?.Fare
+                ?.PublishedFare || 0;
             // order.supplierBaseAmount = data.ticketingResult.Response?.Response?.FlightItinerary?.Fare?.BaseFare || 0;
             // order.orderAmount = bookReq?.paymentDetails?.totalFare;
             // order.currency = bookReq?.paymentDetails?.currencyCode;
@@ -326,6 +326,37 @@ export class TboBookService {
 
     console.log("Revalidate response found:", !!revalidateResponse);
     const res = JSON.parse(revalidateResponse.response);
+
+    const authToken = await this.tboAuthTokenService.getAuthToken(bookRequest);
+    const ssrPayload = {
+      // EndUserIp: bookRequest.headers["ip-address"],
+      EndUserIp: "20.244.28.12",
+      TokenId: authToken,
+      TraceId: res.Response.TraceId,
+      ResultIndex: res.Response.Results.ResultIndex,
+    };
+    console.log("🔥 CALLING SSR API WITH:", ssrPayload);
+    const ssrResponse = await Http.httpRequestTBO(
+      "POST",
+      // `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SSR`,
+      `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
+      JSON.stringify(ssrPayload),
+    );
+
+    console.log("🔥 SSR RESPONSE:", JSON.stringify(ssrResponse));
+
+    // booking = await this.bookRepository.getBookingByBookingId({
+    //     bookingId: bookReq.bookingId,
+    //   });
+
+    const userSSR = (bookReq as any).Passengers || [];
+
+    const mappedSSR = this.mapSSR(userSSR, ssrResponse);
+
+    console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(mappedSSR));
+
+    bookReq.ssr = mappedSSR;
+
     const fareBreakDown = res.Response.Results?.FareBreakdown;
     const isLCC = res.Response.Results.IsLCC;
 
@@ -769,5 +800,40 @@ export class TboBookService {
     }
 
     return obj;
+  }
+
+  async mapSSR(userSSR, ssrApiResponse) {
+    const result = {};
+
+    userSSR.forEach((pax, index) => {
+      const apiPax = ssrApiResponse.Response.Baggage?.[index] || {};
+      const apiMeal = ssrApiResponse.Response.MealDynamic?.[index] || {};
+      const apiSeat = ssrApiResponse.Response.SeatDynamic?.[index] || {};
+
+      result[index] = {};
+
+      // 🧳 BAGGAGE
+      if (pax.Baggage?.length) {
+        result[index].Baggage = pax.Baggage.map((selected) =>
+          apiPax.find((b) => b.Weight === selected.Weight),
+        ).filter(Boolean);
+      }
+
+      // 🍱 MEAL
+      if (pax.MealDynamic?.length) {
+        result[index].MealDynamic = pax.MealDynamic.map((selected) =>
+          apiMeal.find((m) => m.Code === selected.Code),
+        ).filter(Boolean);
+      }
+
+      // 🪑 SEAT
+      if (pax.SeatDynamic?.length) {
+        result[index].SeatDynamic = pax.SeatDynamic.map((selected) =>
+          apiSeat.find((s) => s.SeatNo === selected.SeatNo),
+        ).filter(Boolean);
+      }
+    });
+
+    return result;
   }
 }

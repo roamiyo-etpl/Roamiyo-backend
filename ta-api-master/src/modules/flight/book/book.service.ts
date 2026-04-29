@@ -80,43 +80,33 @@ export class BookService {
         };
       }
 
-      // let mealFare = 0;
-      // let seatFare = 0;
-      // let baggageFare = 0;
+      let mealFare = 0;
+      let seatFare = 0;
+      let baggageFare = 0;
 
-      // if (bookReq.Passengers?.length) {
-      //   bookReq.Passengers.forEach((pax) => {
-      //     pax.MealDynamic?.forEach((meal) => {
-      //       mealFare += meal.Price || 0;
-      //     });
+      if (bookReq.Passengers?.length) {
+        bookReq.Passengers.forEach((pax) => {
+          pax.MealDynamic?.forEach((meal) => {
+            mealFare += meal.Price || 0;
+          });
 
-      //     pax.SeatDynamic?.forEach((seat) => {
-      //       seatFare += seat.Price || 0;
-      //     });
+          pax.SeatDynamic?.forEach((seat) => {
+            seatFare += seat.Price || 0;
+          });
 
-      //     pax.Baggage?.forEach((bag) => {
-      //       baggageFare += bag.Price || 0;
-      //     });
-      //   });
-      // }
+          pax.Baggage?.forEach((bag) => {
+            baggageFare += bag.Price || 0;
+          });
+        });
+      }
+
+      const ssrTotal = mealFare + seatFare + baggageFare;
 
       fare = revalidateResult.route?.fare as unknown as Fare[];
+      console.log("💰 FINAL FARE ARRAY:", JSON.stringify(fare, null, 2));
+      const tboFare = fare?.[0]?.searchTotalFare ?? 0;
+      const payableAmount = tboFare + ssrTotal;
 
-      // fare = fare.map((f) => {
-      //   const updatedSearchTotalFare =
-      //     (f.searchTotalFare ?? 0) + mealFare + seatFare + baggageFare;
-
-      //   return {
-      //     ...f,
-
-      //     mealFare: mealFare || 0,
-      //     seatFare: seatFare || 0,
-      //     baggageFare: baggageFare || 0,
-
-      //     searchTotalFare: updatedSearchTotalFare,
-      //     totalFare: updatedSearchTotalFare, // optional override
-      //   };
-      // });
       fare = fare.map((f) => ({
         ...f,
       }));
@@ -125,19 +115,10 @@ export class BookService {
         JSON.stringify(revalidateResult.route?.fare, null, 2),
       );
 
-      console.log("💰 FINAL FARE ARRAY:", JSON.stringify(fare, null, 2));
-
       console.log(
         "💰 FINAL TOTAL FARE (searchTotalFare):",
         fare?.[0]?.searchTotalFare,
       );
-
-      // console.log("FARE BREAKDOWN:", {
-      //   mealFare,
-      //   seatFare,
-      //   baggageFare,
-      //   total: fare?.[0]?.searchTotalFare,
-      // });
 
       const mwrLogId = Generic.generateRandomString(10);
 
@@ -220,6 +201,8 @@ export class BookService {
         search_req_id: bookReq.searchReqId,
         booking_id: booking.booking_id,
         fare: fare as unknown as Fare,
+        payableAmount: payableAmount, // ✅ for Razorpay
+        ssrTotal: ssrTotal,
       };
     } catch (error) {
       console.log(error);
@@ -271,16 +254,16 @@ export class BookService {
       console.log("Calling PROVIDER BOOK API (TBO)...");
 
       // ===== FETCH SSR FROM DB =====
-      const ssrData = booking?.ssr_response;
-      console.log(
-        "SSR fetched from DB:::::::::::::::",
-        JSON.stringify(ssrData),
-      );
+      // const ssrData = booking?.ssr_response;
+      // console.log(
+      //   "SSR fetched from DB:::::::::::::::",
+      //   JSON.stringify(ssrData),
+      // );
 
       // ===== ADD SSR INTO REQUEST =====
       const updatedBookRequest = {
         ...originalBookRequest,
-        ssr: ssrData,
+        // ssr: ssrData,
       };
 
       const supplierDetails = await this.providerBookService.providerBook({

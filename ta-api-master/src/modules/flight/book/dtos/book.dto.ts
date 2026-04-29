@@ -556,3 +556,5 @@ export class BookConfirmationDto {
     @IsString()
     bookingLogId: string;
 }
+
+// Passengers?: any[];
