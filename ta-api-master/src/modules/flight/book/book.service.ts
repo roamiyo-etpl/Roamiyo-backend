@@ -84,21 +84,26 @@ export class BookService {
       let seatFare = 0;
       let baggageFare = 0;
 
-      if (bookReq.Passengers?.length) {
-        bookReq.Passengers.forEach((pax) => {
-          pax.MealDynamic?.forEach((meal) => {
-            mealFare += meal.Price || 0;
-          });
+      const ancillPaxForTotals =
+        bookReq.Passengers?.length > 0
+          ? bookReq.Passengers
+          : bookReq.ssr && typeof bookReq.ssr === "object"
+            ? Object.keys(bookReq.ssr)
+                .sort((a, b) => Number(a) - Number(b))
+                .map((k) => bookReq.ssr[k])
+            : [];
 
-          pax.SeatDynamic?.forEach((seat) => {
-            seatFare += seat.Price || 0;
-          });
-
-          pax.Baggage?.forEach((bag) => {
-            baggageFare += bag.Price || 0;
-          });
+      ancillPaxForTotals.forEach((pax: any) => {
+        pax?.MealDynamic?.forEach((meal: any) => {
+          mealFare += meal.Price || 0;
         });
-      }
+        pax?.SeatDynamic?.forEach((seat: any) => {
+          seatFare += seat.Price || 0;
+        });
+        pax?.Baggage?.forEach((bag: any) => {
+          baggageFare += bag.Price || 0;
+        });
+      });
 
       const ssrTotal = mealFare + seatFare + baggageFare;
 
@@ -135,7 +140,6 @@ export class BookService {
 
       if (bookReq.Passengers && Array.isArray(bookReq.Passengers)) {
         formattedSSR = bookReq.Passengers.reduce((acc, pax, index) => {
-          //
           if (!pax) {
             acc[index] = {};
             return acc;
@@ -143,28 +147,30 @@ export class BookService {
 
           acc[index] = {};
 
-          // BAGGAGE → store full object
           if (Array.isArray(pax.Baggage) && pax.Baggage.length > 0) {
             acc[index].Baggage = pax.Baggage;
           }
 
-          // MEAL → store full object
           if (Array.isArray(pax.MealDynamic) && pax.MealDynamic.length > 0) {
             acc[index].MealDynamic = pax.MealDynamic;
           }
 
-          // SEAT → store full object
           if (Array.isArray(pax.SeatDynamic) && pax.SeatDynamic.length > 0) {
             acc[index].SeatDynamic = pax.SeatDynamic;
           }
 
-          // remove empty
           if (Object.keys(acc[index]).length === 0) {
             acc[index] = {};
           }
 
           return acc;
         }, {});
+      } else if (
+        bookReq.ssr &&
+        typeof bookReq.ssr === "object" &&
+        Object.keys(bookReq.ssr).length > 0
+      ) {
+        formattedSSR = { ...bookReq.ssr };
       }
 
       // STORE ONLY IF SSR EXISTS
@@ -254,16 +260,16 @@ export class BookService {
       console.log("Calling PROVIDER BOOK API (TBO)...");
 
       // ===== FETCH SSR FROM DB =====
-      // const ssrData = booking?.ssr_response;
-      // console.log(
-      //   "SSR fetched from DB:::::::::::::::",
-      //   JSON.stringify(ssrData),
-      // );
+      const ssrData = booking?.ssr_response;
+      console.log(
+        "SSR fetched from DB:::::::::::::::",
+        JSON.stringify(ssrData),
+      );
 
       // ===== ADD SSR INTO REQUEST =====
       const updatedBookRequest = {
         ...originalBookRequest,
-        // ssr: ssrData,
+        ssr: ssrData,
       };
 
       const supplierDetails = await this.providerBookService.providerBook({

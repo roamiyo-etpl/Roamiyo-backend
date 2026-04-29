@@ -30,6 +30,13 @@ interface SupplierLogEntry {
 
 type SupplierLogCollector = (entry: SupplierLogEntry) => void;
 
+/** Per-passenger SSR selections merged with TBO SSR response (Tek Travels Universal Air API). */
+type SsrPassengerSelections = {
+  Baggage?: any[];
+  MealDynamic?: any[];
+  SeatDynamic?: any[];
+};
+
 @Injectable()
 export class TboBookService {
   logDate = Date.now();
@@ -40,6 +47,134 @@ export class TboBookService {
     private revalidateRepo: Repository<RevalidateResponseEntity>,
     private readonly supplierLogUtility: SupplierLogUtility,
   ) {}
+
+  private resolveEndUserIp(bookRequest: any): string {
+    const h = bookRequest?.headers || {};
+    const raw = h["ip-address"] || h["x-forwarded-for"] || h["x-real-ip"];
+    if (raw) return String(raw).split(",")[0].trim();
+    return "20.244.28.12";
+  }
+
+  /**
+   * TBO returns Baggage / MealDynamic as either `options[]` or `options[][]` (per passenger / leg).
+   */
+  private getSsrCatalogArray(catalogRoot: any, paxIndex: number): any[] {
+    if (catalogRoot == null) return [];
+    if (!Array.isArray(catalogRoot)) return [];
+    const slot = catalogRoot[paxIndex] ?? catalogRoot[0];
+    if (!Array.isArray(slot)) return [];
+    if (slot.length > 0 && Array.isArray(slot[0])) {
+      return (slot as any[][]).flat();
+    }
+    return slot;
+  }
+
+  /** SSR SeatDynamic → SegmentSeat → RowSeats → Seats (TBO structure). */
+  private flattenTboSeatInventory(seatDynamic: any): any[] {
+    if (!Array.isArray(seatDynamic)) return [];
+    const out: any[] = [];
+    for (const segmentWrap of seatDynamic) {
+      const segmentSeats = segmentWrap?.SegmentSeat;
+      if (!Array.isArray(segmentSeats)) continue;
+      for (const seg of segmentSeats) {
+        const rowSeats = seg?.RowSeats;
+        if (!Array.isArray(rowSeats)) continue;
+        for (const row of rowSeats) {
+          const seats = row?.Seats;
+          if (!Array.isArray(seats)) continue;
+          for (const s of seats) {
+            if (s && typeof s === "object") out.push(s);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Client may send `Passengers` (SSR shape) or only `passengers` + `ssr` from DB (numeric keys).
+   */
+  private buildUserSsrPassengersList(bookReq: any): SsrPassengerSelections[] {
+    const withCaps = bookReq?.Passengers;
+    if (Array.isArray(withCaps) && withCaps.length > 0) {
+      return withCaps;
+    }
+    const riders = bookReq?.passengers;
+    const n = Array.isArray(riders) ? riders.length : 0;
+    const ssrMap = bookReq?.ssr;
+    if (n > 0 && ssrMap && typeof ssrMap === "object") {
+      return Array.from({ length: n }, (_, i) => ({
+        ...(ssrMap[i] ?? ssrMap[String(i)] ?? {}),
+      }));
+    }
+    if (ssrMap && typeof ssrMap === "object" && Object.keys(ssrMap).length > 0) {
+      return Object.keys(ssrMap)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((k) => ({ ...(ssrMap[k] || {}) }));
+    }
+    return [];
+  }
+
+  private mergeSsrByPassengerIndex(
+    prior: Record<string, any> | undefined,
+    mapped: Record<number, any>,
+  ): Record<string, any> {
+    const out: Record<string, any> = { ...(prior || {}) };
+    for (const [k, v] of Object.entries(mapped)) {
+      const prev = out[k] && typeof out[k] === "object" ? out[k] : {};
+      out[k] = { ...prev, ...(v && typeof v === "object" ? v : {}) };
+    }
+    return out;
+  }
+
+  private pickBaggageFromCatalog(
+    selected: any,
+    catalog: any[],
+  ): any | undefined {
+    if (!selected || !Array.isArray(catalog) || catalog.length === 0)
+      return undefined;
+    if (selected.Code) {
+      const byCode = catalog.find((b) => b.Code === selected.Code);
+      if (byCode) return byCode;
+    }
+    if (selected.Weight != null) {
+      const w = Number(selected.Weight);
+      return catalog.find(
+        (b) =>
+          b.Weight === selected.Weight ||
+          Number(b.Weight) === w ||
+          String(b.Weight) === String(selected.Weight),
+      );
+    }
+    return undefined;
+  }
+
+  private pickMealFromCatalog(
+    selected: any,
+    catalog: any[],
+  ): any | undefined {
+    if (!selected?.Code || !Array.isArray(catalog)) return undefined;
+    return catalog.find((m) => m.Code === selected.Code);
+  }
+
+  private pickSeatFromCatalog(
+    selected: any,
+    catalog: any[],
+  ): any | undefined {
+    if (!Array.isArray(catalog) || catalog.length === 0) return undefined;
+    if (selected.Code) {
+      const byCode = catalog.find((s) => s.Code === selected.Code);
+      if (byCode) return byCode;
+    }
+    if (selected.SeatNo != null) {
+      return catalog.find((s) => {
+        if (s.SeatNo !== selected.SeatNo) return false;
+        if (selected.RowNo == null || selected.RowNo === "") return true;
+        return String(s.RowNo) === String(selected.RowNo);
+      });
+    }
+    return undefined;
+  }
 
   /** [@Description: This method is used to book the flights]
    * @author: Prashant Joshi at 13-10-2025 **/
@@ -329,8 +464,7 @@ export class TboBookService {
 
     const authToken = await this.tboAuthTokenService.getAuthToken(bookRequest);
     const ssrPayload = {
-      // EndUserIp: bookRequest.headers["ip-address"],
-      EndUserIp: "20.244.28.12",
+      EndUserIp: this.resolveEndUserIp(bookRequest),
       TokenId: authToken,
       TraceId: res.Response.TraceId,
       ResultIndex: res.Response.Results.ResultIndex,
@@ -345,17 +479,13 @@ export class TboBookService {
 
     console.log("🔥 SSR RESPONSE:", JSON.stringify(ssrResponse));
 
-    // booking = await this.bookRepository.getBookingByBookingId({
-    //     bookingId: bookReq.bookingId,
-    //   });
-
-    const userSSR = (bookReq as any).Passengers || [];
-
+    const userSSR = this.buildUserSsrPassengersList(bookReq);
     const mappedSSR = this.mapSSR(userSSR, ssrResponse);
+    const priorSsr =
+      bookReq.ssr && typeof bookReq.ssr === "object" ? bookReq.ssr : {};
+    bookReq.ssr = this.mergeSsrByPassengerIndex(priorSsr, mappedSSR);
 
-    console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(mappedSSR));
-
-    bookReq.ssr = mappedSSR;
+    console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(bookReq.ssr));
 
     const fareBreakDown = res.Response.Results?.FareBreakdown;
     const isLCC = res.Response.Results.IsLCC;
@@ -566,7 +696,7 @@ export class TboBookService {
       ticketingResult?.Response?.Response?.IsPriceChanged ||
       ticketingResult?.Response?.Response?.IsTimeChanged
     ) {
-      this.ticketingCall({
+      return await this.ticketingCall({
         bookRequest,
         pnr,
         bookingId,
@@ -575,7 +705,6 @@ export class TboBookService {
         supplierResult: ticketingResult,
         logCollector,
       });
-      // ticketingResult.Response.ResponseStatus = 2;
     }
     return [{ ticketingResult, requestBodyTicketing }] as any;
   }
@@ -649,7 +778,8 @@ export class TboBookService {
       index: idx = 0,
       supplierResult = null,
     } = reqParams;
-    const fareBreakDown = bookRequest?.FareBreakdown;
+    const fareBreakDown =
+      bookRequest?.fareBreakDown ?? bookRequest?.FareBreakdown;
 
     const { bookReq, headers } = bookRequest;
 
@@ -681,7 +811,8 @@ export class TboBookService {
     // const passengerArray = passengers.map((element, index) => {
     const passengerArray = passengers.map((element, passengerIndex) => {
       // const passengerSSR = ssr[index] || {};
-      const passengerSSR = ssr[passengerIndex] || {};
+      const passengerSSR =
+        ssr[passengerIndex] ?? ssr[String(passengerIndex)] ?? {};
       console.log(
         `Passenger ${passengerIndex} SSR:`,
         JSON.stringify(passengerSSR),
@@ -695,13 +826,17 @@ export class TboBookService {
 
       // get pex fare from DB fare breakdown
       const fare = fareBreakDown?.find((f) => f?.PassengerType === pexT);
+      const paxCount = fare?.PassengerCount || 1;
       console.log("👤 Passenger Fare Breakdown:", {
         passengerName: element?.passengerDetail?.firstName,
         passengerType: element?.passengerType,
         baseFare: fare?.BaseFare,
         passengerCount: fare?.PassengerCount,
-        dividedFare: fare?.BaseFare / (fare?.PassengerCount || 1),
+        dividedFare: (fare?.BaseFare ?? 0) / paxCount,
       });
+
+      const addTxnPub =
+        fare?.AdditionalTxnFeePub ?? fare?.AdditionalTxnFeePubL ?? 0;
 
       return {
         Title: element?.passengerDetail?.title || "Mr",
@@ -737,20 +872,25 @@ export class TboBookService {
         FFNumber: null,
         Fare: {
           Currency: fare?.Currency,
-          BaseFare: fare?.BaseFare / (fare?.PassengerCount || 1) || 0,
-          Tax: fare?.Tax / (fare?.PassengerCount || 1) || 0,
-          YQTax: fare?.YQTax / (fare?.PassengerCount || 1) || 0,
+          BaseFare: (fare?.BaseFare ?? 0) / paxCount,
+          Tax: (fare?.Tax ?? 0) / paxCount,
+          TransactionFee: (fare?.TransactionFee ?? 0) / paxCount,
+          YQTax: (fare?.YQTax ?? 0) / paxCount,
           AdditionalTxnFeeOfrd:
-            fare?.AdditionalTxnFeeOfrd / (fare?.PassengerCount || 1) || 0,
-          AdditionalTxnFeePubL:
-            fare?.AdditionalTxnFeePubL / (fare?.PassengerCount || 1) || 0,
-          PGCharge: fare?.PGCharge / (fare?.PassengerCount || 1) || 0,
+            (fare?.AdditionalTxnFeeOfrd ?? 0) / paxCount,
+          AdditionalTxnFeePub: addTxnPub / paxCount,
+          AdditionalTxnFeePubL: (fare?.AdditionalTxnFeePubL ?? 0) / paxCount,
+          AirTransFee: (fare?.AirTransFee ?? 0) / paxCount,
+          PGCharge: (fare?.PGCharge ?? 0) / paxCount,
         },
         // ===== SSR INJECTION =====
 
         ...(Array.isArray(passengerSSR?.MealDynamic) &&
           passengerSSR.MealDynamic.length > 0 && {
-            MealDynamic: passengerSSR.MealDynamic,
+            MealDynamic: passengerSSR.MealDynamic.map((m: any) => ({
+              ...m,
+              Nationality: m?.Nationality ?? element?.nationality,
+            })),
           }),
 
         ...(Array.isArray(passengerSSR?.SeatDynamic) &&
@@ -802,35 +942,49 @@ export class TboBookService {
     return obj;
   }
 
-  async mapSSR(userSSR, ssrApiResponse) {
-    const result = {};
+  /**
+   * Maps user-selected SSR to full TBO catalog objects (required on LCC Ticket per Tek Travels docs).
+   */
+  mapSSR(
+    userSSR: SsrPassengerSelections[],
+    ssrApiResponse: any,
+  ): Record<number, any> {
+    const result: Record<number, any> = {};
+    const resp = ssrApiResponse?.Response;
+    if (!resp || Number(resp.ResponseStatus) !== 1) {
+      return result;
+    }
+
+    const flatSeats = this.flattenTboSeatInventory(resp.SeatDynamic);
 
     userSSR.forEach((pax, index) => {
-      const apiPax = ssrApiResponse.Response.Baggage?.[index] || {};
-      const apiMeal = ssrApiResponse.Response.MealDynamic?.[index] || {};
-      const apiSeat = ssrApiResponse.Response.SeatDynamic?.[index] || {};
+      const bagCat = this.getSsrCatalogArray(resp.Baggage, index);
+      const mealCat = this.getSsrCatalogArray(resp.MealDynamic, index);
+      const row: any = {};
 
-      result[index] = {};
-
-      // 🧳 BAGGAGE
       if (pax.Baggage?.length) {
-        result[index].Baggage = pax.Baggage.map((selected) =>
-          apiPax.find((b) => b.Weight === selected.Weight),
+        const mapped = pax.Baggage.map((sel) =>
+          this.pickBaggageFromCatalog(sel, bagCat),
         ).filter(Boolean);
+        if (mapped.length) row.Baggage = mapped;
       }
 
-      // 🍱 MEAL
       if (pax.MealDynamic?.length) {
-        result[index].MealDynamic = pax.MealDynamic.map((selected) =>
-          apiMeal.find((m) => m.Code === selected.Code),
+        const mapped = pax.MealDynamic.map((sel) =>
+          this.pickMealFromCatalog(sel, mealCat),
         ).filter(Boolean);
+        if (mapped.length) row.MealDynamic = mapped;
       }
 
-      // 🪑 SEAT
       if (pax.SeatDynamic?.length) {
-        result[index].SeatDynamic = pax.SeatDynamic.map((selected) =>
-          apiSeat.find((s) => s.SeatNo === selected.SeatNo),
+        const mapped = pax.SeatDynamic.map((sel) =>
+          this.pickSeatFromCatalog(sel, flatSeats),
         ).filter(Boolean);
+        if (mapped.length) row.SeatDynamic = mapped;
+      }
+
+      if (Object.keys(row).length > 0) {
+        result[index] = row;
       }
     });
 
