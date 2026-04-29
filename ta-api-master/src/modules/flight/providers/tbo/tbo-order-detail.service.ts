@@ -35,10 +35,10 @@ export class TboOrderDetailService {
         try {
             const authToken = await this.tboAuthTokenService.getAuthToken(orderRequest);
              // dev endpoint
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetBookingDetails`;
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetBookingDetails`;
 
             // prod endpoint
-            // const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
+            const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
             const supplierOrderDetailResponse: any[] = [];
             const result: OrderDetailResponse[] = [];
             // let storedLog;
