@@ -659,8 +659,8 @@ export class TboBookService {
     // console.log("🔥 CALLING SSR API WITH:", ssrPayload, "url:", ssrEndpoint);
     const ssrResponse = await Http.httpRequestTBO(
       "POST",
-      `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
-      // `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
+      // `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
+      `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
       JSON.stringify(ssrPayload),
     );
 
@@ -718,7 +718,7 @@ export class TboBookService {
         index,
       });
       // dev
-      // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Book`;
+      const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Book`;
 
       console.log(
         "SSR BEFORE BOOK API:",
@@ -727,7 +727,7 @@ export class TboBookService {
       console.log("Calling TBO BOOK API...");
 
       // prod url
-      const endpoint = `${providerCred.book_url}/rest/Book`;
+      // const endpoint = `${providerCred.book_url}/rest/Book`;
       let bookResult;
       try {
         bookResult = await Http.httpRequestTBO(
@@ -829,12 +829,12 @@ export class TboBookService {
     });
 
     // dev
-    // const endpointTicketing = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Ticket`;
+    const endpointTicketing = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Ticket`;
 
     console.log("Calling TBO TICKETING API...");
 
     // prod url
-    const endpointTicketing = `${providerCred.book_url}/rest/Ticket`;
+    // const endpointTicketing = `${providerCred.book_url}/rest/Ticket`;
     let ticketingResult;
     try {
       ticketingResult = await Http.httpRequestTBO(
