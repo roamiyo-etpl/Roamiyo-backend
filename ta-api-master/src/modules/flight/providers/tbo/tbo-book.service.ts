@@ -18,6 +18,7 @@ import { Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { OrderDetailResponse } from "../../order-details/interfaces/order-detail.interface";
 import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
+import { normalizeBundledSsrPerPassengers } from "src/shared/utilities/flight/ssr-passenger-normalize.utility";
 
 interface SupplierLogEntry {
   index: number;
@@ -667,7 +668,10 @@ export class TboBookService {
     console.log("🔥 SSR RESPONSE:", JSON.stringify(ssrResponse));
 
     const fareFlightKeys = this.extractAllowedFlightKeysFromFareQuote(res);
-    const userSSRRaw = this.buildUserSsrPassengersList(bookReq);
+    const userSSRRaw = normalizeBundledSsrPerPassengers(
+      bookReq.passengers ?? [],
+      this.buildUserSsrPassengersList(bookReq),
+    );
     const userSSR =
       fareFlightKeys.size > 0
         ? this.filterSsrByAllowedFlights(userSSRRaw, fareFlightKeys)
