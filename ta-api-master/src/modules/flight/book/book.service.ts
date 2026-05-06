@@ -4,7 +4,11 @@ import {
   BookInitiateResponse,
   BookResponse,
 } from "./interfaces/book.interface";
-import { BookConfirmationDto, BookDto } from "./dtos/book.dto";
+import {
+  BookConfirmationDto,
+  BookDto,
+  normalizeBookRequestGst,
+} from "./dtos/book.dto";
 import { BookRepository } from "./book.repository";
 import { Booking, BookingStatus } from "src/shared/entities/bookings.entity";
 import { v4 as uuid } from "uuid";
@@ -27,6 +31,8 @@ export class BookService {
     const { bookReq, headers } = reqParams;
     const userId = uuid();
     try {
+      normalizeBookRequestGst(bookReq);
+
       let fare: Fare[] = [];
       // Calculate the total count for each passenger type
       const adultCount = bookReq.passengers.filter(
@@ -256,6 +262,8 @@ export class BookService {
       if (!originalBookRequest) {
         throw new Error("Original booking request not found in booking log");
       }
+
+      normalizeBookRequestGst(originalBookRequest);
 
       console.log("Calling PROVIDER BOOK API (TBO)...");
 
