@@ -16,6 +16,10 @@ import { Generic } from "src/shared/utilities/flight/generic.utility";
 import { DuplicateBookingException } from "./exceptions/duplicate-booking.exception";
 import { RevalidateService } from "../revalidate/revalidate.service";
 import { Fare } from "../search/interfaces/start-routing.interface";
+import {
+  normalizeBundledSsrPerPassengers,
+  ssrBucketsToNumericRecord,
+} from "src/shared/utilities/flight/ssr-passenger-normalize.utility";
 
 @Injectable()
 export class BookService {
@@ -144,39 +148,25 @@ export class BookService {
 
       let formattedSSR: any = {};
 
+      const paxCount = bookReq.passengers?.length ?? 0;
       if (bookReq.Passengers && Array.isArray(bookReq.Passengers)) {
-        formattedSSR = bookReq.Passengers.reduce((acc, pax, index) => {
-          if (!pax) {
-            acc[index] = {};
-            return acc;
-          }
-
-          acc[index] = {};
-
-          if (Array.isArray(pax.Baggage) && pax.Baggage.length > 0) {
-            acc[index].Baggage = pax.Baggage;
-          }
-
-          if (Array.isArray(pax.MealDynamic) && pax.MealDynamic.length > 0) {
-            acc[index].MealDynamic = pax.MealDynamic;
-          }
-
-          if (Array.isArray(pax.SeatDynamic) && pax.SeatDynamic.length > 0) {
-            acc[index].SeatDynamic = pax.SeatDynamic;
-          }
-
-          if (Object.keys(acc[index]).length === 0) {
-            acc[index] = {};
-          }
-
-          return acc;
-        }, {});
+        const buckets = Array.from({ length: paxCount }, (_, i) => ({
+          ...(bookReq.Passengers[i] ?? {}),
+        }));
+        formattedSSR = ssrBucketsToNumericRecord(
+          normalizeBundledSsrPerPassengers(bookReq.passengers ?? [], buckets),
+        );
       } else if (
         bookReq.ssr &&
         typeof bookReq.ssr === "object" &&
         Object.keys(bookReq.ssr).length > 0
       ) {
-        formattedSSR = { ...bookReq.ssr };
+        const buckets = Array.from({ length: paxCount }, (_, i) => ({
+          ...(bookReq.ssr[i] ?? bookReq.ssr[String(i)] ?? {}),
+        }));
+        formattedSSR = ssrBucketsToNumericRecord(
+          normalizeBundledSsrPerPassengers(bookReq.passengers ?? [], buckets),
+        );
       }
 
       // STORE ONLY IF SSR EXISTS
