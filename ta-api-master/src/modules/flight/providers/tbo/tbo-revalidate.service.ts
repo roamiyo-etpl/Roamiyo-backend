@@ -298,6 +298,14 @@ export class TboRevalidateService {
               ...convertedResultArray[0].route.flightSegments,
               ...convertedResultArray[1].route.flightSegments,
             ],
+            fareRules: [
+              ...(convertedResultArray[0].route?.fareRules ?? []),
+              ...(convertedResultArray[1].route?.fareRules ?? []),
+            ],
+            miniFareRules: [
+              ...(convertedResultArray[0].route?.miniFareRules ?? []),
+              ...(convertedResultArray[1].route?.miniFareRules ?? []),
+            ],
           },
         };
       }
@@ -432,6 +440,9 @@ export class TboRevalidateService {
             flightJourney.IsLCC ? AirlineCategory.LCC : AirlineCategory.Non_LCC,
           );
           flightRoute.isRefundable.push(flightJourney?.IsRefundable);
+
+          flightRoute.fareRules = flightJourney?.FareRules ?? undefined;
+          flightRoute.miniFareRules = flightJourney?.MiniFareRules ?? undefined;
 
           return flightRoute;
         },

@@ -293,6 +293,11 @@ export class TboSearchService {
 
               FareRules: [...flight.FareRules, ...findInBound?.FareRules],
 
+              MiniFareRules: [
+                ...(flight.MiniFareRules ?? []),
+                ...(findInBound?.MiniFareRules ?? []),
+              ],
+
               // Separate fare per leg
               outboundFare: {
                 BaseFare: flight.Fare?.BaseFare,
@@ -478,6 +483,9 @@ export class TboSearchService {
         groupHash.totalAmount = flightRoute.fare[0].totalFare;
         groupHash.solutionId = flightRoute.solutionId[0];
         flightRoute.groupHash = [groupHash];
+
+        flightRoute.fareRules = flightJourney?.FareRules ?? undefined;
+        flightRoute.miniFareRules = flightJourney?.MiniFareRules ?? undefined;
 
         return flightRoute;
       });

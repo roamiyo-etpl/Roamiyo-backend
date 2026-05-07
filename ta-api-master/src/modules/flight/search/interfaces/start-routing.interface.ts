@@ -95,6 +95,15 @@ export class Route {
   outboundFare?: any;
   inboundFare?: any;
   legs?: any[];
+  /**
+   * TBO Air Search passthrough: `FareRules` from supplier (unchanged shape).
+   */
+  fareRules?: unknown[];
+  /**
+   * TBO Air Search passthrough: `MiniFareRules` from supplier (unchanged shape;
+   * includes Cancellation / Reissue rows and any other types returned).
+   */
+  miniFareRules?: unknown[];
 }
 
 export class Fare {
