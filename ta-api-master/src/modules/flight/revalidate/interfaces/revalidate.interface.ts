@@ -27,7 +27,10 @@ export class RevalidateData {
     solutionId: string;
     passportRequired: boolean;
     fare: Fare[];
-    fareRules?: FareRules[];
+    /** TBO FareQuote passthrough: supplier `FareRules` (same shape as search). */
+    fareRules?: unknown[];
+    /** TBO FareQuote passthrough: supplier `MiniFareRules` (Cancellation / Reissue / etc.). */
+    miniFareRules?: unknown[];
     flightStops: number[];
     airlineName: string[];
     airlineCode: string[];

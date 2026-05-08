@@ -94,10 +94,10 @@ export class TboRevalidateService {
         const requestBody = this.createRequest(tempRequestData, authToken);
         // const TIMEOUT = Http.Timeout.Others;
         // dev endpoint
-        // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareQuote`;
+        const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareQuote`;
 
         // prod endpoint
-        const endpoint = `${providerCred.url}/rest/FareQuote`;
+        // const endpoint = `${providerCred.url}/rest/FareQuote`;
         const revalidateResult = await Http.httpRequestTBO(
           "POST",
           endpoint,
@@ -298,6 +298,14 @@ export class TboRevalidateService {
               ...convertedResultArray[0].route.flightSegments,
               ...convertedResultArray[1].route.flightSegments,
             ],
+            fareRules: [
+              ...(convertedResultArray[0].route?.fareRules ?? []),
+              ...(convertedResultArray[1].route?.fareRules ?? []),
+            ],
+            miniFareRules: [
+              ...(convertedResultArray[0].route?.miniFareRules ?? []),
+              ...(convertedResultArray[1].route?.miniFareRules ?? []),
+            ],
           },
         };
       }
@@ -433,6 +441,9 @@ export class TboRevalidateService {
           );
           flightRoute.isRefundable.push(flightJourney?.IsRefundable);
 
+          flightRoute.fareRules = flightJourney?.FareRules ?? undefined;
+          flightRoute.miniFareRules = flightJourney?.MiniFareRules ?? undefined;
+
           return flightRoute;
         },
       );
@@ -521,10 +532,10 @@ export class TboRevalidateService {
       );
 
       //dev
-      // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareRule`;
+      const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/FareRule`;
 
       //prod
-      const endpoint = `${providerCred.url}/rest/FareRule`;
+      // const endpoint = `${providerCred.url}/rest/FareRule`;
 
       // const TIMEOUT = Http.Timeout.Others;
       const requestResult = await Http.httpRequestTBO(

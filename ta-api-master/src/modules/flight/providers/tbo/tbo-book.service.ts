@@ -18,6 +18,7 @@ import { Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { OrderDetailResponse } from "../../order-details/interfaces/order-detail.interface";
 import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
+import { normalizeBundledSsrPerPassengers } from "src/shared/utilities/flight/ssr-passenger-normalize.utility";
 
 interface SupplierLogEntry {
   index: number;
@@ -46,7 +47,7 @@ export class TboBookService {
     @InjectRepository(RevalidateResponseEntity)
     private revalidateRepo: Repository<RevalidateResponseEntity>,
     private readonly supplierLogUtility: SupplierLogUtility,
-  ) {}
+  ) { }
 
   private resolveEndUserIp(bookRequest: any): string {
     const h = bookRequest?.headers || {};
@@ -96,9 +97,63 @@ export class TboBookService {
    */
   private buildUserSsrPassengersList(bookReq: any): SsrPassengerSelections[] {
     const withCaps = bookReq?.Passengers;
+
+    // CASE 1:
+    // Client directly sends Passengers SSR array
     if (Array.isArray(withCaps) && withCaps.length > 0) {
+
+      const totalPassengers = Array.isArray(bookReq?.passengers)
+        ? bookReq.passengers.length
+        : 0;
+
+      // =========================================
+      // CASE:
+      // 1 SSR object but multiple actual passengers
+      // =========================================
+      if (withCaps.length === 1 && totalPassengers > 1) {
+
+        const firstPax = withCaps[0];
+
+        return Array.from(
+          { length: totalPassengers },
+          (_, index) => {
+
+            const seat =
+              firstPax?.SeatDynamic?.[index];
+
+            const meal =
+              firstPax?.MealDynamic?.[index];
+
+            const baggage =
+              firstPax?.Baggage?.[index];
+
+            return {
+
+              ...(seat && {
+                SeatDynamic: [{ ...seat }],
+              }),
+
+              ...(meal && {
+                MealDynamic: [{ ...meal }],
+              }),
+
+              ...(baggage && {
+                Baggage: [{ ...baggage }],
+              }),
+
+            };
+          },
+        );
+      }
+
       return withCaps;
     }
+
+    // =========================================
+    // CASE 2:
+    // SSR already stored in bookReq.ssr
+    // =========================================
+
     const riders = bookReq?.passengers;
     const n = Array.isArray(riders) ? riders.length : 0;
     const ssrMap = bookReq?.ssr;
@@ -107,6 +162,11 @@ export class TboBookService {
         ...(ssrMap[i] ?? ssrMap[String(i)] ?? {}),
       }));
     }
+
+    // =========================================
+    // CASE 3:
+    // fallback
+    // =========================================
     if (ssrMap && typeof ssrMap === "object" && Object.keys(ssrMap).length > 0) {
       return Object.keys(ssrMap)
         .sort((a, b) => Number(a) - Number(b))
@@ -659,15 +719,18 @@ export class TboBookService {
     // console.log("🔥 CALLING SSR API WITH:", ssrPayload, "url:", ssrEndpoint);
     const ssrResponse = await Http.httpRequestTBO(
       "POST",
-      `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
-      // `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
+      // `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
+      `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
       JSON.stringify(ssrPayload),
     );
 
     console.log("🔥 SSR RESPONSE:", JSON.stringify(ssrResponse));
 
     const fareFlightKeys = this.extractAllowedFlightKeysFromFareQuote(res);
-    const userSSRRaw = this.buildUserSsrPassengersList(bookReq);
+    const userSSRRaw = normalizeBundledSsrPerPassengers(
+      bookReq.passengers ?? [],
+      this.buildUserSsrPassengersList(bookReq),
+    );
     const userSSR =
       fareFlightKeys.size > 0
         ? this.filterSsrByAllowedFlights(userSSRRaw, fareFlightKeys)
@@ -718,7 +781,7 @@ export class TboBookService {
         index,
       });
       // dev
-      // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Book`;
+      const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Book`;
 
       console.log(
         "SSR BEFORE BOOK API:",
@@ -727,7 +790,7 @@ export class TboBookService {
       console.log("Calling TBO BOOK API...");
 
       // prod url
-      const endpoint = `${providerCred.book_url}/rest/Book`;
+      // const endpoint = `${providerCred.book_url}/rest/Book`;
       let bookResult;
       try {
         bookResult = await Http.httpRequestTBO(
@@ -829,12 +892,12 @@ export class TboBookService {
     });
 
     // dev
-    // const endpointTicketing = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Ticket`;
+    const endpointTicketing = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Ticket`;
 
     console.log("Calling TBO TICKETING API...");
 
     // prod url
-    const endpointTicketing = `${providerCred.book_url}/rest/Ticket`;
+    // const endpointTicketing = `${providerCred.book_url}/rest/Ticket`;
     let ticketingResult;
     try {
       ticketingResult = await Http.httpRequestTBO(
@@ -1084,21 +1147,21 @@ export class TboBookService {
 
         ...(Array.isArray(passengerSSR?.MealDynamic) &&
           passengerSSR.MealDynamic.length > 0 && {
-            MealDynamic: passengerSSR.MealDynamic.map((m: any) => ({
-              ...m,
-              Nationality: m?.Nationality ?? element?.nationality,
-            })),
-          }),
+          MealDynamic: passengerSSR.MealDynamic.map((m: any) => ({
+            ...m,
+            Nationality: m?.Nationality ?? element?.nationality,
+          })),
+        }),
 
         ...(Array.isArray(passengerSSR?.SeatDynamic) &&
           passengerSSR.SeatDynamic.length > 0 && {
-            SeatDynamic: passengerSSR.SeatDynamic,
-          }),
+          SeatDynamic: passengerSSR.SeatDynamic,
+        }),
 
         ...(Array.isArray(passengerSSR?.Baggage) &&
           passengerSSR.Baggage.length > 0 && {
-            Baggage: passengerSSR.Baggage,
-          }),
+          Baggage: passengerSSR.Baggage,
+        }),
       };
     });
     console.log(

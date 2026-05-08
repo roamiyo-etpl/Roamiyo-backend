@@ -170,10 +170,10 @@ export class TboCancellationService {
             };
 
             // dev
-            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/ReleasePNRRequest`;
+            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/ReleasePNRRequest`;
 
             // prod
-            const endpoint = `${providerCred.book_url}/rest/ReleasePNRRequest`;
+            // const endpoint = `${providerCred.book_url}/rest/ReleasePNRRequest`;
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
             await this.supplierLogUtility.generateLogFile({
@@ -223,10 +223,10 @@ export class TboCancellationService {
             }
 
             // dev
-            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SendChangeRequest`;
+            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SendChangeRequest`;
 
             // prod url
-            const endpoint = `${providerCred.book_url}/rest/SendChangeRequest`;
+            // const endpoint = `${providerCred.book_url}/rest/SendChangeRequest`;
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
             await this.supplierLogUtility.generateLogFile({
@@ -270,10 +270,10 @@ export class TboCancellationService {
             };
 
             // dev
-            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetChangeRequestStatus`;
+            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetChangeRequestStatus`;
 
             // prod
-            const endpoint = `${providerCred.book_url}/rest/GetChangeRequestStatus`;
+            // const endpoint = `${providerCred.book_url}/rest/GetChangeRequestStatus`;
 
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
@@ -327,10 +327,10 @@ export class TboCancellationService {
             };
 
             // dev
-            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCancellationCharges`;
+            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCancellationCharges`;
 
             // prod
-            const endpoint = `${providerCred.book_url}/rest/GetCancellationCharges`;
+            // const endpoint = `${providerCred.book_url}/rest/GetCancellationCharges`;
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
             await this.supplierLogUtility.generateLogFile({
@@ -477,10 +477,10 @@ export class TboCancellationService {
             };
 
             // dev
-            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetBookingDetails`;
+            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetBookingDetails`;
 
             // prod
-            const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
+            // const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
             const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
 
             await this.supplierLogUtility.generateLogFile({

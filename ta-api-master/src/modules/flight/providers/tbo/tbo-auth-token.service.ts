@@ -80,10 +80,10 @@ export class TboAuthTokenService {
         EndUserIp: headers["ip-address"],
       };
       // dev endpoint
-      // const endpoint = `${providerCred.auth_url}/SharedData.svc/rest/Authenticate`;
+      const endpoint = `${providerCred.auth_url}/SharedData.svc/rest/Authenticate`;
 
       // prod endpoint is
-      const endpoint = `${providerCred.auth_url}/rest/Authenticate`;
+      // const endpoint = `${providerCred.auth_url}/rest/Authenticate`;
       console.log("endpoint:::::::::", endpoint);
 
       const sessionData = await Http.httpRequestTBO(

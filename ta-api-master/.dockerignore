@@ -1,3 +1,4 @@
 # Keep context small; do not add patterns that exclude ta-api-master/json/*.json or config/env.
 node_modules
 dist
+docs

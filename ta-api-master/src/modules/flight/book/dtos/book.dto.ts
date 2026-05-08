@@ -1,5 +1,5 @@
 import { IsArray, IsNotEmpty, ValidateNested, IsDateString, IsString, IsOptional, IsEmail } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RouteDetails {
@@ -347,6 +347,7 @@ export class GSTDetails {
         format: 'email',
     })
     @IsOptional()
+    @Transform(({ value }) => (value === '' || value == null ? undefined : value))
     @IsEmail()
     gstCompanyEmail?: string;
 }
@@ -511,14 +512,15 @@ export class BookDto {
     routes: RouteDetails[][];
 
     @ApiPropertyOptional({
-        description: 'GST details (optional - may be required based on flight/supplier)',
+        description:
+            'GST details (optional; may be required for some fares/suppliers). Blank strings are normalized before TBO.',
         type: GSTDetails,
         example: {
-            gstCompanyAddress: '123 Main Street',
-            gstCompanyContactNumber: '1234567890',
-            gstCompanyName: 'ABC Company Ltd.',
             gstNumber: '27AAAAA0000A1Z5',
+            gstCompanyName: 'ABC Company Ltd.',
             gstCompanyEmail: 'company@example.com',
+            gstCompanyContactNumber: '1234567890',
+            gstCompanyAddress: '123 Main Street',
         },
     })
     @IsOptional()
@@ -537,6 +539,38 @@ export class BookDto {
 })
 @IsOptional()
 ssr?: any;
+}
+
+/**
+ * Trim GST strings; blank strings become undefined so TBO gets clean fields.
+ * Older booking logs may still have only `gst_details`; treat it as `gst` for confirmation.
+ */
+export function normalizeBookRequestGst(bookReq: BookDto): void {
+    const raw = bookReq as BookDto & { gst_details?: GSTDetails };
+    if (!bookReq.gst && raw.gst_details && typeof raw.gst_details === 'object') {
+        bookReq.gst = raw.gst_details;
+    }
+
+    if (!bookReq.gst) {
+        return;
+    }
+
+    const g = bookReq.gst;
+    const pick = (s?: string) => {
+        if (s == null) {
+            return undefined;
+        }
+        const t = String(s).trim();
+        return t === '' ? undefined : t;
+    };
+
+    bookReq.gst = {
+        gstCompanyAddress: pick(g.gstCompanyAddress),
+        gstCompanyContactNumber: pick(g.gstCompanyContactNumber),
+        gstCompanyName: pick(g.gstCompanyName),
+        gstNumber: pick(g.gstNumber),
+        gstCompanyEmail: pick(g.gstCompanyEmail),
+    };
 }
 
 export class BookConfirmationDto {
