@@ -150,9 +150,7 @@ export class BookService {
 
       const paxCount = bookReq.passengers?.length ?? 0;
       if (bookReq.Passengers && Array.isArray(bookReq.Passengers)) {
-        const buckets = Array.from({ length: paxCount }, (_, i) => ({
-          ...(bookReq.Passengers[i] ?? {}),
-        }));
+        const buckets = bookReq.Passengers.map((p) => ({ ...(p ?? {}) }));
         formattedSSR = ssrBucketsToNumericRecord(
           normalizeBundledSsrPerPassengers(bookReq.passengers ?? [], buckets),
         );

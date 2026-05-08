@@ -3,8 +3,10 @@
  * `Passengers[0]` entry, TBO mapping only runs for index 0 and the supplier
  * receives multiple seats on one pax. We expand to one slot per booking
  * passenger and assign items round-robin to seat-eligible travellers (no seats
- * for INF). Meals and baggage use the same bundling detection so multiple
- * selections in one bucket are split across non-INF passengers in order.
+ * for INF) only in this single-bucket shape.
+ *
+ * If client already sends one `Passengers[i]` bucket per traveler index,
+ * indexes are preserved as-is (including intentional empty buckets).
  */
 
 export type SsrPassengerBucket = {
@@ -55,10 +57,14 @@ export function normalizeBundledSsrPerPassengers(
   if (n === 0) return userSSR;
 
   const eligible = nonInfantIndices(passengers);
+  // Auto-redistribute only when client sends a single bundled SSR bucket.
+  // If SSR has one bucket per passenger (even with empty objects), keep indexes as-is.
+  const fromSingleBundledBucket = userSSR.length <= 1;
 
   const flatSeats = flatItems(userSSR, "SeatDynamic");
   const seatIdxs = indicesWithItems(userSSR, "SeatDynamic");
   const redistributeSeats =
+    fromSingleBundledBucket &&
     flatSeats.length > 0 &&
     seatIdxs.length === 1 &&
     flatSeats.length > 1 &&
@@ -67,6 +73,7 @@ export function normalizeBundledSsrPerPassengers(
   const flatMeals = flatItems(userSSR, "MealDynamic");
   const mealIdxs = indicesWithItems(userSSR, "MealDynamic");
   const redistributeMeals =
+    fromSingleBundledBucket &&
     flatMeals.length > 0 &&
     mealIdxs.length === 1 &&
     flatMeals.length > 1 &&
@@ -75,6 +82,7 @@ export function normalizeBundledSsrPerPassengers(
   const flatBaggage = flatItems(userSSR, "Baggage");
   const bagIdxs = indicesWithItems(userSSR, "Baggage");
   const redistributeBaggage =
+    fromSingleBundledBucket &&
     flatBaggage.length > 0 &&
     bagIdxs.length === 1 &&
     flatBaggage.length > 1 &&

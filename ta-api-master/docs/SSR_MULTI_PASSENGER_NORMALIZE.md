@@ -1,47 +1,152 @@
-# SSR multi-passenger normalization (revert / changelog)
+# SSR multi-passenger normalization and frontend payload guide
 
-## Problem
+## What was fixed
 
-- The client often sends all `SeatDynamic` (and sometimes multiple `MealDynamic` / `Baggage`) under a **single** `Passengers[0]` entry when several travellers have SSR.
-- `TboBookService.buildUserSsrPassengersList` prefers `Passengers` and returns that array unchanged.
-- `mapSSR` runs **per index**, so only passenger `0` was mapped and the TBO Ticketing payload put **multiple seats on one pax** (e.g. 6E). Infants must not hold seats; suppliers reject this with generic errors (e.g. ErrorCode 35).
+### Root issue
 
-## Fix (what changed)
+When frontend sent SSR in one bundled bucket (usually only `Passengers[0]`), backend had to split SSR by passenger index.  
+But when frontend already sent one bucket per passenger (for example `Passengers[1]` exists but empty), backend still redistributed seats and could move seats to the wrong passenger index.
 
-1. **`src/shared/utilities/flight/ssr-passenger-normalize.utility.ts`** (new)
-   - `normalizeBundledSsrPerPassengers(passengers, userSSR)`:
-     - Builds one SSR bucket per `bookReq.passengers` entry (same order as booking).
-     - If **all** seats are attached to **one** index and there is **more than one** seat, splits them **in list order** across passengers who are **not** `INF`.
-     - Same bundling rule for **meals** and **baggage** (multiple items in one bucket → split across non-INF passengers in order).
-     - **Strips `SeatDynamic` from infants** even if the client sent them by mistake.
-   - `ssrBucketsToNumericRecord` converts the array to the `ssr` object shape stored in DB (`"0"`, `"1"`, …).
+This produced supplier errors like `Invalid Seat Data`.
 
-2. **`src/modules/flight/providers/tbo/tbo-book.service.ts`**
-   - After `buildUserSsrPassengersList(bookReq)`, the list is passed through `normalizeBundledSsrPerPassengers(bookReq.passengers, …)` **before** `filterSsrByAllowedFlights` and `mapSSR`.
+### Current behavior
 
-3. **`src/modules/flight/book/book.service.ts`** (`bookingInitiate`)
-   - When persisting `ssr_response`, SSR is normalized the same way so confirmation reads per-passenger SSR from DB.
+`normalizeBundledSsrPerPassengers` now redistributes only when payload is truly bundled:
 
-## How to revert
+- auto-redistribution runs only if SSR comes as a **single bucket** (`Passengers.length <= 1`)
+- if SSR is already per-passenger (array length equals passenger count, even with empties), indexes are preserved
+- `INF` passengers still cannot have seats (`SeatDynamic` stripped for infants)
 
-1. Delete `src/shared/utilities/flight/ssr-passenger-normalize.utility.ts`.
-2. Remove imports and calls to `normalizeBundledSsrPerPassengers` / `ssrBucketsToNumericRecord` in:
-   - `src/modules/flight/providers/tbo/tbo-book.service.ts`
-   - `src/modules/flight/book/book.service.ts`
-3. In `book.service.ts`, restore the previous `Passengers.reduce` block and `formattedSSR = { ...bookReq.ssr }` for the SSR-only branch (see git history).
-4. Remove this doc if you do not want it in the tree.
+Also, in `bookingInitiate`, `bookReq.Passengers` is normalized from the raw array (no forced padding before normalization), so "single bundled bucket" detection works correctly.
 
-## Behaviour / limitations
+## Files changed
 
-- **Seat order**: seats are assigned to non-INF passengers in **passenger list order** (first seat → first eligible pax, second → second eligible, …). The client should send seats in the same order as `passengers[]`.
-- **Single bucket with one seat**: left on index `0` (first passenger); still OK for ADT+CHD+INF.
-- **More seats than non-INF passengers**: redistribution is **not** applied (`eligible.length >= flatSeats.length` guard); seats stay on the original indices (may still fail at supplier).
-- **Meals for infants**: not explicitly stripped; only seats are stripped for `INF`. If you need infant meals only on specific indices, send them per-passenger from the client.
+| File | Change |
+|---|---|
+| `src/shared/utilities/flight/ssr-passenger-normalize.utility.ts` | Restrict redistribution to single bundled SSR bucket |
+| `src/modules/flight/book/book.service.ts` | Use raw `Passengers` array for normalization during initiate |
+| `src/modules/flight/providers/tbo/tbo-book.service.ts` | Already consumes normalized SSR flow in book/ticket pipeline |
 
-## Files touched
+## Frontend payload format (recommended)
 
-| File | Role |
-|------|------|
-| `ssr-passenger-normalize.utility.ts` | Shared normalization |
-| `tbo-book.service.ts` | TBO book / ticketing SSR pipeline |
-| `book.service.ts` | Persist normalized `ssr_response` on initiate |
+### Important contract
+
+1. `passengers[i]` and `Passengers[i]` represent the same traveler index.
+2. If passenger has no SSR, send empty arrays for that index.
+3. For roundtrip:
+   - non-stop: per selected passenger, one seat/meal/baggage item per direction as selected
+   - layover: one item per segment as selected
+4. For infants (`INF`), do not send `SeatDynamic`.
+
+---
+
+### A) Roundtrip non-stop, single passenger
+
+```json
+{
+  "passengers": [{ "passengerType": "ADT" }],
+  "Passengers": [
+    {
+      "SeatDynamic": [
+        { "FlightNumber": "1040", "Origin": "BLR", "Destination": "DEL", "Code": "6C" },
+        { "FlightNumber": "1070", "Origin": "DEL", "Destination": "BLR", "Code": "6B" }
+      ],
+      "MealDynamic": [
+        { "FlightNumber": "1040", "Origin": "BLR", "Destination": "DEL", "Code": "VPMB" }
+      ],
+      "Baggage": [
+        { "FlightNumber": "1040", "Origin": "BLR", "Destination": "DEL", "Code": "SBHA" }
+      ]
+    }
+  ]
+}
+```
+
+### B) Roundtrip non-stop, multiple passengers
+
+```json
+{
+  "passengers": [
+    { "passengerType": "ADT" },
+    { "passengerType": "ADT" }
+  ],
+  "Passengers": [
+    {
+      "SeatDynamic": [
+        { "FlightNumber": "1040", "Origin": "BLR", "Destination": "DEL", "Code": "6C" },
+        { "FlightNumber": "1070", "Origin": "DEL", "Destination": "BLR", "Code": "6B" }
+      ],
+      "MealDynamic": [{ "FlightNumber": "1040", "Origin": "BLR", "Destination": "DEL", "Code": "VPMB" }],
+      "Baggage": [{ "FlightNumber": "1040", "Origin": "BLR", "Destination": "DEL", "Code": "SBHA" }]
+    },
+    {
+      "SeatDynamic": [],
+      "MealDynamic": [],
+      "Baggage": []
+    }
+  ]
+}
+```
+
+> In this case second passenger stays empty by design; backend now preserves this.
+
+---
+
+### C) Roundtrip layover, single passenger
+
+```json
+{
+  "passengers": [{ "passengerType": "ADT" }],
+  "Passengers": [
+    {
+      "SeatDynamic": [
+        { "FlightNumber": "269", "Origin": "BLR", "Destination": "BOM", "Code": "9B" },
+        { "FlightNumber": "164", "Origin": "BOM", "Destination": "DEL", "Code": "7C" },
+        { "FlightNumber": "2487", "Origin": "DEL", "Destination": "PNQ", "Code": "11A" },
+        { "FlightNumber": "137", "Origin": "PNQ", "Destination": "BLR", "Code": "12C" }
+      ],
+      "MealDynamic": [
+        { "FlightNumber": "164", "Origin": "BOM", "Destination": "DEL", "Code": "VGSW" }
+      ],
+      "Baggage": [
+        { "FlightNumber": "269", "Origin": "BLR", "Destination": "DEL", "Code": "EB03" }
+      ]
+    }
+  ]
+}
+```
+
+### D) Roundtrip layover, multiple passengers
+
+```json
+{
+  "passengers": [
+    { "passengerType": "ADT" },
+    { "passengerType": "ADT" }
+  ],
+  "Passengers": [
+    {
+      "SeatDynamic": [
+        { "FlightNumber": "269", "Origin": "BLR", "Destination": "BOM", "Code": "9B" },
+        { "FlightNumber": "164", "Origin": "BOM", "Destination": "DEL", "Code": "7C" }
+      ],
+      "MealDynamic": [{ "FlightNumber": "164", "Origin": "BOM", "Destination": "DEL", "Code": "VGSW" }],
+      "Baggage": [{ "FlightNumber": "269", "Origin": "BLR", "Destination": "DEL", "Code": "EB03" }]
+    },
+    {
+      "SeatDynamic": [
+        { "FlightNumber": "269", "Origin": "BLR", "Destination": "BOM", "Code": "9C" },
+        { "FlightNumber": "164", "Origin": "BOM", "Destination": "DEL", "Code": "7B" }
+      ],
+      "MealDynamic": [{ "FlightNumber": "164", "Origin": "BOM", "Destination": "DEL", "Code": "VGS1" }],
+      "Baggage": [{ "FlightNumber": "269", "Origin": "BLR", "Destination": "DEL", "Code": "IB08" }]
+    }
+  ]
+}
+```
+
+## Revert steps
+
+1. Revert `src/shared/utilities/flight/ssr-passenger-normalize.utility.ts`.
+2. Revert `src/modules/flight/book/book.service.ts` SSR bucket preparation.
+3. Keep or remove this doc based on project docs policy.
