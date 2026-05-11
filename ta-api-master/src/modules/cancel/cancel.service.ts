@@ -23,15 +23,37 @@ export class GenericCancelService {
 
     async getCancellationCharges(reqParams: { cancelReq: GenericGetCancellationChargesDto; headers: any }) {
         const { cancelReq, headers } = reqParams;
+    
+        console.log('================ CONTROLLER: GET CANCELLATION CHARGES ================');
+        console.log('Incoming Headers =>', JSON.stringify(headers, null, 2));
+        console.log('Incoming cancelReq =>', JSON.stringify(cancelReq, null, 2));
+    
         const mode = (cancelReq.mode || '').toString().toLowerCase();
+    
+        console.log('Resolved Mode =>', mode);
+    
         if (mode === 'flight') {
+            console.log('Routing request to Flight Cancellation Service');
+    
             const flightReq = { ...cancelReq } as any;
             delete flightReq.mode;
-            return this.flightCancelService.getCancellationCharges({ cancelReq: flightReq, headers });
+    
+            console.log('Prepared Flight Request =>', JSON.stringify(flightReq, null, 2));
+    
+            return this.flightCancelService.getCancellationCharges({
+                cancelReq: flightReq,
+                headers,
+            });
         }
+    
         if (mode === 'hotel') {
+            console.log('Hotel mode received but not implemented');
+    
             throw new BadRequestException('Hotel cancellation charges are not implemented');
         }
+    
+        console.log('Invalid mode received =>', mode);
+    
         throw new BadRequestException('Invalid mode. Allowed: "flight" | "hotel"');
     }
 }

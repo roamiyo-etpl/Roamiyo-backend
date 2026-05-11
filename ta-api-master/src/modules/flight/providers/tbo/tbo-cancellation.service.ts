@@ -316,8 +316,22 @@ export class TboCancellationService {
     /**
      * Gets cancellation charges and refund amount
     */
-    private async getCancellationCharges({ cancelReq, providerCred, authToken, headers, logPrefix }) {
+    private async getCancellationCharges({
+        cancelReq,
+        providerCred,
+        authToken,
+        headers,
+        logPrefix,
+    }) {
         try {
+            console.log('================ TBO GET CANCELLATION CHARGES API ================');
+    
+            console.log('Incoming cancelReq =>', JSON.stringify(cancelReq, null, 2));
+            console.log('Incoming headers =>', JSON.stringify(headers, null, 2));
+            console.log('Incoming providerCred =>', JSON.stringify(providerCred, null, 2));
+            console.log('Incoming authToken =>', authToken);
+            console.log('Incoming logPrefix =>', logPrefix);
+    
             const requestData: GetCancellationChargesRequestDto = {
                 EndUserIp: headers['ip-address'] || '192.168.10.36',
                 TokenId: authToken,
@@ -325,38 +339,81 @@ export class TboCancellationService {
                 BookingId: cancelReq.bookingId,
                 BookingMode: 5,
             };
-
+    
+            console.log(
+                'Prepared TBO Request Payload =>',
+                JSON.stringify(requestData, null, 2),
+            );
+    
             // dev
             const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCancellationCharges`;
-
+    
             // prod
             // const endpoint = `${providerCred.book_url}/rest/GetCancellationCharges`;
-            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
-
+    
+            console.log('Final Endpoint =>', endpoint);
+            console.log('HTTP Method => POST');
+    
+            console.log('Calling TBO API');
+    
+            const response = await Http.httpRequestTBO(
+                'POST',
+                endpoint,
+                JSON.stringify(requestData),
+            );
+    
+            console.log(
+                'Raw Supplier Response =>',
+                JSON.stringify(response, null, 2),
+            );
+    
+            console.log('Generating Supplier Log File');
+    
             await this.supplierLogUtility.generateLogFile({
                 fileName: `${logPrefix}-getcancellationcharges-TBO`,
-                logData: { request: requestData, response },
+                logData: {
+                    request: requestData,
+                    response,
+                },
                 folderName: 'cancellation',
                 logId: null,
                 title: 'Get-Cancellation-Charges-TBO',
                 searchReqId: null,
                 bookingReferenceId: cancelReq.bookingId.toString(),
             });
-
-            const supplierResponseStatus = response?.Response?.ResponseStatus || 0;
-
-            return {
+    
+            console.log('Supplier Log File Generated');
+    
+            const supplierResponseStatus =
+                response?.Response?.ResponseStatus || 0;
+    
+            console.log('Supplier Response Status =>', supplierResponseStatus);
+    
+            const finalResponse = {
                 success: supplierResponseStatus === 1,
-                supplierResponseStatus: this.getResponseStatusText(supplierResponseStatus),
+                supplierResponseStatus:
+                    this.getResponseStatusText(supplierResponseStatus),
                 refundAmount: response?.Response?.RefundAmount || 0,
-                cancellationCharge: response?.Response?.CancellationCharge || 0,
+                cancellationCharge:
+                    response?.Response?.CancellationCharge || 0,
                 remarks: response?.Response?.Remarks || '',
                 currency: response?.Response?.Currency || '',
                 traceId: response?.Response?.TraceId,
                 error: response?.Response?.Error,
             };
+    
+            console.log(
+                'Final API Response =>',
+                JSON.stringify(finalResponse, null, 2),
+            );
+    
+            return finalResponse;
         } catch (error) {
-            console.error('Get Cancellation Charges Error:', error);
+            console.log('================ GET CANCELLATION CHARGES ERROR ================');
+    
+            console.log('Error Message =>', error?.message);
+            console.log('Full Error =>', error);
+    
             return {
                 success: false,
                 supplierResponseStatus: 'Failed',
@@ -366,7 +423,8 @@ export class TboCancellationService {
                 currency: '',
                 error: {
                     errorCode: -1,
-                    errorMessage: error.message || 'Error fetching cancellation charges',
+                    errorMessage:
+                        error.message || 'Error fetching cancellation charges',
                 },
             };
         }
@@ -374,14 +432,35 @@ export class TboCancellationService {
 
     async fetchCancellationCharges(cancelRequest): Promise<CancellationChargesResponse> {
         const { cancelReq, headers, providerCred } = cancelRequest;
+    
+        console.log('================ TBO FETCH CANCELLATION CHARGES ================');
+    
+        console.log('Headers =>', JSON.stringify(headers, null, 2));
+        console.log('CancelReq =>', JSON.stringify(cancelReq, null, 2));
+        console.log('ProviderCred =>', JSON.stringify(providerCred, null, 2));
+    
         try {
             const tokenRequestData = {
                 providerCred,
                 tokenReqData: cancelReq,
                 headers,
             };
-            const authToken = await this.tboAuthTokenService.getAuthToken(tokenRequestData);
+    
+            console.log(
+                'Token Request Data =>',
+                JSON.stringify(tokenRequestData, null, 2),
+            );
+    
+            console.log('Requesting auth token from TBO');
+    
+            const authToken =
+                await this.tboAuthTokenService.getAuthToken(tokenRequestData);
+    
+            console.log('Received Auth Token =>', authToken);
+    
             if (!authToken) {
+                console.log('Auth token generation failed');
+    
                 return {
                     success: false,
                     supplierResponseStatus: 'InValidCredentials',
@@ -395,9 +474,24 @@ export class TboCancellationService {
                     },
                 };
             }
+    
             const logPrefix = `cancel-${Date.now()}`;
-            return await this.getCancellationCharges({ cancelReq, providerCred, authToken, headers, logPrefix });
+    
+            console.log('Generated Log Prefix =>', logPrefix);
+    
+            console.log('Calling internal getCancellationCharges');
+    
+            return await this.getCancellationCharges({
+                cancelReq,
+                providerCred,
+                authToken,
+                headers,
+                logPrefix,
+            });
         } catch (error) {
+            console.log('Error inside fetchCancellationCharges');
+            console.log(error);
+    
             return {
                 success: false,
                 supplierResponseStatus: 'Failed',
@@ -407,7 +501,8 @@ export class TboCancellationService {
                 currency: '',
                 error: {
                     errorCode: -1,
-                    errorMessage: error.message || 'Error fetching cancellation charges',
+                    errorMessage:
+                        error.message || 'Error fetching cancellation charges',
                 },
             };
         }

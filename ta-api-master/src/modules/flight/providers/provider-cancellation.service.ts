@@ -48,24 +48,79 @@ export class ProviderCancellationService {
 
     async providerCancellationCharges(reqParams) {
         const { cancelReq, headers, booking } = reqParams;
-        if (!booking || cancelReq.bookingId.toString() !== (booking.supplier_reference_id || '').toString()) {
-            throw new NotFoundException('Booking mismatch: bookingId does not match supplier reference id');
+    
+        console.log('================ PROVIDER CANCELLATION SERVICE ================');
+    
+        console.log('Headers =>', JSON.stringify(headers, null, 2));
+        console.log('CancelReq =>', JSON.stringify(cancelReq, null, 2));
+        console.log('Booking =>', JSON.stringify(booking, null, 2));
+    
+        if (
+            !booking ||
+            cancelReq.bookingId.toString() !==
+                (booking.supplier_reference_id || '').toString()
+        ) {
+            console.log('Booking mismatch detected');
+            console.log('cancelReq.bookingId =>', cancelReq.bookingId);
+            console.log('booking.supplier_reference_id =>', booking?.supplier_reference_id);
+    
+            throw new NotFoundException(
+                'Booking mismatch: bookingId does not match supplier reference id',
+            );
         }
+    
         const providerCode = (booking.supplier_name || '').toUpperCase();
+    
+        console.log('Resolved Provider Code =>', providerCode);
+    
+        console.log('Fetching provider configuration from DB/config');
+    
         const providerConfig = await this.configService.getConfiguration(providerCode);
+    
+        console.log('Provider Config Query Executed');
+    
         if (!providerConfig) {
-            throw new NotFoundException('Provider code is not valid, Check your provider code and try again.');
+            console.log('Provider config not found for =>', providerCode);
+    
+            throw new NotFoundException(
+                'Provider code is not valid, Check your provider code and try again.',
+            );
         }
+    
+        console.log('Provider Config Found');
+    
+        let parsedProviderCred = {};
+    
+        try {
+            parsedProviderCred = JSON.parse(providerConfig.provider_credentials);
+    
+            console.log(
+                'Parsed Provider Credentials =>',
+                JSON.stringify(parsedProviderCred, null, 2),
+            );
+        } catch (err) {
+            console.log('Error parsing provider credentials =>', err.message);
+            throw err;
+        }
+    
         const cancelRequest = [];
         cancelRequest['cancelReq'] = cancelReq;
-        cancelRequest['providerCred'] = JSON.parse(providerConfig.provider_credentials);
+        cancelRequest['providerCred'] = parsedProviderCred;
         cancelRequest['headers'] = headers;
-
+    
+        console.log('Prepared cancelRequest object =>', JSON.stringify(cancelRequest, null, 2));
+    
         if (providerCode === 'TBO') {
+            console.log('Routing to TBO Cancellation Service');
+    
             return this.tboCancellationService.fetchCancellationCharges(cancelRequest);
         }
-
-        throw new NotFoundException(`Provider ${providerCode || 'UNKNOWN'} is not supported for cancellation charges`);
+    
+        console.log('Unsupported provider =>', providerCode);
+    
+        throw new NotFoundException(
+            `Provider ${providerCode || 'UNKNOWN'} is not supported for cancellation charges`,
+        );
     }
 }
 
