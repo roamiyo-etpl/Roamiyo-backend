@@ -1,4 +1,7 @@
-# roamiyo-aggregator-layer — repo root is the app (Dockerfile at root).
+# roamiyo-travel-tek (ta-api) — repo root is the app (Dockerfile at root).
+# NOTE: Bitbucket only reads bitbucket-pipelines.yml from the REPOSITORY ROOT.
+# This file is correct for the case where `ta-api-master/` is the repo root.
+# In the current monorepo layout the active file is `../bitbucket-pipelines.yml`.
 #
 # Bitbucket: Repository settings → Pipelines → Repository variables (secured where noted)
 #   ACR_LOGIN_SERVER   e.g. myregistry.azurecr.io
@@ -17,14 +20,20 @@
 # Unique tags force Azure Container Apps to create a new revision; reusing the same tag may not.
 # Old tags can accumulate in ACR — prune periodically if you do not use retention policies.
 #
-# ACR repository: roamiyo-aggregator-layer
-#   .../roamiyo-aggregator-layer:dev-<BITBUCKET_BUILD_NUMBER>
-#   .../roamiyo-aggregator-layer:testing-<BITBUCKET_BUILD_NUMBER>
-#   .../roamiyo-aggregator-layer:production-<BITBUCKET_BUILD_NUMBER>
+# ACR repository: travel-app-travel-tek
+#   .../travel-app-travel-tek:dev-<BITBUCKET_BUILD_NUMBER>
+#   .../travel-app-travel-tek:testing-<BITBUCKET_BUILD_NUMBER>
+#   .../travel-app-travel-tek:production-<BITBUCKET_BUILD_NUMBER>
 #
-# Branch → Container Apps (dev):
+# Branch → Container Apps:
 #   dev (resource group: rg-roamiyo-dev-resource):
-#     API: ca-roamiyo-aggregator-dev
+#     API: ca-roamiyo-travel-tek-dev
+#   testing (resource group: rg-roamiyo-travel-tek-testing):
+#     API: ca-roamiyo-travel-tek-testing
+#   production (resource group: rg-roamiyo-travel-tek-production):
+#     API: ca-roamiyo-travel-tek-production
+#
+# Runtime entrypoint: `node dist/src/main.js` (matches Dockerfile CMD and package.json start:prod).
 
 definitions:
   services:
@@ -38,7 +47,7 @@ definitions:
           - docker
         script:
           - export IMAGE_TAG=dev-${BITBUCKET_BUILD_NUMBER}
-          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/roamiyo-aggregator-layer:${IMAGE_TAG}"
+          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
           - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
           - docker push "${IMAGE_NAME}"
@@ -52,7 +61,7 @@ definitions:
           - docker
         script:
           - export IMAGE_TAG=testing-${BITBUCKET_BUILD_NUMBER}
-          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/roamiyo-aggregator-layer:${IMAGE_TAG}"
+          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
           - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
           - docker push "${IMAGE_NAME}"
@@ -66,7 +75,7 @@ definitions:
           - docker
         script:
           - export IMAGE_TAG=production-${BITBUCKET_BUILD_NUMBER}
-          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/roamiyo-aggregator-layer:${IMAGE_TAG}"
+          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
           - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
           - docker push "${IMAGE_NAME}"
@@ -80,35 +89,41 @@ definitions:
         script:
           - export IMAGE_NAME=$(cat image-name.txt)
           - export AZURE_RESOURCE_GROUP=rg-roamiyo-dev-resource
+          - export ACA_NAME=ca-roamiyo-travel-tek-dev
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name ca-roamiyo-aggregator-dev --resource-group "${AZURE_RESOURCE_GROUP}" --image "${IMAGE_NAME}" --command "node" --args "dist/main.js"
+          - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
+          - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
 
     - step: &deploy-azure-testing
         name: Deploy to Azure Container Apps (testing)
         image: mcr.microsoft.com/azure-cli:2.73.0
         script:
           - export IMAGE_NAME=$(cat image-name.txt)
-          - export AZURE_RESOURCE_GROUP=rg-roamiyo-aggregator-testing
+          - export AZURE_RESOURCE_GROUP=rg-roamiyo-travel-tek-testing
+          - export ACA_NAME=ca-roamiyo-travel-tek-testing
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name ca-roamiyo-aggregator-testing --resource-group "${AZURE_RESOURCE_GROUP}" --image "${IMAGE_NAME}" --command "node" --args "dist/main.js"
+          - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
+          - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
 
     - step: &deploy-azure-production
         name: Deploy to Azure Container Apps (production)
         image: mcr.microsoft.com/azure-cli:2.73.0
         script:
           - export IMAGE_NAME=$(cat image-name.txt)
-          - export AZURE_RESOURCE_GROUP=rg-roamiyo-aggregator-production
+          - export AZURE_RESOURCE_GROUP=rg-roamiyo-travel-tek-production
+          - export ACA_NAME=ca-roamiyo-travel-tek-production
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - az containerapp update --name ca-roamiyo-aggregator-production --resource-group "${AZURE_RESOURCE_GROUP}" --image "${IMAGE_NAME}" --command "node" --args "dist/main.js"
+          - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
+          - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
 
 pipelines:
   branches:
@@ -139,4 +154,4 @@ pipelines:
         services:
           - docker
         script:
-          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t roamiyo-aggregator-layer:ci .
+          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t travel-app-travel-tek:ci .

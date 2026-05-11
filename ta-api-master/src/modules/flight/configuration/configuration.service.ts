@@ -6,7 +6,7 @@ import { Repository } from 'typeorm';
 
 @Injectable()
 export class ConfigurationService {
-    constructor(@InjectRepository(ProviderMaster) private providerRepository: Repository<ProviderMaster>) {}
+    constructor(@InjectRepository(ProviderMaster) private providerRepository: Repository<ProviderMaster>) { }
 
     /** [@Description: Get active provider list]
      * @author: Prashant Joshi at 23-09-2025 **/
@@ -22,8 +22,23 @@ export class ConfigurationService {
     /** [@Description: Get configuration]
      * @author: Prashant Joshi at 23-09-2025 **/
     async getConfiguration({ supplierCode, mode, module }): Promise<ProviderMaster | null> {
+
+        console.log('================ GET CONFIGURATION ================');
+
+        console.log('Incoming supplierCode =>', supplierCode);
+        console.log('Type of supplierCode =>', typeof supplierCode);
+
+        console.log('Incoming mode =>', mode);
+        console.log('Type of mode =>', typeof mode);
+
+        console.log('Incoming module =>', module);
+        console.log('Type of module =>', typeof module);
+        console.log('mode raw value =>', mode);
+        console.log('isNaN(mode) =>', isNaN(mode));
         if (supplierCode != '') {
+
             if (mode == '') {
+                console.log('Executing query WITHOUT provider_mode');
                 return await this.providerRepository.findOne({
                     where: {
                         code: supplierCode,

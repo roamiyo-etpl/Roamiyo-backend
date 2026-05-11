@@ -84,8 +84,10 @@ export class ProviderCancellationService {
     
         console.log('Fetching provider configuration from DB/config');
     
-        // const providerConfig = await this.configService.getConfiguration(providerCode);
-        
+                // const providerConfig = await this.configService.getConfiguration(providerCode);
+
+
+        // MAIN FIX HERE
         const providerConfig = await this.configService.getConfiguration({
             supplierCode: providerCode,
             mode: '',
