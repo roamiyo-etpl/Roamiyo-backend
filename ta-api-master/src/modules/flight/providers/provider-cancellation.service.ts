@@ -19,7 +19,12 @@ export class ProviderCancellationService {
         }
         // Derive provider code from booking
         const providerCode = (booking.supplier_name || '').toUpperCase();
-        const providerConfig = await this.configService.getConfiguration(providerCode);
+        // const providerConfig = await this.configService.getConfiguration(providerCode);
+        const providerConfig = await this.configService.getConfiguration({
+            supplierCode: providerCode,
+            mode: '',
+            module: 'Flight',
+        });
 
         if (!providerConfig) {
             throw new NotFoundException('Provider code is not valid, Check your provider code and try again.');
@@ -51,6 +56,12 @@ export class ProviderCancellationService {
     
         console.log('================ PROVIDER CANCELLATION SERVICE ================');
     
+        const providerCode = (booking?.supplier_name || '').toUpperCase();
+    
+        console.log('booking.supplier_name =>', booking?.supplier_name);
+        console.log('providerCode =>', providerCode);
+        console.log('providerCode type =>', typeof providerCode);
+    
         console.log('Headers =>', JSON.stringify(headers, null, 2));
         console.log('CancelReq =>', JSON.stringify(cancelReq, null, 2));
         console.log('Booking =>', JSON.stringify(booking, null, 2));
@@ -69,13 +80,17 @@ export class ProviderCancellationService {
             );
         }
     
-        const providerCode = (booking.supplier_name || '').toUpperCase();
-    
         console.log('Resolved Provider Code =>', providerCode);
     
         console.log('Fetching provider configuration from DB/config');
     
-        const providerConfig = await this.configService.getConfiguration(providerCode);
+        // const providerConfig = await this.configService.getConfiguration(providerCode);
+        
+        const providerConfig = await this.configService.getConfiguration({
+            supplierCode: providerCode,
+            mode: '',
+            module: 'Flight',
+        });
     
         console.log('Provider Config Query Executed');
     
@@ -108,12 +123,17 @@ export class ProviderCancellationService {
         cancelRequest['providerCred'] = parsedProviderCred;
         cancelRequest['headers'] = headers;
     
-        console.log('Prepared cancelRequest object =>', JSON.stringify(cancelRequest, null, 2));
+        console.log(
+            'Prepared cancelRequest object =>',
+            JSON.stringify(cancelRequest, null, 2),
+        );
     
         if (providerCode === 'TBO') {
             console.log('Routing to TBO Cancellation Service');
     
-            return this.tboCancellationService.fetchCancellationCharges(cancelRequest);
+            return this.tboCancellationService.fetchCancellationCharges(
+                cancelRequest,
+            );
         }
     
         console.log('Unsupported provider =>', providerCode);
