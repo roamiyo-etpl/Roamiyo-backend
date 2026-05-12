@@ -333,7 +333,8 @@ export class TboCancellationService {
             console.log('Incoming logPrefix =>', logPrefix);
     
             const requestData: GetCancellationChargesRequestDto = {
-                EndUserIp: headers['ip-address'] || '192.168.10.36',
+                // EndUserIp: headers['ip-address'] || '192.168.10.36',
+                EndUserIp: '20.244.28.12',
                 TokenId: authToken,
                 RequestType: this.generateRequestType(cancelReq.requestType),
                 BookingId: cancelReq.bookingId,
