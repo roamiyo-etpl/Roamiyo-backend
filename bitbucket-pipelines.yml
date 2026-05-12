@@ -1,30 +1,38 @@
-# Monorepo layout: builds from ./ta-api-master. If your Bitbucket repo root is only ta-api-master,
-# remove every `cd ta-api-master` line and use `image-name.txt` instead of `../image-name.txt`.
+# roamiyo-travel-tek (monorepo) — Dockerfile lives in ./ta-api-master.
+# Bitbucket only reads bitbucket-pipelines.yml from the REPOSITORY ROOT, so THIS is the active file.
+# (The copy at ta-api-master/bitbucket-pipelines.yml is only for the case where that folder
+#  is the repo root; Bitbucket ignores it in this layout.)
 #
 # Bitbucket: Repository settings → Pipelines → Repository variables (secured where noted)
 #   ACR_LOGIN_SERVER   e.g. myregistry.azurecr.io
 #   ACR_USERNAME, ACR_PASSWORD
 #   AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID
-#   AZURE_SUBSCRIPTION_ID  (required for deploy — use az account set after login)
+#   AZURE_SUBSCRIPTION_ID  (required for deploy — used by az account set after login)
 # Deploy uses --allow-no-subscriptions on az login when the SP has no default directory subscriptions.
-# Optional: NPM_TOKEN (private npm, e.g. @emmvee scope)
+# Optional: NPM_TOKEN (private npm)
 #
 # RBAC: Grant Contributor (or a role that includes Microsoft.App/containerApps/write) on the
 # resource group or subscription to this pipeline's *service principal* (AZURE_CLIENT_ID), not only your user.
 #
-# Container App names and resource groups are hardcoded below (edit to match your Azure resources).
-# Optional: keep deployment: on deploy steps for Bitbucket approvals/history — no deployment variables required.
+# Images: each run uses a UNIQUE tag (dev|testing|production plus BITBUCKET_BUILD_NUMBER), e.g. dev-42.
+# Unique tags force Azure Container Apps to create a new revision on every push; mutable tags may not.
+# Old tags accumulate in ACR — prune periodically if you do not use retention policies.
 #
-# Images (same ACR, mutable tags; latest push wins per tag).
 # ACR repository: travel-app-travel-tek
-#   .../travel-app-travel-tek:dev
-#   .../travel-app-travel-tek:testing
-#   .../travel-app-travel-tek:production
+#   .../travel-app-travel-tek:dev-<BITBUCKET_BUILD_NUMBER>
+#   .../travel-app-travel-tek:testing-<BITBUCKET_BUILD_NUMBER>
+#   .../travel-app-travel-tek:production-<BITBUCKET_BUILD_NUMBER>
 #
-# Branch → Container Apps (API only; this repo has no worker image):
+# Branch → Container Apps:
 #   dev (resource group: rg-roamiyo-dev-resource):
 #     API: ca-roamiyo-travel-tek-dev
-#   testing / production: edit names below to match your Azure apps for this service.
+#   testing (resource group: rg-roamiyo-travel-tek-testing):
+#     API: ca-roamiyo-travel-tek-testing
+#   production (resource group: rg-roamiyo-travel-tek-production):
+#     API: ca-roamiyo-travel-tek-production
+#
+# Runtime entrypoint: `node dist/src/main.js` (matches ta-api-master/Dockerfile CMD and package.json start:prod).
+# App listens on SERVER_PORT=5050 (see ta-api-master/config/env/.env.development), so ingress target-port=5050.
 
 definitions:
   services:
@@ -38,7 +46,7 @@ definitions:
           - docker
         script:
           - cd ta-api-master
-          - export IMAGE_TAG=dev
+          - export IMAGE_TAG=dev-${BITBUCKET_BUILD_NUMBER}
           - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
           - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
@@ -53,7 +61,7 @@ definitions:
           - docker
         script:
           - cd ta-api-master
-          - export IMAGE_TAG=testing
+          - export IMAGE_TAG=testing-${BITBUCKET_BUILD_NUMBER}
           - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
           - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
@@ -68,7 +76,7 @@ definitions:
           - docker
         script:
           - cd ta-api-master
-          - export IMAGE_TAG=production
+          - export IMAGE_TAG=production-${BITBUCKET_BUILD_NUMBER}
           - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
           - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
           - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
@@ -97,8 +105,8 @@ definitions:
         image: mcr.microsoft.com/azure-cli:2.73.0
         script:
           - export IMAGE_NAME=$(cat image-name.txt)
-          - export ACA_NAME=roamiyo-login-testing
-          - export AZURE_RESOURCE_GROUP=rg-roamiyo-login-testing
+          - export AZURE_RESOURCE_GROUP=rg-roamiyo-travel-tek-testing
+          - export ACA_NAME=ca-roamiyo-travel-tek-testing
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
@@ -112,8 +120,8 @@ definitions:
         image: mcr.microsoft.com/azure-cli:2.73.0
         script:
           - export IMAGE_NAME=$(cat image-name.txt)
-          - export ACA_NAME=roamiyo-login-production
-          - export AZURE_RESOURCE_GROUP=rg-roamiyo-login-production
+          - export AZURE_RESOURCE_GROUP=rg-roamiyo-travel-tek-production
+          - export ACA_NAME=ca-roamiyo-travel-tek-production
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
