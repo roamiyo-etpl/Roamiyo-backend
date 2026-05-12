@@ -1,38 +1,26 @@
-# roamiyo-travel-tek (monorepo) — Dockerfile lives in ./ta-api-master.
-# Bitbucket only reads bitbucket-pipelines.yml from the REPOSITORY ROOT, so THIS is the active file.
-# (The copy at ta-api-master/bitbucket-pipelines.yml is only for the case where that folder
-#  is the repo root; Bitbucket ignores it in this layout.)
+# roamiyo-travel-tek — Dockerfile lives in ./ta-api-master.
+# Bitbucket only reads bitbucket-pipelines.yml from the REPOSITORY ROOT.
 #
-# Bitbucket: Repository settings → Pipelines → Repository variables (secured where noted)
-#   ACR_LOGIN_SERVER   e.g. myregistry.azurecr.io
-#   ACR_USERNAME, ACR_PASSWORD
-#   AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID
-#   AZURE_SUBSCRIPTION_ID  (required for deploy — used by az account set after login)
-# Deploy uses --allow-no-subscriptions on az login when the SP has no default directory subscriptions.
-# Optional: NPM_TOKEN (private npm)
+# Pipeline triggers ONLY on pushes to `dev`, `testing`, or `production`.
+# No `default:` block, so any other branch (cancellation_dev, gst_dev, safe_dev, main, etc.)
+# will NOT start any build.
 #
-# RBAC: Grant Contributor (or a role that includes Microsoft.App/containerApps/write) on the
-# resource group or subscription to this pipeline's *service principal* (AZURE_CLIENT_ID), not only your user.
+# Required Bitbucket repository variables (Repo settings → Pipelines → Repository variables):
+#   ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD
+#   AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   Optional: NPM_TOKEN
 #
-# Images: each run uses a UNIQUE tag (dev|testing|production plus BITBUCKET_BUILD_NUMBER), e.g. dev-42.
-# Unique tags force Azure Container Apps to create a new revision on every push; mutable tags may not.
-# Old tags accumulate in ACR — prune periodically if you do not use retention policies.
+# Branch → Azure Container Apps:
+#   dev        → rg-roamiyo-dev-resource           / ca-roamiyo-travel-tek-dev
+#   testing    → rg-roamiyo-travel-tek-testing     / ca-roamiyo-travel-tek-testing
+#   production → rg-roamiyo-travel-tek-production  / ca-roamiyo-travel-tek-production
 #
-# ACR repository: travel-app-travel-tek
-#   .../travel-app-travel-tek:dev-<BITBUCKET_BUILD_NUMBER>
-#   .../travel-app-travel-tek:testing-<BITBUCKET_BUILD_NUMBER>
-#   .../travel-app-travel-tek:production-<BITBUCKET_BUILD_NUMBER>
+# ACR images (unique tag per build → new ACA revision each push):
+#   ${ACR_LOGIN_SERVER}/travel-app-travel-tek:dev-<BITBUCKET_BUILD_NUMBER>
+#   ${ACR_LOGIN_SERVER}/travel-app-travel-tek:testing-<BITBUCKET_BUILD_NUMBER>
+#   ${ACR_LOGIN_SERVER}/travel-app-travel-tek:production-<BITBUCKET_BUILD_NUMBER>
 #
-# Branch → Container Apps:
-#   dev (resource group: rg-roamiyo-dev-resource):
-#     API: ca-roamiyo-travel-tek-dev
-#   testing (resource group: rg-roamiyo-travel-tek-testing):
-#     API: ca-roamiyo-travel-tek-testing
-#   production (resource group: rg-roamiyo-travel-tek-production):
-#     API: ca-roamiyo-travel-tek-production
-#
-# Runtime entrypoint: `node dist/src/main.js` (matches ta-api-master/Dockerfile CMD and package.json start:prod).
-# App listens on SERVER_PORT=5050 (see ta-api-master/config/env/.env.development), so ingress target-port=5050.
+# Runtime: `node dist/src/main.js`. Ingress target-port=5050 (SERVER_PORT in .env.development).
 
 definitions:
   services:
@@ -93,7 +81,6 @@ definitions:
           - export AZURE_RESOURCE_GROUP=rg-roamiyo-dev-resource
           - export ACA_NAME=ca-roamiyo-travel-tek-dev
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
-          - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
           - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
@@ -108,7 +95,6 @@ definitions:
           - export AZURE_RESOURCE_GROUP=rg-roamiyo-travel-tek-testing
           - export ACA_NAME=ca-roamiyo-travel-tek-testing
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
-          - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
           - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
@@ -123,7 +109,6 @@ definitions:
           - export AZURE_RESOURCE_GROUP=rg-roamiyo-travel-tek-production
           - export ACA_NAME=ca-roamiyo-travel-tek-production
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
-          - az account list --output table
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
           - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
@@ -144,7 +129,7 @@ pipelines:
           <<: *build-and-push-testing
       - step:
           <<: *deploy-azure-testing
-          deployment: testing
+          deployment: staging
 
     production:
       - step:
@@ -152,12 +137,3 @@ pipelines:
       - step:
           <<: *deploy-azure-production
           deployment: production
-
-  default:
-    - step:
-        name: Build only (no deploy)
-        services:
-          - docker
-        script:
-          - cd ta-api-master
-          - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t travel-app-travel-tek:ci .
