@@ -3,7 +3,6 @@ import { Http } from 'src/shared/utilities/flight/http.utility';
 import { TboAuthTokenService } from './tbo-auth-token.service';
 import { SupplierLogUtility } from 'src/shared/utilities/flight/supplier-log.utility';
 import {
-    CancelFlightDto,
     ReleasePNRRequestDto,
     SendChangeRequestDto,
     GetChangeRequestStatusRequestDto,
@@ -13,7 +12,10 @@ import {
     CancelResponse,
     CancellationChargesResponse,
 } from 'src/modules/cancel/interfaces/cancel.interface';
-import { Generic } from 'src/shared/utilities/flight/generic.utility';
+import {
+    redactTboCredentialsForLog,
+    resolveTboEndUserIp,
+} from 'src/shared/utilities/flight/tbo-request-context.utility';
 
 /**
  * TBO Cancellation Service
@@ -72,7 +74,10 @@ export class TboCancellationService {
                     logPrefix,
                 });
 
-                const source = bookingDetails?.Response?.FlightItinerary?.Source;
+                const itinerary = this.getFlightItineraryFromBookingDetails(
+                    bookingDetails,
+                );
+                const source = itinerary?.Source;
 
                 const releaseResult = await this.releasePNR({
                     cancelReq,
@@ -163,7 +168,7 @@ export class TboCancellationService {
     private async releasePNR({ cancelReq, providerCred, authToken, headers, logPrefix, source }) {
         try {
             const requestData: ReleasePNRRequestDto = {
-                EndUserIp: headers['ip-address'] || '192.168.10.36',
+                EndUserIp: resolveTboEndUserIp(headers as Record<string, unknown>),
                 TokenId: authToken,
                 BookingId: cancelReq.bookingId,
                 Source: source || '4', // Source fetched from GetBookingDetails API
@@ -200,7 +205,7 @@ export class TboCancellationService {
     private async sendChangeRequest({ cancelReq, providerCred, authToken, headers, logPrefix }) {
         try {
             const requestData: SendChangeRequestDto = {
-                EndUserIp: headers['ip-address'] || '192.168.10.36',
+                EndUserIp: resolveTboEndUserIp(headers as Record<string, unknown>),
                 TokenId: authToken,
                 BookingId: cancelReq.bookingId,
                 RequestType: this.generateRequestType(cancelReq.requestType),
@@ -264,7 +269,7 @@ export class TboCancellationService {
     private async getChangeRequestStatus({ changeRequestId, providerCred, authToken, headers, logPrefix }) {
         try {
             const requestData: GetChangeRequestStatusRequestDto = {
-                EndUserIp: headers['ip-address'] || '192.168.10.36',
+                EndUserIp: resolveTboEndUserIp(headers as Record<string, unknown>),
                 TokenId: authToken,
                 ChangeRequestId: changeRequestId,
             };
@@ -325,23 +330,46 @@ export class TboCancellationService {
     }) {
         try {
             console.log('================ TBO GET CANCELLATION CHARGES API ================');
-    
+
             console.log('Incoming cancelReq =>', JSON.stringify(cancelReq, null, 2));
             console.log('Incoming headers =>', JSON.stringify(headers, null, 2));
-            console.log('Incoming providerCred =>', JSON.stringify(providerCred, null, 2));
+            console.log(
+                'Incoming providerCred =>',
+                JSON.stringify(
+                    redactTboCredentialsForLog(
+                        providerCred as Record<string, unknown>,
+                    ),
+                    null,
+                    2,
+                ),
+            );
             console.log('Incoming authToken =>', authToken);
             console.log('Incoming logPrefix =>', logPrefix);
-    
+
+            const endUserIp = resolveTboEndUserIp(headers as Record<string, unknown>);
+
+            const bookingDetails = await this.getBookingDetails({
+                cancelReq,
+                providerCred,
+                authToken,
+                headers,
+                logPrefix: `${logPrefix}-precharges`,
+            });
+            const itinerary =
+                this.getFlightItineraryFromBookingDetails(bookingDetails);
+            const bookingMode =
+                typeof itinerary?.BookingMode === 'number'
+                    ? itinerary.BookingMode
+                    : 5;
+
             const requestData: GetCancellationChargesRequestDto = {
-                // EndUserIp: headers['ip-address'] || '192.168.10.36',
-                // EndUserIp: '20.244.28.12',
-                EndUserIp: '104.211.206.107',
+                EndUserIp: endUserIp,
                 TokenId: authToken,
                 RequestType: this.generateRequestType(cancelReq.requestType),
                 BookingId: cancelReq.bookingId,
-                BookingMode: 5,
+                BookingMode: bookingMode,
             };
-    
+
             console.log(
                 'Prepared TBO Request Payload =>',
                 JSON.stringify(requestData, null, 2),
@@ -439,18 +467,36 @@ export class TboCancellationService {
     
         console.log('Headers =>', JSON.stringify(headers, null, 2));
         console.log('CancelReq =>', JSON.stringify(cancelReq, null, 2));
-        console.log('ProviderCred =>', JSON.stringify(providerCred, null, 2));
-    
+        console.log(
+            'ProviderCred =>',
+            JSON.stringify(
+                redactTboCredentialsForLog(
+                    providerCred as Record<string, unknown>,
+                ),
+                null,
+                2,
+            ),
+        );
+
         try {
             const tokenRequestData = {
                 providerCred,
                 tokenReqData: cancelReq,
                 headers,
             };
-    
+
             console.log(
                 'Token Request Data =>',
-                JSON.stringify(tokenRequestData, null, 2),
+                JSON.stringify(
+                    {
+                        ...tokenRequestData,
+                        providerCred: redactTboCredentialsForLog(
+                            providerCred as Record<string, unknown>,
+                        ),
+                    },
+                    null,
+                    2,
+                ),
             );
     
             console.log('Requesting auth token from TBO');
@@ -508,6 +554,24 @@ export class TboCancellationService {
                 },
             };
         }
+    }
+
+    private getFlightItineraryFromBookingDetails(
+        bookingDetails: Record<string, unknown> | null,
+    ): Record<string, unknown> | null {
+        if (!bookingDetails) return null;
+        const outer = bookingDetails.Response as
+            | Record<string, unknown>
+            | undefined;
+        if (!outer) return null;
+        if (outer.FlightItinerary) {
+            return outer.FlightItinerary as Record<string, unknown>;
+        }
+        const inner = outer.Response as Record<string, unknown> | undefined;
+        if (inner?.FlightItinerary) {
+            return inner.FlightItinerary as Record<string, unknown>;
+        }
+        return null;
     }
 
     private getCancellationStatusText(status: number): string {
@@ -568,7 +632,7 @@ export class TboCancellationService {
     private async getBookingDetails({ cancelReq, providerCred, authToken, headers, logPrefix }) {
         try {
             const requestData = {
-                EndUserIp: headers['ip-address'] || '192.168.10.36',
+                EndUserIp: resolveTboEndUserIp(headers as Record<string, unknown>),
                 TokenId: authToken,
                 BookingId: cancelReq.bookingId,
             };

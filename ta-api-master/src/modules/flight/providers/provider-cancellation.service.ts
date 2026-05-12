@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CancelResponse } from 'src/modules/cancel/interfaces/cancel.interface';
 import { ConfigurationService } from '../configuration/configuration.service';
 import { TboCancellationService } from './tbo/tbo-cancellation.service';
+import { redactTboCredentialsForLog } from 'src/shared/utilities/flight/tbo-request-context.utility';
 
 @Injectable()
 export class ProviderCancellationService {
@@ -30,18 +31,18 @@ export class ProviderCancellationService {
             throw new NotFoundException('Provider code is not valid, Check your provider code and try again.');
         }
 
-        const cancelRequest = [];
-
-        cancelRequest['cancelReq'] = cancelReq;
-        cancelRequest['providerCred'] = JSON.parse(providerConfig.provider_credentials);
-        cancelRequest['headers'] = headers;
-        cancelRequest['booking'] = booking; // Pass booking details
+        const cancelPayload = {
+            cancelReq,
+            providerCred: JSON.parse(providerConfig.provider_credentials),
+            headers,
+            booking,
+        };
         /* Check for provider code First and transform the request to particular provider */
         let cancelResult: CancelResponse | null = null;
         
         /* For TBO */
         if (providerCode === 'TBO') {
-            cancelResult = await this.tboCancellationService.cancel(cancelRequest);
+            cancelResult = await this.tboCancellationService.cancel(cancelPayload);
         }
 
         if (!cancelResult) {
@@ -113,28 +114,45 @@ export class ProviderCancellationService {
     
             console.log(
                 'Parsed Provider Credentials =>',
-                JSON.stringify(parsedProviderCred, null, 2),
+                JSON.stringify(
+                    redactTboCredentialsForLog(
+                        parsedProviderCred as Record<string, unknown>,
+                    ),
+                    null,
+                    2,
+                ),
             );
         } catch (err) {
             console.log('Error parsing provider credentials =>', err.message);
             throw err;
         }
     
-        const cancelRequest = [];
-        cancelRequest['cancelReq'] = cancelReq;
-        cancelRequest['providerCred'] = parsedProviderCred;
-        cancelRequest['headers'] = headers;
-    
+        const cancelPayload = {
+            cancelReq,
+            providerCred: parsedProviderCred,
+            headers,
+        };
+
         console.log(
             'Prepared cancelRequest object =>',
-            JSON.stringify(cancelRequest, null, 2),
+            JSON.stringify(
+                {
+                    cancelReq: cancelPayload.cancelReq,
+                    headers: cancelPayload.headers,
+                    providerCred: redactTboCredentialsForLog(
+                        cancelPayload.providerCred as Record<string, unknown>,
+                    ),
+                },
+                null,
+                2,
+            ),
         );
-    
+
         if (providerCode === 'TBO') {
             console.log('Routing to TBO Cancellation Service');
-    
+
             return this.tboCancellationService.fetchCancellationCharges(
-                cancelRequest,
+                cancelPayload,
             );
         }
     

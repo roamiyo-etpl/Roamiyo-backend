@@ -19,6 +19,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { OrderDetailResponse } from "../../order-details/interfaces/order-detail.interface";
 import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
 import { normalizeBundledSsrPerPassengers } from "src/shared/utilities/flight/ssr-passenger-normalize.utility";
+import { resolveTboEndUserIp } from "src/shared/utilities/flight/tbo-request-context.utility";
 
 interface SupplierLogEntry {
   index: number;
@@ -50,10 +51,7 @@ export class TboBookService {
   ) { }
 
   private resolveEndUserIp(bookRequest: any): string {
-    const h = bookRequest?.headers || {};
-    const raw = h["ip-address"] || h["x-forwarded-for"] || h["x-real-ip"];
-    if (raw) return String(raw).split(",")[0].trim();
-    return "20.244.28.12";
+    return resolveTboEndUserIp(bookRequest?.headers);
   }
 
   /**
