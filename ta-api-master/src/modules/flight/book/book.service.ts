@@ -27,7 +27,7 @@ export class BookService {
     private readonly providerBookService: ProviderBookService,
     private readonly bookRepository: BookRepository,
     private readonly revalidateService: RevalidateService,
-  ) {}
+  ) { }
 
   /** [@Description: This method is used to initiate the booking]
    * @author: Prashant Joshi at 13-10-2025 **/
@@ -99,8 +99,8 @@ export class BookService {
           ? bookReq.Passengers
           : bookReq.ssr && typeof bookReq.ssr === "object"
             ? Object.keys(bookReq.ssr)
-                .sort((a, b) => Number(a) - Number(b))
-                .map((k) => bookReq.ssr[k])
+              .sort((a, b) => Number(a) - Number(b))
+              .map((k) => bookReq.ssr[k])
             : [];
 
       ancillPaxForTotals.forEach((pax: any) => {
@@ -296,6 +296,11 @@ export class BookService {
         searchReqId: supplierDetails.searchReqId,
         supplierMessage: supplierDetails.supplierMessage,
         orderDetail: supplierDetails.orderDetail ?? [],
+        rawSupplierResponse:
+          supplierDetails.rawSupplierResponse ?? [],
+
+        supplierOrderDetailResponse:
+          supplierDetails.supplierOrderDetailResponse ?? [],
         // orderDetails: supplierDetails.orderDetails ?? null,
       });
 

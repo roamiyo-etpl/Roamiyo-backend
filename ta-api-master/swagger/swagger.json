@@ -3746,13 +3746,13 @@
             "type": "array"
           },
           "gst": {
-            "description": "GST details (optional - may be required based on flight/supplier)",
+            "description": "GST details (optional; may be required for some fares/suppliers). Blank strings are normalized before TBO.",
             "example": {
-              "gstCompanyAddress": "123 Main Street",
-              "gstCompanyContactNumber": "1234567890",
-              "gstCompanyName": "ABC Company Ltd.",
               "gstNumber": "27AAAAA0000A1Z5",
-              "gstCompanyEmail": "company@example.com"
+              "gstCompanyName": "ABC Company Ltd.",
+              "gstCompanyEmail": "company@example.com",
+              "gstCompanyContactNumber": "1234567890",
+              "gstCompanyAddress": "123 Main Street"
             },
             "allOf": [
               {
