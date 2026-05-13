@@ -75,13 +75,17 @@ export class TboRevalidateService {
       const convertedResultArray: any = [];
       const solutionIds = revalidateReq.solutionId.split(" ||| ");
 
-      for (let i = 0; i < solutionIds.length; i++) {
+      const uniqueSolutionIds = [...new Set(solutionIds)];
+
+      // for (let i = 0; i < solutionIds.length; i++) {
+        for (let i = 0; i < uniqueSolutionIds.length; i++) {
         // requestData.revalidateReq.solutionId = solutionIds[i];
         const tempRequestData = {
           ...requestData,
           revalidateReq: {
             ...requestData.revalidateReq,
-            solutionId: solutionIds[i],
+            // solutionId: solutionIds[i],
+            solutionId: uniqueSolutionIds[i],
           },
         };
         const fareRules = await this.getCancellationFareRules(
