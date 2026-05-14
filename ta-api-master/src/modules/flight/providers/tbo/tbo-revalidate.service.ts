@@ -141,7 +141,7 @@ export class TboRevalidateService {
         //   bookingReferenceId: null,
         // });
 
-        if (process.env.ENABLE_LOCAL_LOGS === "true") {
+        if (process.env.ENABLE_LOCAL_LOGS === "false") {
           await this.supplierLogUtility.generateLogFile({
             fileName:
               revalidateReq.searchReqId + " " + i + "-" + this.logDate + "-TBO",
