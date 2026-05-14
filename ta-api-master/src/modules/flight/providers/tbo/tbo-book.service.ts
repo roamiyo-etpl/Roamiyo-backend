@@ -55,6 +55,19 @@ export class TboBookService {
   }
 
   /**
+   * Tek / TBO: LCC expects SSR lists as JSON arrays `[{...}]`; Non-LCC expects a JSON object
+   * with numeric string keys (not a top-level array), e.g. `{ "0": {...}, "1": {...} }`.
+   * Internal code still uses arrays; we convert only when building the Book/Ticket payload.
+   */
+  private toNonLccSsrObject(items: any[]): Record<string, any> {
+    const out: Record<string, any> = {};
+    items.forEach((item, i) => {
+      out[String(i)] = item;
+    });
+    return out;
+  }
+
+  /**
    * TBO returns Baggage / MealDynamic as either `options[]` or `options[][]` (per passenger / leg).
    */
   private getSsrCatalogArray(catalogRoot: any, paxIndex: number): any[] {
@@ -1041,6 +1054,11 @@ export class TboBookService {
 
     const { bookReq, headers } = bookRequest;
 
+    const airlineType =
+      (bookRequest as { airlineType?: string }).airlineType ??
+      bookReq?.airlineType;
+    const isNonLcc = airlineType === "Non-LCC";
+
     const passengers = bookReq.passengers;
 
     // ===== SSR START =====
@@ -1141,24 +1159,35 @@ export class TboBookService {
           AirTransFee: (fare?.AirTransFee ?? 0) / paxCount,
           PGCharge: (fare?.PGCharge ?? 0) / paxCount,
         },
-        // ===== SSR INJECTION =====
+        // ===== SSR INJECTION (LCC: arrays; Non-LCC: keyed objects per Tek Travels) =====
 
         ...(Array.isArray(passengerSSR?.MealDynamic) &&
           passengerSSR.MealDynamic.length > 0 && {
-          MealDynamic: passengerSSR.MealDynamic.map((m: any) => ({
-            ...m,
-            Nationality: m?.Nationality ?? element?.nationality,
-          })),
+          MealDynamic: isNonLcc
+            ? this.toNonLccSsrObject(
+                passengerSSR.MealDynamic.map((m: any) => ({
+                  ...m,
+                  Nationality: m?.Nationality ?? element?.nationality,
+                })),
+              )
+            : passengerSSR.MealDynamic.map((m: any) => ({
+                ...m,
+                Nationality: m?.Nationality ?? element?.nationality,
+              })),
         }),
 
         ...(Array.isArray(passengerSSR?.SeatDynamic) &&
           passengerSSR.SeatDynamic.length > 0 && {
-          SeatDynamic: passengerSSR.SeatDynamic,
+          SeatDynamic: isNonLcc
+            ? this.toNonLccSsrObject(passengerSSR.SeatDynamic)
+            : passengerSSR.SeatDynamic,
         }),
 
         ...(Array.isArray(passengerSSR?.Baggage) &&
           passengerSSR.Baggage.length > 0 && {
-          Baggage: passengerSSR.Baggage,
+          Baggage: isNonLcc
+            ? this.toNonLccSsrObject(passengerSSR.Baggage)
+            : passengerSSR.Baggage,
         }),
       };
     });
