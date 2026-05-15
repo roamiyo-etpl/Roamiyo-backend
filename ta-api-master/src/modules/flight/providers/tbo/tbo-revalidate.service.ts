@@ -18,6 +18,10 @@ import {
 import { airlines } from "src/shared/utilities/flight/airline.utility";
 import { Generic } from "src/shared/utilities/flight/generic.utility";
 import { AirlineCategory } from "src/shared/enums/flight/flight.enum";
+import {
+  getFareQuoteIsBookableIfSeatNotAvailable,
+  isIndigoAirlineCodeList,
+} from "src/shared/utilities/flight/tbo-indigo-seat.utility";
 import { airports } from "src/shared/utilities/flight/airport.utility";
 import moment from "moment";
 import { Http } from "src/shared/utilities/flight/http.utility";
@@ -452,13 +456,25 @@ export class TboRevalidateService {
         },
       );
 
+      const isBookableIfSeatNotAvailable =
+        getFareQuoteIsBookableIfSeatNotAvailable(results);
+      const indigoRevalidate = isIndigoAirlineCodeList(
+        flightRoutes[0]?.airlineCode,
+      );
+      /** Hint for clients: default when booking IndiGo with seats (actual flag set at Book/Ticket). */
+      const suggestedAllowBookingWithoutSeat =
+        indigoRevalidate && isBookableIfSeatNotAvailable === true
+          ? true
+          : undefined;
+
       Object.assign(revalidateResponse, {
         isValid: true,
         error: false,
         message: "success",
         route: flightRoutes[0],
-        IsBookableIfSeatNotAvailable:
-          results?.Response?.Results?.IsBookableIfSeatNotAvailable,
+        isBookableIfSeatNotAvailable,
+        isAllowBookingWithoutSeat: suggestedAllowBookingWithoutSeat,
+        IsBookableIfSeatNotAvailable: isBookableIfSeatNotAvailable,
         IsExclusiveFare: results?.Response?.Results?.IsExclusiveFare,
         IsFreeMealAvailable: results?.Response?.Results?.IsFreeMealAvailable,
         IsHoldAllowedWithSSR: results?.Response?.Results?.IsHoldAllowedWithSSR,

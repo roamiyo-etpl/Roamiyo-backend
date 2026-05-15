@@ -1,4 +1,4 @@
-import { IsArray, IsNotEmpty, ValidateNested, IsDateString, IsString, IsOptional, IsEmail } from 'class-validator';
+import { IsArray, IsNotEmpty, ValidateNested, IsDateString, IsString, IsOptional, IsEmail, IsBoolean } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -539,6 +539,15 @@ export class BookDto {
 })
 @IsOptional()
 ssr?: any;
+
+    @ApiPropertyOptional({
+        description:
+            'Deprecated / ignored for IndiGo: when FareQuote `IsBookableIfSeatNotAvailable` is true, the API always sends `IsAllowBookingWithoutSeat: true` on Book/Ticket. Non-IndiGo: field has no effect.',
+        example: true,
+    })
+    @IsOptional()
+    @IsBoolean()
+    isAllowBookingWithoutSeat?: boolean;
 }
 
 /**

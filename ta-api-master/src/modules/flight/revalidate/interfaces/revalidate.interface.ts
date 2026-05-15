@@ -13,6 +13,15 @@ export class RevalidateResponse {
     prevSolutionID: string;
     isDomestic?: boolean;
     route?: RevalidateData;
+    /**
+     * TBO FareQuote (IndiGo): when true, Book/Ticket may complete without the chosen seat if it sells out.
+     */
+    isBookableIfSeatNotAvailable?: boolean;
+    /**
+     * Hint: IndiGo + FareQuote `IsBookableIfSeatNotAvailable` true → Book/Ticket always sends
+     * `IsAllowBookingWithoutSeat: true` (seat selection not required for this flag).
+     */
+    isAllowBookingWithoutSeat?: boolean;
 }
 
 export class CharacterLimit {

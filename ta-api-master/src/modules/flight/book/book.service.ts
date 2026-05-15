@@ -20,6 +20,10 @@ import {
   normalizeBundledSsrPerPassengers,
   ssrBucketsToNumericRecord,
 } from "src/shared/utilities/flight/ssr-passenger-normalize.utility";
+import {
+  isIndigoAirlineCodeList,
+  resolveIsAllowBookingWithoutSeat,
+} from "src/shared/utilities/flight/tbo-indigo-seat.utility";
 
 @Injectable()
 export class BookService {
@@ -179,6 +183,16 @@ export class BookService {
         // console.log("SSR stored in BOOKING table:", booking.booking_id);
       }
 
+      const isBookableIfSeatNotAvailable =
+        revalidateResult.isBookableIfSeatNotAvailable;
+      const resolvedAllowWithoutSeat = resolveIsAllowBookingWithoutSeat({
+        isIndigo: isIndigoAirlineCodeList(revalidateResult.route?.airlineCode),
+        isBookableIfSeatNotAvailable,
+      });
+      if (typeof resolvedAllowWithoutSeat === "boolean") {
+        bookReq.isAllowBookingWithoutSeat = resolvedAllowWithoutSeat;
+      }
+
       /* Store booking log with original booking request in data field */
       const bookingLog = await this.bookRepository.storeBookingLog({
         bookingRefId: booking.booking_reference_id,
@@ -189,8 +203,13 @@ export class BookService {
       // Store original booking request in booking log for later use
       await this.bookRepository.updateBookingLogData({
         bookingLogId: bookingLog.id,
-        // data: { originalBookRequest: bookReq, ssr: bookReq.ssr || {} },
-        data: { originalBookRequest: bookReq },
+        data: {
+          originalBookRequest: bookReq,
+          tboIndigoSeat: {
+            isBookableIfSeatNotAvailable,
+            isAllowBookingWithoutSeat: resolvedAllowWithoutSeat,
+          },
+        },
       });
       console.log("===== BOOK INITIATE SUCCESS =====");
 
@@ -203,6 +222,8 @@ export class BookService {
         fare: fare as unknown as Fare,
         payableAmount: payableAmount, // ✅ for Razorpay
         ssrTotal: ssrTotal,
+        isBookableIfSeatNotAvailable,
+        isAllowBookingWithoutSeat: resolvedAllowWithoutSeat,
       };
     } catch (error) {
       console.log(error);

@@ -20,6 +20,11 @@ import { OrderDetailResponse } from "../../order-details/interfaces/order-detail
 import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
 import { normalizeBundledSsrPerPassengers } from "src/shared/utilities/flight/ssr-passenger-normalize.utility";
 import { resolveTboEndUserIp } from "src/shared/utilities/flight/tbo-request-context.utility";
+import {
+  getFareQuoteIsBookableIfSeatNotAvailable,
+  isIndigoFareQuote,
+  resolveIsAllowBookingWithoutSeat,
+} from "src/shared/utilities/flight/tbo-indigo-seat.utility";
 
 interface SupplierLogEntry {
   index: number;
@@ -758,6 +763,19 @@ export class TboBookService {
 
     console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(bookReq.ssr));
 
+    const isBookableIfSeatNotAvailable =
+      getFareQuoteIsBookableIfSeatNotAvailable(res);
+    const isAllowBookingWithoutSeat = resolveIsAllowBookingWithoutSeat({
+      isIndigo: isIndigoFareQuote(res),
+      isBookableIfSeatNotAvailable,
+    });
+    if (typeof isAllowBookingWithoutSeat === "boolean") {
+      console.log("IndiGo seat fallback (Book/Ticket):", {
+        isBookableIfSeatNotAvailable,
+        isAllowBookingWithoutSeat,
+      });
+    }
+
     const fareBreakDown = res.Response.Results?.FareBreakdown;
     const isLCC = res.Response.Results.IsLCC;
 
@@ -777,6 +795,8 @@ export class TboBookService {
       trackingId: bookReq.trackingId,
       fareBreakDown,
       airlineType: isLCC ? "LCC" : "Non-LCC",
+      isBookableIfSeatNotAvailable,
+      isAllowBookingWithoutSeat,
     });
     let pnr: string = "";
     let bookingId: string = "";
@@ -1224,6 +1244,12 @@ export class TboBookService {
 
     if (supplierResult?.Response?.Response?.IsTimeChanged) {
       obj.IsPriceChangeAccepted = true;
+    }
+
+    const allowWithoutSeat = (bookRequest as { isAllowBookingWithoutSeat?: boolean })
+      .isAllowBookingWithoutSeat;
+    if (typeof allowWithoutSeat === "boolean") {
+      obj.IsAllowBookingWithoutSeat = allowWithoutSeat;
     }
 
     return obj;
