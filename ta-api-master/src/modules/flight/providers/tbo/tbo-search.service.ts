@@ -41,6 +41,8 @@ export class TboSearchService {
       await this.tboAuthTokenService.getAuthToken(searchRequest);
     searchRequest.authToken = authToken;
 
+    // console.log("authToken:::::::::", authToken);
+
     try {
       console.log("Azure URL:", process.env.AZURE_BLOB_SAS_LINK);
       const requestBody = this.creatingSearchRequest(searchRequest);
@@ -67,7 +69,7 @@ export class TboSearchService {
       // console.log("searchResult::::::::::",searchResult);
       // Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
 
-      if (process.env.ENABLE_LOCAL_LOGS === "true") {
+      if (process.env.ENABLE_LOCAL_LOGS === "false") {
         Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
       }
 
