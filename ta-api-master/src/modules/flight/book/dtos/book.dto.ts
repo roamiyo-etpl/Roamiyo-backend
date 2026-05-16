@@ -513,6 +513,17 @@ export class BookDto {
 
     @ApiPropertyOptional({
         description:
+            'Segments for the current split-RT booking leg (TBO). When set, SSR is restricted to these flights so return baggage is not sent on the outbound Ticket request.',
+        type: [RouteDetails],
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => RouteDetails)
+    selectedSegment?: RouteDetails[];
+
+    @ApiPropertyOptional({
+        description:
             'GST details (optional; may be required for some fares/suppliers). Blank strings are normalized before TBO.',
         type: GSTDetails,
         example: {

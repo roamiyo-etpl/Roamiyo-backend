@@ -387,6 +387,74 @@ export class TboBookService {
     });
   }
 
+  /**
+   * Client `routes` / `selectedSegment`: segment objects use `airline` + `flightNum`
+   * (see split RT booking); align with SSR items that use AirlineCode + FlightNumber.
+   */
+  private extractAllowedFlightKeysFromRouteSelection(selection: any): Set<string> {
+    const keys = new Set<string>();
+    const addSeg = (seg: any) => {
+      if (!seg || typeof seg !== "object") return;
+      const code =
+        seg.AirlineCode ?? seg.airlineCode ?? seg.airline ?? seg.Airline?.AirlineCode;
+      const fn =
+        seg.FlightNumber ??
+        seg.flightNumber ??
+        seg.flightNum ??
+        seg.Airline?.FlightNumber;
+      const k = this.canonicalAirlineFlightKey(code, fn);
+      if (k) keys.add(k);
+    };
+    if (!selection) return keys;
+    if (Array.isArray(selection)) {
+      for (const item of selection) {
+        if (Array.isArray(item)) {
+          for (const seg of item) addSeg(seg);
+        } else {
+          addSeg(item);
+        }
+      }
+    } else {
+      addSeg(selection);
+    }
+    return keys;
+  }
+
+  /**
+   * After merging mapped SSR with prior `bookReq.ssr`, stale leg-level SSR (e.g. return
+   * baggage on the outbound Ticket call) would survive because `{ ...prior, ...mapped }`
+   * keeps prior keys when mapped omits them. Strip anything not on this fare / segment.
+   */
+  private filterSsrNumericRecord(
+    ssr: Record<string, any> | undefined,
+    allowed: Set<string>,
+  ): Record<string, any> {
+    if (!ssr || typeof ssr !== "object" || !allowed.size) return ssr || {};
+    const keep = (item: any): boolean => {
+      const k = this.canonicalAirlineFlightKey(
+        item?.AirlineCode ?? item?.airline,
+        item?.FlightNumber ?? item?.flightNum,
+      );
+      if (k == null) return true;
+      return allowed.has(k);
+    };
+    const out: Record<string, any> = {};
+    for (const [key, raw] of Object.entries(ssr)) {
+      if (!raw || typeof raw !== "object") continue;
+      const pax = { ...raw };
+      if (Array.isArray(pax.SeatDynamic))
+        pax.SeatDynamic = pax.SeatDynamic.filter(keep);
+      if (Array.isArray(pax.MealDynamic))
+        pax.MealDynamic = pax.MealDynamic.filter(keep);
+      if (Array.isArray(pax.Baggage)) pax.Baggage = pax.Baggage.filter(keep);
+      if (!pax.SeatDynamic?.length) delete pax.SeatDynamic;
+      if (!pax.MealDynamic?.length) delete pax.MealDynamic;
+      if (!pax.Baggage?.length) delete pax.Baggage;
+      if (Object.keys(pax).length > 0) out[key] = pax;
+    }
+    return out;
+  }
+
   /** If mapping left no seats/meals, copy from `Passengers` for flights on this fare. */
   private injectClientSsrWhenMissing(bookReq: any, fareQuoteParsed: any): void {
     const allowed = this.extractAllowedFlightKeysFromFareQuote(fareQuoteParsed);
@@ -743,13 +811,19 @@ export class TboBookService {
     console.log("🔥 SSR RESPONSE:", JSON.stringify(ssrResponse));
 
     const fareFlightKeys = this.extractAllowedFlightKeysFromFareQuote(res);
+    const routeSelectionKeys = this.extractAllowedFlightKeysFromRouteSelection(
+      bookReq.selectedSegment ?? bookReq.routes,
+    );
+    const allowedFlightKeys =
+      fareFlightKeys.size > 0 ? fareFlightKeys : routeSelectionKeys;
+
     const userSSRRaw = normalizeBundledSsrPerPassengers(
       bookReq.passengers ?? [],
       this.buildUserSsrPassengersList(bookReq),
     );
     const userSSR =
-      fareFlightKeys.size > 0
-        ? this.filterSsrByAllowedFlights(userSSRRaw, fareFlightKeys)
+      allowedFlightKeys.size > 0
+        ? this.filterSsrByAllowedFlights(userSSRRaw, allowedFlightKeys)
         : userSSRRaw;
     const mappedSSR = this.mapSSR(userSSR, ssrResponse);
     const mappedWithSeatFallback = this.mergeUserSeatPassthrough(
@@ -760,6 +834,9 @@ export class TboBookService {
       bookReq.ssr && typeof bookReq.ssr === "object" ? bookReq.ssr : {};
     bookReq.ssr = this.mergeSsrByPassengerIndex(priorSsr, mappedWithSeatFallback);
     this.injectClientSsrWhenMissing(bookReq, res);
+    if (allowedFlightKeys.size > 0) {
+      bookReq.ssr = this.filterSsrNumericRecord(bookReq.ssr, allowedFlightKeys);
+    }
 
     console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(bookReq.ssr));
 
