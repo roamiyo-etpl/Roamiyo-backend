@@ -59,6 +59,26 @@ export class TboBookService {
     return resolveTboEndUserIp(bookRequest?.headers);
   }
 
+  /** TBO Book/Ticket expects passport dates as `YYYY-MM-DDTHH:mm:ss` (same as DateOfBirth). */
+  private formatTboDateField(value: string | undefined): string | undefined {
+    if (value == null || String(value).trim() === "") return undefined;
+    const m = moment(String(value).trim(), [
+      "YYYY-MM-DD",
+      "YYYY-MM-DDTHH:mm:ss",
+      moment.ISO_8601,
+    ]);
+    if (!m.isValid()) return undefined;
+    return m.format("YYYY-MM-DDTHH:mm:ss");
+  }
+
+  private resolvePassportIssueDate(passenger: any): string | undefined {
+    const fromDoc = passenger?.document?.issueDate;
+    if (fromDoc != null && String(fromDoc).trim() !== "") return String(fromDoc).trim();
+    const topLevel = passenger?.issueDate;
+    if (topLevel != null && String(topLevel).trim() !== "") return String(topLevel).trim();
+    return undefined;
+  }
+
   /**
    * Tek / TBO: LCC expects SSR lists as JSON arrays `[{...}]`; Non-LCC expects a JSON object
    * with numeric string keys (not a top-level array), e.g. `{ "0": {...}, "1": {...} }`.
@@ -1222,8 +1242,10 @@ export class TboBookService {
         ),
         Gender: element.gender == "M" ? 1 : 2,
         PassportNo: element?.document?.documentNumber,
-        PassportExpiry: element?.document?.expiryDate,
-        PassportIssueDate: element?.document?.issueDate,
+        PassportExpiry: this.formatTboDateField(element?.document?.expiryDate),
+        PassportIssueDate: this.formatTboDateField(
+          this.resolvePassportIssueDate(element),
+        ),
         PassportIssueCountryCode: element?.document?.country,
         AddressLine1: `${element?.city?.name || ""}, ${element?.country?.name || ""}, ${bookReq?.contact?.postalCode}`,
         AddressLine2: "",

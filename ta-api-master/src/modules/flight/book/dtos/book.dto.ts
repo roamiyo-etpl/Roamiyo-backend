@@ -106,6 +106,15 @@ export class Document {
     @IsDateString()
     expiryDate: string;
 
+    @ApiPropertyOptional({
+        description: 'Passport issue date (required by some international fares / TBO)',
+        example: '2015-06-20',
+        format: 'date',
+    })
+    @IsOptional()
+    @IsDateString()
+    issueDate?: string;
+
     @ApiProperty({
         description: 'Country that issued the document',
         example: 'US',
@@ -199,6 +208,7 @@ export class Passenger {
             documentType: 'Passport',
             documentNumber: 'A1234567',
             expiryDate: '2030-12-31',
+            issueDate: '2015-06-20',
             country: 'US',
         },
     })
