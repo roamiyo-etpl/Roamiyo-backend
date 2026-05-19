@@ -92,6 +92,47 @@ export class TboBookService {
     return out;
   }
 
+  /** TBO `WS_Meal_dynamic` requires `Description` (same enum as seat/baggage when omitted by frontend). */
+  private static readonly TBO_MEAL_DESCRIPTION_DEFAULT = 2;
+
+  private ensureMealDescription(meal: any): any {
+    if (!meal || typeof meal !== "object") return meal;
+    if (
+      meal.Description !== undefined &&
+      meal.Description !== null &&
+      meal.Description !== ""
+    ) {
+      return meal;
+    }
+    return { ...meal, Description: TboBookService.TBO_MEAL_DESCRIPTION_DEFAULT };
+  }
+
+  private ensureMealDynamicDescriptions(
+    meals: any[] | undefined | null,
+  ): any[] {
+    if (!Array.isArray(meals)) return [];
+    return meals.map((m) => this.ensureMealDescription(m));
+  }
+
+  private normalizeSsrMealDescriptions(
+    ssr: Record<string, any> | undefined,
+  ): Record<string, any> {
+    if (!ssr || typeof ssr !== "object") return {};
+    const out: Record<string, any> = {};
+    for (const [key, pax] of Object.entries(ssr)) {
+      if (!pax || typeof pax !== "object") {
+        out[key] = pax;
+        continue;
+      }
+      const next = { ...pax };
+      if (Array.isArray(next.MealDynamic) && next.MealDynamic.length > 0) {
+        next.MealDynamic = this.ensureMealDynamicDescriptions(next.MealDynamic);
+      }
+      out[key] = next;
+    }
+    return out;
+  }
+
   /**
    * TBO returns Baggage / MealDynamic as either `options[]` or `options[][]` (per passenger / leg).
    */
@@ -170,7 +211,7 @@ export class TboBookService {
               }),
 
               ...(meal && {
-                MealDynamic: [{ ...meal }],
+                MealDynamic: [this.ensureMealDescription({ ...meal })],
               }),
 
               ...(baggage && {
@@ -597,7 +638,9 @@ export class TboBookService {
         if (filtered.length > 0 && have === 0) {
           cur = {
             ...cur,
-            MealDynamic: filtered.map((m: any) => ({ ...m })),
+            MealDynamic: this.ensureMealDynamicDescriptions(
+              filtered.map((m: any) => ({ ...m })),
+            ),
           };
         }
       }
@@ -939,6 +982,7 @@ export class TboBookService {
       bookReq.ssr = this.filterSsrNumericRecord(bookReq.ssr, allowedFlightKeys);
     }
     bookReq.ssr = this.dedupeSsrNumericRecord(bookReq.ssr);
+    bookReq.ssr = this.normalizeSsrMealDescriptions(bookReq.ssr);
 
     console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(bookReq.ssr));
 
@@ -1261,7 +1305,8 @@ export class TboBookService {
     const passengers = bookReq.passengers;
 
     // ===== SSR START =====
-    const ssr = bookReq.ssr || {};
+    bookReq.ssr = this.normalizeSsrMealDescriptions(bookReq.ssr || {});
+    const ssr = bookReq.ssr;
     console.log("SSR inside createBookRequest:", JSON.stringify(ssr));
 
     // calculate SSR total (optional debug)
@@ -1364,17 +1409,15 @@ export class TboBookService {
 
         ...(Array.isArray(passengerSSR?.MealDynamic) &&
           passengerSSR.MealDynamic.length > 0 && {
-          MealDynamic: isNonLcc
-            ? this.toNonLccSsrObject(
-                passengerSSR.MealDynamic.map((m: any) => ({
-                  ...m,
-                  Nationality: m?.Nationality ?? element?.nationality,
-                })),
-              )
-            : passengerSSR.MealDynamic.map((m: any) => ({
-                ...m,
-                Nationality: m?.Nationality ?? element?.nationality,
-              })),
+          MealDynamic: (() => {
+            const meals = this.ensureMealDynamicDescriptions(
+              passengerSSR.MealDynamic,
+            ).map((m: any) => ({
+              ...m,
+              Nationality: m?.Nationality ?? element?.nationality,
+            }));
+            return isNonLcc ? this.toNonLccSsrObject(meals) : meals;
+          })(),
         }),
 
         ...(Array.isArray(passengerSSR?.SeatDynamic) &&
@@ -1471,7 +1514,9 @@ export class TboBookService {
             this.pickMealFromCatalog(sel, mealCat),
           ).filter(Boolean),
         );
-        // if (mapped.length) row.MealDynamic = mapped;
+        if (mapped.length) {
+          row.MealDynamic = this.ensureMealDynamicDescriptions(mapped);
+        }
       }
 
       if (pax.SeatDynamic?.length) {
