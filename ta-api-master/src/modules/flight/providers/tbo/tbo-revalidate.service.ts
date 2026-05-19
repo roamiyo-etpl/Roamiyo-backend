@@ -832,26 +832,11 @@ export class TboRevalidateService {
     flightSegment.airlineCode = segment.Airline.AirlineCode;
     flightSegment.airlineName =
       airlines("")[segment.Airline.AirlineCode] || segment.Airline;
-    const tboCabinClassRaw = segment.CabinClass;
-    console.log("[TBO Revalidate Segment] convertCabinClassCode BEFORE", {
-      tboCabinClassRaw,
-      tboCabinClassType: typeof tboCabinClassRaw,
-      airlineCode: segment?.Airline?.AirlineCode,
-      flightNumber: segment?.Airline?.FlightNumber,
-      segmentIndicator: segment?.SegmentIndicator,
-    });
     flightSegment.cabinClass = Generic.convertCabinClassCode(
       "TBO",
-      tboCabinClassRaw,
+      segment.CabinClass,
       false,
     );
-    console.log("[TBO Revalidate Segment] convertCabinClassCode AFTER", {
-      tboCabinClassRaw,
-      mappedCabinClass: flightSegment.cabinClass,
-      airlineCode: segment?.Airline?.AirlineCode,
-      flightNumber: segment?.Airline?.FlightNumber,
-      segmentIndicator: segment?.SegmentIndicator,
-    });
     flightSegment.flightNumber = segment?.Airline?.FlightNumber;
     flightSegment.noOfSeatAvailable = segment?.NoOfSeatAvailable;
     flightSegment.mealType = segment?.MealType || "";

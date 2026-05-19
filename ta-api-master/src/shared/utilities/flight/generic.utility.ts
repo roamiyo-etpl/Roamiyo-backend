@@ -297,15 +297,6 @@ export class Generic {
     /** [@Description: Converting cabin class code]
      * @author: Prashant Joshi at 23-09-2025 **/
     static convertCabinClassCode(providerCode, cabinCode, convertToProvider = false) {
-        const isTbo = providerCode?.toUpperCase() === 'TBO';
-        if (isTbo) {
-            console.log('[TBO CabinClass] convertCabinClassCode BEFORE', {
-                direction: convertToProvider ? 'api→tbo' : 'tbo→api',
-                cabinCode,
-                cabinCodeType: typeof cabinCode,
-            });
-        }
-
         let cabin = '';
         switch (providerCode.toUpperCase()) {
             case 'PK':
@@ -408,14 +399,6 @@ export class Generic {
                     }
                 }
                 break;
-        }
-
-        if (isTbo) {
-            console.log('[TBO CabinClass] convertCabinClassCode AFTER', {
-                direction: convertToProvider ? 'api→tbo' : 'tbo→api',
-                cabinCode,
-                mappedCabin: cabin,
-            });
         }
 
         return cabin;
