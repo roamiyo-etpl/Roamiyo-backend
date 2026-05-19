@@ -1,4 +1,4 @@
-import { IsArray, IsNotEmpty, ValidateNested, IsDateString, IsString, IsOptional, IsEmail } from 'class-validator';
+import { IsArray, IsNotEmpty, ValidateNested, IsDateString, IsString, IsOptional, IsEmail, IsBoolean } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -106,6 +106,15 @@ export class Document {
     @IsDateString()
     expiryDate: string;
 
+    @ApiPropertyOptional({
+        description: 'Passport issue date (required by some international fares / TBO)',
+        example: '2015-06-20',
+        format: 'date',
+    })
+    @IsOptional()
+    @IsDateString()
+    issueDate?: string;
+
     @ApiProperty({
         description: 'Country that issued the document',
         example: 'US',
@@ -199,6 +208,7 @@ export class Passenger {
             documentType: 'Passport',
             documentNumber: 'A1234567',
             expiryDate: '2030-12-31',
+            issueDate: '2015-06-20',
             country: 'US',
         },
     })
@@ -513,6 +523,17 @@ export class BookDto {
 
     @ApiPropertyOptional({
         description:
+            'Segments for the current split-RT booking leg (TBO). When set, SSR is restricted to these flights so return baggage is not sent on the outbound Ticket request.',
+        type: [RouteDetails],
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => RouteDetails)
+    selectedSegment?: RouteDetails[];
+
+    @ApiPropertyOptional({
+        description:
             'GST details (optional; may be required for some fares/suppliers). Blank strings are normalized before TBO.',
         type: GSTDetails,
         example: {
@@ -539,6 +560,15 @@ export class BookDto {
 })
 @IsOptional()
 ssr?: any;
+
+    @ApiPropertyOptional({
+        description:
+            'Deprecated / ignored for IndiGo: when FareQuote `IsBookableIfSeatNotAvailable` is true, the API always sends `IsAllowBookingWithoutSeat: true` on Book/Ticket. Non-IndiGo: field has no effect.',
+        example: true,
+    })
+    @IsOptional()
+    @IsBoolean()
+    isAllowBookingWithoutSeat?: boolean;
 }
 
 /**

@@ -3,6 +3,10 @@ import { ConfigurationService } from "../../configuration/configuration.service"
 import { s3BucketService } from "src/shared/utilities/flight/s3bucket.utility";
 import { Http } from "src/shared/utilities/flight/http.utility";
 import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
+import {
+  redactTboCredentialsForLog,
+  resolveTboEndUserIp,
+} from "src/shared/utilities/flight/tbo-request-context.utility";
 
 @Injectable()
 export class TboAuthTokenService {
@@ -30,10 +34,6 @@ export class TboAuthTokenService {
         return newAuthToken;
       }
       // Save auth logs to S3
-      const logs = {
-        request: searchRequest,
-        response: authToken,
-      };
       // await this.s3BucketService.generateS3LogFile((searchRequest?.searchReqId || 'unknown') + '-' + new Date().toISOString().slice(0, 10) + '-auth-TBO', logs, 'auth');
       // await this.supplierLogUtility.generateLogFile({
       //     fileName: (searchRequest?.searchReqId || 'unknown') + '-' + new Date().toISOString().slice(0, 10) + '-auth-TBO',
@@ -44,14 +44,23 @@ export class TboAuthTokenService {
       //     searchReqId: searchRequest?.searchReqId,
       //     bookingReferenceId: null,
       // });
-      if (process.env.ENABLE_LOCAL_LOGS === "true") {
+      if (process.env.ENABLE_LOCAL_LOGS === "false") {
+        const safeLogs = {
+          request: {
+            ...searchRequest,
+            providerCred: redactTboCredentialsForLog(
+              searchRequest?.providerCred as Record<string, unknown>,
+            ),
+          },
+          response: authToken,
+        };
         await this.supplierLogUtility.generateLogFile({
           fileName:
             (searchRequest?.searchReqId || "unknown") +
             "-" +
             new Date().toISOString().slice(0, 10) +
             "-auth-TBO",
-          logData: logs,
+          logData: safeLogs,
           folderName: "auth",
           logId: null,
           title: "Auth-TBO",
@@ -77,7 +86,7 @@ export class TboAuthTokenService {
         ClientId: providerCred.client_id,
         UserName: providerCred.username,
         Password: providerCred.password,
-        EndUserIp: headers["ip-address"],
+        EndUserIp: resolveTboEndUserIp(headers as Record<string, unknown>),
       };
       // dev endpoint
       // const endpoint = `${providerCred.auth_url}/SharedData.svc/rest/Authenticate`;
@@ -92,9 +101,14 @@ export class TboAuthTokenService {
         JSON.stringify(data),
       );
       const logs = {
-        request: data,
+        request: { ...data, Password: "[REDACTED]" },
         response: sessionData,
-        ApiRequest: searchRequest,
+        ApiRequest: {
+          ...searchRequest,
+          providerCred: redactTboCredentialsForLog(
+            searchRequest?.providerCred as Record<string, unknown>,
+          ),
+        },
         ApiResponse: sessionData,
       };
       // Log auth request to S3

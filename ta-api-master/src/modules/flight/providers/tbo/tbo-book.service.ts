@@ -19,6 +19,12 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { OrderDetailResponse } from "../../order-details/interfaces/order-detail.interface";
 import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
 import { normalizeBundledSsrPerPassengers } from "src/shared/utilities/flight/ssr-passenger-normalize.utility";
+import { resolveTboEndUserIp } from "src/shared/utilities/flight/tbo-request-context.utility";
+import {
+  getFareQuoteIsBookableIfSeatNotAvailable,
+  isIndigoFareQuote,
+  resolveIsAllowBookingWithoutSeat,
+} from "src/shared/utilities/flight/tbo-indigo-seat.utility";
 
 interface SupplierLogEntry {
   index: number;
@@ -50,10 +56,81 @@ export class TboBookService {
   ) { }
 
   private resolveEndUserIp(bookRequest: any): string {
-    const h = bookRequest?.headers || {};
-    const raw = h["ip-address"] || h["x-forwarded-for"] || h["x-real-ip"];
-    if (raw) return String(raw).split(",")[0].trim();
-    return "20.244.28.12";
+    return resolveTboEndUserIp(bookRequest?.headers);
+  }
+
+  /** TBO Book/Ticket expects passport dates as `YYYY-MM-DDTHH:mm:ss` (same as DateOfBirth). */
+  private formatTboDateField(value: string | undefined): string | undefined {
+    if (value == null || String(value).trim() === "") return undefined;
+    const m = moment(String(value).trim(), [
+      "YYYY-MM-DD",
+      "YYYY-MM-DDTHH:mm:ss",
+      moment.ISO_8601,
+    ]);
+    if (!m.isValid()) return undefined;
+    return m.format("YYYY-MM-DDTHH:mm:ss");
+  }
+
+  private resolvePassportIssueDate(passenger: any): string | undefined {
+    const fromDoc = passenger?.document?.issueDate;
+    if (fromDoc != null && String(fromDoc).trim() !== "") return String(fromDoc).trim();
+    const topLevel = passenger?.issueDate;
+    if (topLevel != null && String(topLevel).trim() !== "") return String(topLevel).trim();
+    return undefined;
+  }
+
+  /**
+   * Tek / TBO: LCC expects SSR lists as JSON arrays `[{...}]`; Non-LCC expects a JSON object
+   * with numeric string keys (not a top-level array), e.g. `{ "0": {...}, "1": {...} }`.
+   * Internal code still uses arrays; we convert only when building the Book/Ticket payload.
+   */
+  private toNonLccSsrObject(items: any[]): Record<string, any> {
+    const out: Record<string, any> = {};
+    items.forEach((item, i) => {
+      out[String(i)] = item;
+    });
+    return out;
+  }
+
+  /** TBO `WS_Meal_dynamic` requires `Description` (same enum as seat/baggage when omitted by frontend). */
+  private static readonly TBO_MEAL_DESCRIPTION_DEFAULT = 2;
+
+  private ensureMealDescription(meal: any): any {
+    if (!meal || typeof meal !== "object") return meal;
+    if (
+      meal.Description !== undefined &&
+      meal.Description !== null &&
+      meal.Description !== ""
+    ) {
+      return meal;
+    }
+    return { ...meal, Description: TboBookService.TBO_MEAL_DESCRIPTION_DEFAULT };
+  }
+
+  private ensureMealDynamicDescriptions(
+    meals: any[] | undefined | null,
+  ): any[] {
+    if (!Array.isArray(meals)) return [];
+    return meals.map((m) => this.ensureMealDescription(m));
+  }
+
+  private normalizeSsrMealDescriptions(
+    ssr: Record<string, any> | undefined,
+  ): Record<string, any> {
+    if (!ssr || typeof ssr !== "object") return {};
+    const out: Record<string, any> = {};
+    for (const [key, pax] of Object.entries(ssr)) {
+      if (!pax || typeof pax !== "object") {
+        out[key] = pax;
+        continue;
+      }
+      const next = { ...pax };
+      if (Array.isArray(next.MealDynamic) && next.MealDynamic.length > 0) {
+        next.MealDynamic = this.ensureMealDynamicDescriptions(next.MealDynamic);
+      }
+      out[key] = next;
+    }
+    return out;
   }
 
   /**
@@ -134,7 +211,7 @@ export class TboBookService {
               }),
 
               ...(meal && {
-                MealDynamic: [{ ...meal }],
+                MealDynamic: [this.ensureMealDescription({ ...meal })],
               }),
 
               ...(baggage && {
@@ -193,19 +270,42 @@ export class TboBookService {
   ): any | undefined {
     if (!selected || !Array.isArray(catalog) || catalog.length === 0)
       return undefined;
+
+    const matchFlightOd = (item: any) =>
+      this.ssrMatchesFlightAndOd(item, selected);
+
     if (selected.Code) {
-      const byCode = catalog.find((b) => b.Code === selected.Code);
-      if (byCode) return byCode;
+      const byCode = catalog.filter((b) => b.Code === selected.Code);
+      if (byCode.length === 1) return byCode[0];
+      if (byCode.length > 1) {
+        const od = byCode.find(matchFlightOd);
+        if (od) return od;
+      }
     }
+
     if (selected.Weight != null) {
       const w = Number(selected.Weight);
-      return catalog.find(
+      const byWeight = catalog.filter(
         (b) =>
           b.Weight === selected.Weight ||
           Number(b.Weight) === w ||
           String(b.Weight) === String(selected.Weight),
       );
+      if (byWeight.length === 1) return byWeight[0];
+      if (byWeight.length > 1) {
+        const od = byWeight.find(matchFlightOd);
+        if (od) return od;
+      }
     }
+
+    if (
+      selected?.FlightNumber != null ||
+      selected?.Origin ||
+      selected?.Destination
+    ) {
+      return catalog.find(matchFlightOd);
+    }
+
     return undefined;
   }
 
@@ -213,25 +313,83 @@ export class TboBookService {
     selected: any,
     catalog: any[],
   ): any | undefined {
-    if (!selected?.Code || !Array.isArray(catalog)) return undefined;
-    return catalog.find((m) => m.Code === selected.Code);
+    if (!selected || !Array.isArray(catalog) || catalog.length === 0)
+      return undefined;
+
+    if (selected.Code) {
+      const byCode = catalog.filter((m) => m.Code === selected.Code);
+      if (byCode.length === 1) return byCode[0];
+      if (byCode.length > 1) {
+        const od = byCode.find((m) => this.ssrMatchesFlightAndOd(m, selected));
+        if (od) return od;
+      }
+    }
+
+    if (
+      selected?.FlightNumber != null ||
+      selected?.Origin ||
+      selected?.Destination
+    ) {
+      return catalog.find((m) => this.ssrMatchesFlightAndOd(m, selected));
+    }
+
+    return undefined;
+  }
+
+  private ssrSegmentKey(item: any): string {
+    return `${String(item?.FlightNumber ?? "").trim()}|${item?.Origin ?? ""}|${item?.Destination ?? ""}`;
+  }
+
+  /** TBO allows at most one baggage/meal per segment; drop duplicates after mapping. */
+  private dedupeSsrItemsBySegment(items: any[] | undefined): any[] {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const item of items) {
+      const key = this.ssrSegmentKey(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    return out;
+  }
+
+  private dedupeSsrNumericRecord(
+    ssr: Record<string, any> | undefined,
+  ): Record<string, any> {
+    if (!ssr || typeof ssr !== "object") return {};
+    const out: Record<string, any> = {};
+    for (const [key, raw] of Object.entries(ssr)) {
+      if (!raw || typeof raw !== "object") continue;
+      const pax = { ...raw };
+      if (Array.isArray(pax.Baggage)) {
+        pax.Baggage = this.dedupeSsrItemsBySegment(pax.Baggage);
+        if (!pax.Baggage.length) delete pax.Baggage;
+      }
+      if (Array.isArray(pax.MealDynamic)) {
+        pax.MealDynamic = this.dedupeSsrItemsBySegment(pax.MealDynamic);
+        if (!pax.MealDynamic.length) delete pax.MealDynamic;
+      }
+      if (Object.keys(pax).length > 0) out[key] = pax;
+    }
+    return out;
   }
 
   private seatFlightOdKey(s: any): string {
     return `${s?.Code ?? ""}|${String(s?.FlightNumber ?? "").trim()}|${s?.Origin ?? ""}|${s?.Destination ?? ""}`;
   }
 
-  private seatMatchesFlightAndOd(catalogSeat: any, selected: any): boolean {
+  private ssrMatchesFlightAndOd(catalogItem: any, selected: any): boolean {
     if (selected?.FlightNumber != null && String(selected.FlightNumber).trim() !== "") {
       if (
-        String(catalogSeat?.FlightNumber ?? "").trim() !==
+        String(catalogItem?.FlightNumber ?? "").trim() !==
         String(selected.FlightNumber).trim()
       ) {
         return false;
       }
     }
-    if (selected?.Origin && catalogSeat?.Origin !== selected.Origin) return false;
-    if (selected?.Destination && catalogSeat?.Destination !== selected.Destination)
+    if (selected?.Origin && catalogItem?.Origin !== selected.Origin) return false;
+    if (selected?.Destination && catalogItem?.Destination !== selected.Destination)
       return false;
     return true;
   }
@@ -245,7 +403,7 @@ export class TboBookService {
       const byCode = catalog.filter((s) => s.Code === selected.Code);
       if (byCode.length === 1) return byCode[0];
       if (byCode.length > 1) {
-        const od = byCode.find((s) => this.seatMatchesFlightAndOd(s, selected));
+        const od = byCode.find((s) => this.ssrMatchesFlightAndOd(s, selected));
         if (od) return od;
         return byCode[0];
       }
@@ -257,7 +415,7 @@ export class TboBookService {
         return String(s.RowNo) === String(selected.RowNo);
       };
       const rowCandidates = catalog.filter(
-        (s) => rowMatch(s) && this.seatMatchesFlightAndOd(s, selected),
+        (s) => rowMatch(s) && this.ssrMatchesFlightAndOd(s, selected),
       );
       if (rowCandidates.length === 1) return rowCandidates[0];
       if (rowCandidates.length > 1 && selected.Code) {
@@ -371,6 +529,74 @@ export class TboBookService {
     });
   }
 
+  /**
+   * Client `routes` / `selectedSegment`: segment objects use `airline` + `flightNum`
+   * (see split RT booking); align with SSR items that use AirlineCode + FlightNumber.
+   */
+  private extractAllowedFlightKeysFromRouteSelection(selection: any): Set<string> {
+    const keys = new Set<string>();
+    const addSeg = (seg: any) => {
+      if (!seg || typeof seg !== "object") return;
+      const code =
+        seg.AirlineCode ?? seg.airlineCode ?? seg.airline ?? seg.Airline?.AirlineCode;
+      const fn =
+        seg.FlightNumber ??
+        seg.flightNumber ??
+        seg.flightNum ??
+        seg.Airline?.FlightNumber;
+      const k = this.canonicalAirlineFlightKey(code, fn);
+      if (k) keys.add(k);
+    };
+    if (!selection) return keys;
+    if (Array.isArray(selection)) {
+      for (const item of selection) {
+        if (Array.isArray(item)) {
+          for (const seg of item) addSeg(seg);
+        } else {
+          addSeg(item);
+        }
+      }
+    } else {
+      addSeg(selection);
+    }
+    return keys;
+  }
+
+  /**
+   * After merging mapped SSR with prior `bookReq.ssr`, stale leg-level SSR (e.g. return
+   * baggage on the outbound Ticket call) would survive because `{ ...prior, ...mapped }`
+   * keeps prior keys when mapped omits them. Strip anything not on this fare / segment.
+   */
+  private filterSsrNumericRecord(
+    ssr: Record<string, any> | undefined,
+    allowed: Set<string>,
+  ): Record<string, any> {
+    if (!ssr || typeof ssr !== "object" || !allowed.size) return ssr || {};
+    const keep = (item: any): boolean => {
+      const k = this.canonicalAirlineFlightKey(
+        item?.AirlineCode ?? item?.airline,
+        item?.FlightNumber ?? item?.flightNum,
+      );
+      if (k == null) return true;
+      return allowed.has(k);
+    };
+    const out: Record<string, any> = {};
+    for (const [key, raw] of Object.entries(ssr)) {
+      if (!raw || typeof raw !== "object") continue;
+      const pax = { ...raw };
+      if (Array.isArray(pax.SeatDynamic))
+        pax.SeatDynamic = pax.SeatDynamic.filter(keep);
+      if (Array.isArray(pax.MealDynamic))
+        pax.MealDynamic = pax.MealDynamic.filter(keep);
+      if (Array.isArray(pax.Baggage)) pax.Baggage = pax.Baggage.filter(keep);
+      if (!pax.SeatDynamic?.length) delete pax.SeatDynamic;
+      if (!pax.MealDynamic?.length) delete pax.MealDynamic;
+      if (!pax.Baggage?.length) delete pax.Baggage;
+      if (Object.keys(pax).length > 0) out[key] = pax;
+    }
+    return out;
+  }
+
   /** If mapping left no seats/meals, copy from `Passengers` for flights on this fare. */
   private injectClientSsrWhenMissing(bookReq: any, fareQuoteParsed: any): void {
     const allowed = this.extractAllowedFlightKeysFromFareQuote(fareQuoteParsed);
@@ -412,7 +638,9 @@ export class TboBookService {
         if (filtered.length > 0 && have === 0) {
           cur = {
             ...cur,
-            MealDynamic: filtered.map((m: any) => ({ ...m })),
+            MealDynamic: this.ensureMealDynamicDescriptions(
+              filtered.map((m: any) => ({ ...m })),
+            ),
           };
         }
       }
@@ -719,21 +947,27 @@ export class TboBookService {
     // console.log("🔥 CALLING SSR API WITH:", ssrPayload, "url:", ssrEndpoint);
     const ssrResponse = await Http.httpRequestTBO(
       "POST",
-      `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
-      // `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
+      // `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
+      `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
       JSON.stringify(ssrPayload),
     );
 
     console.log("🔥 SSR RESPONSE:", JSON.stringify(ssrResponse));
 
     const fareFlightKeys = this.extractAllowedFlightKeysFromFareQuote(res);
+    const routeSelectionKeys = this.extractAllowedFlightKeysFromRouteSelection(
+      bookReq.selectedSegment ?? bookReq.routes,
+    );
+    const allowedFlightKeys =
+      fareFlightKeys.size > 0 ? fareFlightKeys : routeSelectionKeys;
+
     const userSSRRaw = normalizeBundledSsrPerPassengers(
       bookReq.passengers ?? [],
       this.buildUserSsrPassengersList(bookReq),
     );
     const userSSR =
-      fareFlightKeys.size > 0
-        ? this.filterSsrByAllowedFlights(userSSRRaw, fareFlightKeys)
+      allowedFlightKeys.size > 0
+        ? this.filterSsrByAllowedFlights(userSSRRaw, allowedFlightKeys)
         : userSSRRaw;
     const mappedSSR = this.mapSSR(userSSR, ssrResponse);
     const mappedWithSeatFallback = this.mergeUserSeatPassthrough(
@@ -744,8 +978,26 @@ export class TboBookService {
       bookReq.ssr && typeof bookReq.ssr === "object" ? bookReq.ssr : {};
     bookReq.ssr = this.mergeSsrByPassengerIndex(priorSsr, mappedWithSeatFallback);
     this.injectClientSsrWhenMissing(bookReq, res);
+    if (allowedFlightKeys.size > 0) {
+      bookReq.ssr = this.filterSsrNumericRecord(bookReq.ssr, allowedFlightKeys);
+    }
+    bookReq.ssr = this.dedupeSsrNumericRecord(bookReq.ssr);
+    bookReq.ssr = this.normalizeSsrMealDescriptions(bookReq.ssr);
 
     console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(bookReq.ssr));
+
+    const isBookableIfSeatNotAvailable =
+      getFareQuoteIsBookableIfSeatNotAvailable(res);
+    const isAllowBookingWithoutSeat = resolveIsAllowBookingWithoutSeat({
+      isIndigo: isIndigoFareQuote(res),
+      isBookableIfSeatNotAvailable,
+    });
+    if (typeof isAllowBookingWithoutSeat === "boolean") {
+      console.log("IndiGo seat fallback (Book/Ticket):", {
+        isBookableIfSeatNotAvailable,
+        isAllowBookingWithoutSeat,
+      });
+    }
 
     const fareBreakDown = res.Response.Results?.FareBreakdown;
     const isLCC = res.Response.Results.IsLCC;
@@ -766,6 +1018,8 @@ export class TboBookService {
       trackingId: bookReq.trackingId,
       fareBreakDown,
       airlineType: isLCC ? "LCC" : "Non-LCC",
+      isBookableIfSeatNotAvailable,
+      isAllowBookingWithoutSeat,
     });
     let pnr: string = "";
     let bookingId: string = "";
@@ -1043,10 +1297,16 @@ export class TboBookService {
 
     const { bookReq, headers } = bookRequest;
 
+    const airlineType =
+      (bookRequest as { airlineType?: string }).airlineType ??
+      bookReq?.airlineType;
+    const isNonLcc = airlineType === "Non-LCC";
+
     const passengers = bookReq.passengers;
 
     // ===== SSR START =====
-    const ssr = bookReq.ssr || {};
+    bookReq.ssr = this.normalizeSsrMealDescriptions(bookReq.ssr || {});
+    const ssr = bookReq.ssr;
     console.log("SSR inside createBookRequest:", JSON.stringify(ssr));
 
     // calculate SSR total (optional debug)
@@ -1109,14 +1369,16 @@ export class TboBookService {
         ),
         Gender: element.gender == "M" ? 1 : 2,
         PassportNo: element?.document?.documentNumber,
-        PassportExpiry: element?.document?.expiryDate,
-        PassportIssueDate: element?.document?.issueDate,
+        PassportExpiry: this.formatTboDateField(element?.document?.expiryDate),
+        PassportIssueDate: this.formatTboDateField(
+          this.resolvePassportIssueDate(element),
+        ),
         PassportIssueCountryCode: element?.document?.country,
         AddressLine1: `${element?.city?.name || ""}, ${element?.country?.name || ""}, ${bookReq?.contact?.postalCode}`,
         AddressLine2: "",
-        City: element?.city?.name,
-        CountryName: element?.country?.name,
-        CountryCode: element?.document?.country,
+        City: element?.city?.name || 'Mumbai',
+        CountryName: element?.country?.name || 'India',
+        CountryCode: element?.document?.country || 'IN',
         Nationality: element?.nationality,
         GSTCompanyAddress: bookReq?.gst?.gstCompanyAddress || "",
         GSTCompanyContactNumber: bookReq?.gst?.gstCompanyContactNumber || "",
@@ -1143,24 +1405,33 @@ export class TboBookService {
           AirTransFee: (fare?.AirTransFee ?? 0) / paxCount,
           PGCharge: (fare?.PGCharge ?? 0) / paxCount,
         },
-        // ===== SSR INJECTION =====
+        // ===== SSR INJECTION (LCC: arrays; Non-LCC: keyed objects per Tek Travels) =====
 
         ...(Array.isArray(passengerSSR?.MealDynamic) &&
           passengerSSR.MealDynamic.length > 0 && {
-          MealDynamic: passengerSSR.MealDynamic.map((m: any) => ({
-            ...m,
-            Nationality: m?.Nationality ?? element?.nationality,
-          })),
+          MealDynamic: (() => {
+            const meals = this.ensureMealDynamicDescriptions(
+              passengerSSR.MealDynamic,
+            ).map((m: any) => ({
+              ...m,
+              Nationality: m?.Nationality ?? element?.nationality,
+            }));
+            return isNonLcc ? this.toNonLccSsrObject(meals) : meals;
+          })(),
         }),
 
         ...(Array.isArray(passengerSSR?.SeatDynamic) &&
           passengerSSR.SeatDynamic.length > 0 && {
-          SeatDynamic: passengerSSR.SeatDynamic,
+          SeatDynamic: isNonLcc
+            ? this.toNonLccSsrObject(passengerSSR.SeatDynamic)
+            : passengerSSR.SeatDynamic,
         }),
 
         ...(Array.isArray(passengerSSR?.Baggage) &&
           passengerSSR.Baggage.length > 0 && {
-          Baggage: passengerSSR.Baggage,
+          Baggage: isNonLcc
+            ? this.toNonLccSsrObject(passengerSSR.Baggage)
+            : passengerSSR.Baggage,
         }),
       };
     });
@@ -1199,6 +1470,12 @@ export class TboBookService {
       obj.IsPriceChangeAccepted = true;
     }
 
+    const allowWithoutSeat = (bookRequest as { isAllowBookingWithoutSeat?: boolean })
+      .isAllowBookingWithoutSeat;
+    if (typeof allowWithoutSeat === "boolean") {
+      obj.IsAllowBookingWithoutSeat = allowWithoutSeat;
+    }
+
     return obj;
   }
 
@@ -1223,17 +1500,23 @@ export class TboBookService {
       const row: any = {};
 
       if (pax.Baggage?.length) {
-        const mapped = pax.Baggage.map((sel) =>
-          this.pickBaggageFromCatalog(sel, bagCat),
-        ).filter(Boolean);
+        const mapped = this.dedupeSsrItemsBySegment(
+          pax.Baggage.map((sel) =>
+            this.pickBaggageFromCatalog(sel, bagCat),
+          ).filter(Boolean),
+        );
         if (mapped.length) row.Baggage = mapped;
       }
 
       if (pax.MealDynamic?.length) {
-        const mapped = pax.MealDynamic.map((sel) =>
-          this.pickMealFromCatalog(sel, mealCat),
-        ).filter(Boolean);
-        if (mapped.length) row.MealDynamic = mapped;
+        const mapped = this.dedupeSsrItemsBySegment(
+          pax.MealDynamic.map((sel) =>
+            this.pickMealFromCatalog(sel, mealCat),
+          ).filter(Boolean),
+        );
+        if (mapped.length) {
+          row.MealDynamic = this.ensureMealDynamicDescriptions(mapped);
+        }
       }
 
       if (pax.SeatDynamic?.length) {

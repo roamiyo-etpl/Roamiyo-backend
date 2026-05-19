@@ -35,4 +35,8 @@ export class BookInitiateResponse {
   fare: Fare;
   payableAmount?: number;
   ssrTotal?: number;
+  /** TBO FareQuote (IndiGo): seat may be omitted at ticket if sold out when true. */
+  isBookableIfSeatNotAvailable?: boolean;
+  /** Value sent on TBO Book/Ticket when IndiGo + seats selected. */
+  isAllowBookingWithoutSeat?: boolean;
 }

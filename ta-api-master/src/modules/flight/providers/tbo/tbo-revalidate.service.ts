@@ -18,6 +18,10 @@ import {
 import { airlines } from "src/shared/utilities/flight/airline.utility";
 import { Generic } from "src/shared/utilities/flight/generic.utility";
 import { AirlineCategory } from "src/shared/enums/flight/flight.enum";
+import {
+  getFareQuoteIsBookableIfSeatNotAvailable,
+  isIndigoAirlineCodeList,
+} from "src/shared/utilities/flight/tbo-indigo-seat.utility";
 import { airports } from "src/shared/utilities/flight/airport.utility";
 import moment from "moment";
 import { Http } from "src/shared/utilities/flight/http.utility";
@@ -36,7 +40,7 @@ export class TboRevalidateService {
     @InjectRepository(RevalidateResponseEntity)
     private revalidateRepo: Repository<RevalidateResponseEntity>,
     private readonly supplierLogUtility: SupplierLogUtility,
-  ) {}
+  ) { }
 
   /** [@Description: This method is used to revalidate the flights]
    * @author: Prashant Joshi at 13-10-2025 **/
@@ -44,7 +48,7 @@ export class TboRevalidateService {
     requestData,
   ): Promise<RevalidateResponse | RevalidateResponse[]> {
     const { providerCred, revalidateReq } = requestData;
-    console.log("requestData::::::::::",requestData);
+    console.log("requestData::::::::::", requestData);
 
     Object.assign(requestData, { tokenReqData: revalidateReq });
     // For domestic roundTrip pass solutionID with( ||| )
@@ -75,13 +79,17 @@ export class TboRevalidateService {
       const convertedResultArray: any = [];
       const solutionIds = revalidateReq.solutionId.split(" ||| ");
 
-      for (let i = 0; i < solutionIds.length; i++) {
+      const uniqueSolutionIds = [...new Set(solutionIds)];
+
+      // for (let i = 0; i < solutionIds.length; i++) {
+      for (let i = 0; i < uniqueSolutionIds.length; i++) {
         // requestData.revalidateReq.solutionId = solutionIds[i];
         const tempRequestData = {
           ...requestData,
           revalidateReq: {
             ...requestData.revalidateReq,
-            solutionId: solutionIds[i],
+            // solutionId: solutionIds[i],
+            solutionId: uniqueSolutionIds[i],
           },
         };
         const fareRules = await this.getCancellationFareRules(
@@ -137,7 +145,7 @@ export class TboRevalidateService {
         //   bookingReferenceId: null,
         // });
 
-        if (process.env.ENABLE_LOCAL_LOGS === "true") {
+        if (process.env.ENABLE_LOCAL_LOGS === "false") {
           await this.supplierLogUtility.generateLogFile({
             fileName:
               revalidateReq.searchReqId + " " + i + "-" + this.logDate + "-TBO",
@@ -161,12 +169,12 @@ export class TboRevalidateService {
 
       let result = convertedResultArray[0];
 
-      console.log("convertedResultArray:::::::",convertedResultArray);
+      console.log("convertedResultArray:::::::", convertedResultArray);
 
       // ✅ HANDLE ONEWAY (ADD THIS BLOCK)
 
       if (convertedResultArray.length === 1) {
-        const fareA = convertedResultArray[0]?.route?.fare[0]; 
+        const fareA = convertedResultArray[0]?.route?.fare[0];
 
         const legs: any[] = [];
 
@@ -249,8 +257,8 @@ export class TboRevalidateService {
             netValue:
               convertedResultArray[0].supplierRes?.Response?.Results?.Fare
                 ?.BaseFare +
-                convertedResultArray[1].supplierRes?.Response?.Results?.Fare
-                  ?.BaseFare || 0,
+              convertedResultArray[1].supplierRes?.Response?.Results?.Fare
+                ?.BaseFare || 0,
             fare: fareB ? [calculateFare(fareA, fareB)] : [fareA],
 
             // NEW LOGIC (same as search API - separate fares)
@@ -448,13 +456,25 @@ export class TboRevalidateService {
         },
       );
 
+      const isBookableIfSeatNotAvailable =
+        getFareQuoteIsBookableIfSeatNotAvailable(results);
+      const indigoRevalidate = isIndigoAirlineCodeList(
+        flightRoutes[0]?.airlineCode,
+      );
+      /** Hint for clients: default when booking IndiGo with seats (actual flag set at Book/Ticket). */
+      const suggestedAllowBookingWithoutSeat =
+        indigoRevalidate && isBookableIfSeatNotAvailable === true
+          ? true
+          : undefined;
+
       Object.assign(revalidateResponse, {
         isValid: true,
         error: false,
         message: "success",
         route: flightRoutes[0],
-        IsBookableIfSeatNotAvailable:
-          results?.Response?.Results?.IsBookableIfSeatNotAvailable,
+        isBookableIfSeatNotAvailable,
+        isAllowBookingWithoutSeat: suggestedAllowBookingWithoutSeat,
+        IsBookableIfSeatNotAvailable: isBookableIfSeatNotAvailable,
         IsExclusiveFare: results?.Response?.Results?.IsExclusiveFare,
         IsFreeMealAvailable: results?.Response?.Results?.IsFreeMealAvailable,
         IsHoldAllowedWithSSR: results?.Response?.Results?.IsHoldAllowedWithSSR,
@@ -468,6 +488,23 @@ export class TboRevalidateService {
           results?.Response?.Results?.IsPassportRequiredAtTicket ||
           results?.Response?.Results?.IsPassportFullDetailRequiredAtBook ||
           false,
+        FlightDetailChangeInfo:
+          results?.Response?.FlightDetailChangeInfo,
+
+        IsPriceChanged:
+          results?.Response?.IsPriceChanged,
+
+        ItineraryChangeList:
+          results?.Response?.ItineraryChangeList,
+
+        AirlineRemark:
+          results?.Response?.Results?.AirlineRemark,
+
+        IsPassportRequiredAtBook:
+          results?.Response?.Results?.IsPassportRequiredAtBook,
+
+        IsPassportFullDetailRequiredAtBook:
+          results?.Response?.Results?.IsPassportFullDetailRequiredAtBook,
         isGSTRequired: results?.Response?.Results?.IsGSTMandatory || false,
         searchReqId: revalidateReq.searchReqId,
         hashReqKey: revalidateReq.hashReqKey,
@@ -629,104 +666,104 @@ export class TboRevalidateService {
         /* Tax calculation */
         adultTaxPP = element?.Tax
           ? Generic.currencyConversion(
-              element?.Tax / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.Tax / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
 
         /* Service fee calculation */
         adultSFeePP = element?.ServiceFee
           ? Generic.currencyConversion(
-              element?.ServiceFee / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.ServiceFee / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
 
         /* Other charges calculation */
         adultOChargePP = element?.OtherCharges
           ? Generic.currencyConversion(
-              element?.OtherCharges / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.OtherCharges / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
       } else if (element.PassengerType === 2) {
         /* Child */
         fareDetail.perPersonChildFare =
           childCount > 0
             ? Generic.currencyConversion(
-                element?.BaseFare / passengerCount,
-                element.Currency,
-                preferredCurrency,
-              )
+              element?.BaseFare / passengerCount,
+              element.Currency,
+              preferredCurrency,
+            )
             : 0;
         fareDetail.childFare = fareDetail.perPersonChildFare * childCount;
 
         /* Tax calculation */
         childTaxPP = element?.Tax
           ? Generic.currencyConversion(
-              element?.Tax / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.Tax / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
 
         /* Service fee calculation */
         childSFeePP = element?.ServiceFee
           ? Generic.currencyConversion(
-              element?.ServiceFee / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.ServiceFee / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
 
         /* Other charges calculation */
         childOChargePP = element?.OtherCharges
           ? Generic.currencyConversion(
-              element?.OtherCharges / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.OtherCharges / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
       } else if (element.PassengerType === 3) {
         /* Infant */
         fareDetail.perPersonInfantFare =
           infantCount > 0
             ? Generic.currencyConversion(
-                element?.BaseFare / passengerCount,
-                element.Currency,
-                preferredCurrency,
-              )
+              element?.BaseFare / passengerCount,
+              element.Currency,
+              preferredCurrency,
+            )
             : 0;
         fareDetail.infantFare = fareDetail.perPersonInfantFare * infantCount;
 
         /* Tax calculation */
         infantTaxPP = element?.Tax
           ? Generic.currencyConversion(
-              element?.Tax / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.Tax / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
 
         /* Service fee calculation */
         infantSFeePP = element?.ServiceFee
           ? Generic.currencyConversion(
-              element?.ServiceFee / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.ServiceFee / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
 
         /* Other charges calculation */
         infantOChargePP = element?.OtherCharges
           ? Generic.currencyConversion(
-              element?.OtherCharges / passengerCount,
-              element.Currency,
-              preferredCurrency,
-            )
+            element?.OtherCharges / passengerCount,
+            element.Currency,
+            preferredCurrency,
+          )
           : 0;
       }
     });

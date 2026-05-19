@@ -769,7 +769,7 @@ export class BookRepository extends Repository<Booking> {
             nationality: p.nationality,
             email: contactEmail,
             passport: p.document?.documentNumber,
-            passportIssueDate: p.document?.expiryDate,
+            passportIssueDate: p.document?.issueDate,
             passportExpDate: p.document?.expiryDate,
         }));
 
@@ -783,7 +783,7 @@ export class BookRepository extends Repository<Booking> {
             nationality: p.nationality,
             email: contactEmail,
             passport: p.document?.documentNumber,
-            passportIssueDate: p.document?.expiryDate,
+            passportIssueDate: p.document?.issueDate,
             passportExpDate: p.document?.expiryDate,
         }));
 
@@ -797,7 +797,7 @@ export class BookRepository extends Repository<Booking> {
             nationality: p.nationality,
             email: contactEmail,
             passport: p.document?.documentNumber,
-            passportIssueDate: p.document?.expiryDate,
+            passportIssueDate: p.document?.issueDate,
             passportExpDate: p.document?.expiryDate,
         }));
 
