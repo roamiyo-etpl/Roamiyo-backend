@@ -229,19 +229,42 @@ export class TboBookService {
   ): any | undefined {
     if (!selected || !Array.isArray(catalog) || catalog.length === 0)
       return undefined;
+
+    const matchFlightOd = (item: any) =>
+      this.ssrMatchesFlightAndOd(item, selected);
+
     if (selected.Code) {
-      const byCode = catalog.find((b) => b.Code === selected.Code);
-      if (byCode) return byCode;
+      const byCode = catalog.filter((b) => b.Code === selected.Code);
+      if (byCode.length === 1) return byCode[0];
+      if (byCode.length > 1) {
+        const od = byCode.find(matchFlightOd);
+        if (od) return od;
+      }
     }
+
     if (selected.Weight != null) {
       const w = Number(selected.Weight);
-      return catalog.find(
+      const byWeight = catalog.filter(
         (b) =>
           b.Weight === selected.Weight ||
           Number(b.Weight) === w ||
           String(b.Weight) === String(selected.Weight),
       );
+      if (byWeight.length === 1) return byWeight[0];
+      if (byWeight.length > 1) {
+        const od = byWeight.find(matchFlightOd);
+        if (od) return od;
+      }
     }
+
+    if (
+      selected?.FlightNumber != null ||
+      selected?.Origin ||
+      selected?.Destination
+    ) {
+      return catalog.find(matchFlightOd);
+    }
+
     return undefined;
   }
 
@@ -249,25 +272,83 @@ export class TboBookService {
     selected: any,
     catalog: any[],
   ): any | undefined {
-    if (!selected?.Code || !Array.isArray(catalog)) return undefined;
-    return catalog.find((m) => m.Code === selected.Code);
+    if (!selected || !Array.isArray(catalog) || catalog.length === 0)
+      return undefined;
+
+    if (selected.Code) {
+      const byCode = catalog.filter((m) => m.Code === selected.Code);
+      if (byCode.length === 1) return byCode[0];
+      if (byCode.length > 1) {
+        const od = byCode.find((m) => this.ssrMatchesFlightAndOd(m, selected));
+        if (od) return od;
+      }
+    }
+
+    if (
+      selected?.FlightNumber != null ||
+      selected?.Origin ||
+      selected?.Destination
+    ) {
+      return catalog.find((m) => this.ssrMatchesFlightAndOd(m, selected));
+    }
+
+    return undefined;
+  }
+
+  private ssrSegmentKey(item: any): string {
+    return `${String(item?.FlightNumber ?? "").trim()}|${item?.Origin ?? ""}|${item?.Destination ?? ""}`;
+  }
+
+  /** TBO allows at most one baggage/meal per segment; drop duplicates after mapping. */
+  private dedupeSsrItemsBySegment(items: any[] | undefined): any[] {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const item of items) {
+      const key = this.ssrSegmentKey(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    return out;
+  }
+
+  private dedupeSsrNumericRecord(
+    ssr: Record<string, any> | undefined,
+  ): Record<string, any> {
+    if (!ssr || typeof ssr !== "object") return {};
+    const out: Record<string, any> = {};
+    for (const [key, raw] of Object.entries(ssr)) {
+      if (!raw || typeof raw !== "object") continue;
+      const pax = { ...raw };
+      if (Array.isArray(pax.Baggage)) {
+        pax.Baggage = this.dedupeSsrItemsBySegment(pax.Baggage);
+        if (!pax.Baggage.length) delete pax.Baggage;
+      }
+      if (Array.isArray(pax.MealDynamic)) {
+        pax.MealDynamic = this.dedupeSsrItemsBySegment(pax.MealDynamic);
+        if (!pax.MealDynamic.length) delete pax.MealDynamic;
+      }
+      if (Object.keys(pax).length > 0) out[key] = pax;
+    }
+    return out;
   }
 
   private seatFlightOdKey(s: any): string {
     return `${s?.Code ?? ""}|${String(s?.FlightNumber ?? "").trim()}|${s?.Origin ?? ""}|${s?.Destination ?? ""}`;
   }
 
-  private seatMatchesFlightAndOd(catalogSeat: any, selected: any): boolean {
+  private ssrMatchesFlightAndOd(catalogItem: any, selected: any): boolean {
     if (selected?.FlightNumber != null && String(selected.FlightNumber).trim() !== "") {
       if (
-        String(catalogSeat?.FlightNumber ?? "").trim() !==
+        String(catalogItem?.FlightNumber ?? "").trim() !==
         String(selected.FlightNumber).trim()
       ) {
         return false;
       }
     }
-    if (selected?.Origin && catalogSeat?.Origin !== selected.Origin) return false;
-    if (selected?.Destination && catalogSeat?.Destination !== selected.Destination)
+    if (selected?.Origin && catalogItem?.Origin !== selected.Origin) return false;
+    if (selected?.Destination && catalogItem?.Destination !== selected.Destination)
       return false;
     return true;
   }
@@ -281,7 +362,7 @@ export class TboBookService {
       const byCode = catalog.filter((s) => s.Code === selected.Code);
       if (byCode.length === 1) return byCode[0];
       if (byCode.length > 1) {
-        const od = byCode.find((s) => this.seatMatchesFlightAndOd(s, selected));
+        const od = byCode.find((s) => this.ssrMatchesFlightAndOd(s, selected));
         if (od) return od;
         return byCode[0];
       }
@@ -293,7 +374,7 @@ export class TboBookService {
         return String(s.RowNo) === String(selected.RowNo);
       };
       const rowCandidates = catalog.filter(
-        (s) => rowMatch(s) && this.seatMatchesFlightAndOd(s, selected),
+        (s) => rowMatch(s) && this.ssrMatchesFlightAndOd(s, selected),
       );
       if (rowCandidates.length === 1) return rowCandidates[0];
       if (rowCandidates.length > 1 && selected.Code) {
@@ -857,6 +938,7 @@ export class TboBookService {
     if (allowedFlightKeys.size > 0) {
       bookReq.ssr = this.filterSsrNumericRecord(bookReq.ssr, allowedFlightKeys);
     }
+    bookReq.ssr = this.dedupeSsrNumericRecord(bookReq.ssr);
 
     console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(bookReq.ssr));
 
@@ -1375,17 +1457,21 @@ export class TboBookService {
       const row: any = {};
 
       if (pax.Baggage?.length) {
-        const mapped = pax.Baggage.map((sel) =>
-          this.pickBaggageFromCatalog(sel, bagCat),
-        ).filter(Boolean);
+        const mapped = this.dedupeSsrItemsBySegment(
+          pax.Baggage.map((sel) =>
+            this.pickBaggageFromCatalog(sel, bagCat),
+          ).filter(Boolean),
+        );
         if (mapped.length) row.Baggage = mapped;
       }
 
       if (pax.MealDynamic?.length) {
-        const mapped = pax.MealDynamic.map((sel) =>
-          this.pickMealFromCatalog(sel, mealCat),
-        ).filter(Boolean);
-        if (mapped.length) row.MealDynamic = mapped;
+        const mapped = this.dedupeSsrItemsBySegment(
+          pax.MealDynamic.map((sel) =>
+            this.pickMealFromCatalog(sel, mealCat),
+          ).filter(Boolean),
+        );
+        // if (mapped.length) row.MealDynamic = mapped;
       }
 
       if (pax.SeatDynamic?.length) {
