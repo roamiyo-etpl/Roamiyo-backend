@@ -947,8 +947,8 @@ export class TboBookService {
     // console.log("🔥 CALLING SSR API WITH:", ssrPayload, "url:", ssrEndpoint);
     const ssrResponse = await Http.httpRequestTBO(
       "POST",
-      // `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
-      `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
+      `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
+      // `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
       JSON.stringify(ssrPayload),
     );
 
