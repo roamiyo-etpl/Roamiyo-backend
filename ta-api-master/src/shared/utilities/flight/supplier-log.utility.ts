@@ -43,11 +43,10 @@ export class SupplierLogUtility {
         let filePath = '';
         let storageType = '';
 
-        // const result = await this.storeToS3(fileName, logData, folderName);
-        await this.storeLocally(fileName, logData, folderName);
-        const result = await this.storeToAzure(fileName, logData, folderName);
-        filePath = result.filePath;
-        storageType = result.storageType;
+        const localResult = await this.storeLocally(fileName, logData, folderName);
+        const azureResult = await this.storeToAzure(fileName, logData, folderName);
+        filePath = azureResult.filePath || localResult.filePath;
+        storageType = azureResult.storageType || localResult.storageType;
 
         // /* Run the code only in production server */
         // if (process.env.NODE_ENV == 'production') {

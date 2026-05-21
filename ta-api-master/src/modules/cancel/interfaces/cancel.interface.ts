@@ -11,6 +11,8 @@ export class CancelResponse {
     remarks?: string;
     creditNoteNo?: string;
     creditNoteCreatedOn?: string;
+    changeRequestId?: number;
+    traceId?: string;
     error?: {
         errorCode: number;
         errorMessage: string;
