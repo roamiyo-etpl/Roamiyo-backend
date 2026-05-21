@@ -13,6 +13,8 @@ export class CancelResponse {
     creditNoteCreatedOn?: string;
     changeRequestId?: number;
     traceId?: string;
+    /** UUID of the row saved in `cancellations` after a successful supplier call */
+    cancellationId?: string;
     error?: {
         errorCode: number;
         errorMessage: string;

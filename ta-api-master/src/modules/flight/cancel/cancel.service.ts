@@ -155,9 +155,15 @@ export class CancelService {
                         JSON.stringify(dbPayload, null, 2)
                     );
 
-                    await this.cancelRepository.createCancellationRecord(dbPayload);
+                    const savedCancellation =
+                        await this.cancelRepository.createCancellationRecord(dbPayload);
+
+                    result.cancellationId = savedCancellation.cancellation_id;
 
                     console.log("[CANCEL-FLIGHT][STEP-5] Cancellation record saved successfully");
+                    console.log("[CANCEL-FLIGHT][STEP-5] cancellationId:",
+                        savedCancellation.cancellation_id
+                    );
 
                 } catch (dbError) {
                     console.error("[CANCEL-FLIGHT][STEP-5] Error saving cancellation record");
