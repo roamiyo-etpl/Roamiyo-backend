@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { Http } from 'src/shared/utilities/flight/http.utility';
 import { TboAuthTokenService } from './tbo-auth-token.service';
 import { SupplierLogUtility } from 'src/shared/utilities/flight/supplier-log.utility';
@@ -213,19 +213,7 @@ export class TboCancellationService {
                 Remarks: ((cancelReq?.supplierParams?.remarks) || 'Cancellation requested via API').trim(),
             };
 
-            // Important: TicketId/Sectors must be sent ONLY for PartialCancellation
-            if (this.generateRequestType(cancelReq.requestType) === 2) {
-                if (cancelReq?.supplierParams?.ticketIds && cancelReq.supplierParams.ticketIds.length > 0) {
-                    requestData.TicketId = cancelReq.supplierParams.ticketIds;
-                }
-
-                if (cancelReq?.supplierParams?.sectors && cancelReq.supplierParams.sectors.length > 0) {
-                    requestData.Sectors = cancelReq.supplierParams.sectors.map((sector) => ({
-                        Origin: sector.origin,
-                        Destination: sector.destination,
-                    }));
-                }
-            }
+            this.applyPartialCancellationFields(requestData, cancelReq);
 
             // dev
             const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SendChangeRequest`;
@@ -369,6 +357,8 @@ export class TboCancellationService {
                 BookingId: cancelReq.bookingId,
                 BookingMode: bookingMode,
             };
+
+            this.applyPartialCancellationFields(requestData, cancelReq);
 
             console.log(
                 'Prepared TBO Request Payload =>',
@@ -609,6 +599,45 @@ export class TboCancellationService {
             Reissuance: 3,
         } as Record<string, number>;
         return map[(requestType || '').trim()] ?? 0;
+    }
+
+    /**
+     * Adds TicketId / Sectors for TBO partial cancellation (RequestType 2).
+     * Used by GetCancellationCharges and SendChangeRequest.
+     */
+    private applyPartialCancellationFields(
+        requestData: GetCancellationChargesRequestDto | SendChangeRequestDto,
+        cancelReq: {
+            requestType: string | number;
+            supplierParams?: {
+                ticketIds?: number[];
+                sectors?: { origin: string; destination: string }[];
+            };
+        },
+    ): void {
+        if (this.generateRequestType(cancelReq.requestType) !== 2) {
+            return;
+        }
+
+        const ticketIds = cancelReq?.supplierParams?.ticketIds;
+        const sectors = cancelReq?.supplierParams?.sectors;
+
+        if (ticketIds?.length) {
+            requestData.TicketId = ticketIds;
+        }
+
+        if (sectors?.length) {
+            requestData.Sectors = sectors.map((sector) => ({
+                Origin: sector.origin,
+                Destination: sector.destination,
+            }));
+        }
+
+        if (!requestData.TicketId && !requestData.Sectors?.length) {
+            throw new BadRequestException(
+                'Sectors or ticket IDs are required for partial cancellation',
+            );
+        }
     }
 
     /**

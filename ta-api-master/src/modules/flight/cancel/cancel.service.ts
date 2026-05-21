@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ProviderCancellationService } from '../providers/provider-cancellation.service';
-import { GenericCancelDto } from 'src/modules/cancel/dto/cancel.dto';
+import { GenericCancelDto, GenericGetCancellationChargesDto } from 'src/modules/cancel/dto/cancel.dto';
 import { CancelResponse } from 'src/modules/cancel/interfaces/cancel.interface';
 import { CancelRepository } from './cancel.repository';
 
@@ -87,6 +87,13 @@ export class CancelService {
     
             throw new BadRequestException('bookingId is required');
         }
+
+        if (!cancelReq?.requestType) {
+            throw new BadRequestException('requestType is required');
+        }
+
+        this.normalizeCancellationChargesRequest(cancelReq);
+        this.validatePartialCancellationParams(cancelReq);
     
         console.log('Finding booking from DB using supplier_reference_id =>', cancelReq.bookingId.toString());
     
@@ -135,12 +142,42 @@ export class CancelService {
             throw new BadRequestException('Request type is required');
         }
 
-        // For partial cancellation, validate sectors or ticket IDs
-        if ((cancelReq.requestType || '').toString().toLowerCase() === 'partialcancellation') {
-            const sp = cancelReq.supplierParams || {};
-            if (!sp.sectors && !sp.ticketIds) {
-                throw new BadRequestException('Sectors or ticket IDs are required for partial cancellation');
-            }
+        this.normalizeCancellationChargesRequest(cancelReq);
+        this.validatePartialCancellationParams(cancelReq);
+    }
+
+    /**
+     * Maps top-level `segments` into supplierParams.sectors for TBO partial flows.
+     */
+    private normalizeCancellationChargesRequest(
+        cancelReq: GenericGetCancellationChargesDto | GenericCancelDto,
+    ): void {
+        const segments = cancelReq.segments;
+        if (!segments?.length) {
+            return;
+        }
+        cancelReq.supplierParams = {
+            ...(cancelReq.supplierParams || {}),
+            sectors: cancelReq.supplierParams?.sectors?.length
+                ? cancelReq.supplierParams.sectors
+                : segments,
+        };
+    }
+
+    private validatePartialCancellationParams(
+        cancelReq: { requestType?: string; supplierParams?: { sectors?: unknown[]; ticketIds?: unknown[] } },
+        context: 'cancellation' | 'cancellation charges' = 'cancellation',
+    ): void {
+        if ((cancelReq.requestType || '').toString().toLowerCase() !== 'partialcancellation') {
+            return;
+        }
+        const sp = cancelReq.supplierParams || {};
+        const hasSectors = Array.isArray(sp.sectors) && sp.sectors.length > 0;
+        const hasTicketIds = Array.isArray(sp.ticketIds) && sp.ticketIds.length > 0;
+        if (!hasSectors && !hasTicketIds) {
+            throw new BadRequestException(
+                `Sectors or ticket IDs are required for partial ${context}`,
+            );
         }
     }
 }

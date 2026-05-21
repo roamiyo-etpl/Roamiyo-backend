@@ -85,6 +85,17 @@ export class GenericCancelDto {
     @Type(() => SupplierParamsDto)
     @IsOptional()
     supplierParams?: SupplierParamsDto;
+
+    @ApiProperty({
+        description: 'Alias for supplierParams.sectors (partial cancellation only). Prefer supplierParams.sectors.',
+        type: () => [SectorDto],
+        required: false,
+    })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SectorDto)
+    @IsOptional()
+    segments?: SectorDto[];
 }
 
 export class GenericGetCancellationChargesDto {
@@ -92,7 +103,7 @@ export class GenericGetCancellationChargesDto {
     @IsEnum(CancelMode)
     mode: CancelMode;
 
-    @ApiProperty({ description: 'Unique booking ID', example: 123456 })
+    @ApiProperty({ description: 'Unique booking ID (TBO supplier reference id)', example: 2131126 })
     @IsNumber()
     @IsNotEmpty()
     bookingId: number;
@@ -101,6 +112,27 @@ export class GenericGetCancellationChargesDto {
     @IsString()
     @IsNotEmpty()
     requestType: string;
+
+    @ApiProperty({
+        description: 'Required for PartialCancellation: sectors or ticketIds. Ignored for FullCancellation.',
+        required: false,
+        type: () => SupplierParamsDto,
+    })
+    @ValidateNested()
+    @Type(() => SupplierParamsDto)
+    @IsOptional()
+    supplierParams?: SupplierParamsDto;
+
+    @ApiProperty({
+        description: 'Alias for supplierParams.sectors (partial cancellation only). Prefer supplierParams.sectors.',
+        type: () => [SectorDto],
+        required: false,
+    })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SectorDto)
+    @IsOptional()
+    segments?: SectorDto[];
 }
 
 
