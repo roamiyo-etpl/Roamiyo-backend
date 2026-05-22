@@ -126,28 +126,36 @@ export class CancelRepository extends Repository<Booking> {
     private mapCancellationStatus(status?: string | number): CancellationStatusEnum | null {
         if (status === undefined || status === null) return null;
         if (typeof status === 'number') {
-            // Guard for valid enum range 0..7
-            return status in CancellationStatusEnum ? (status as CancellationStatusEnum) : null;
+            if (
+                status >= CancellationStatusEnum.NotSet &&
+                status <= CancellationStatusEnum.Other &&
+                CancellationStatusEnum[status] !== undefined
+            ) {
+                return status as CancellationStatusEnum;
+            }
+            return null;
         }
 
         const normalized = (status || '').toString().trim();
         const map: Record<string, CancellationStatusEnum> = {
-            'Unassigned': CancellationStatusEnum.Unassigned,
-            'Assigned': CancellationStatusEnum.Assigned,
-            'Acknowledged': CancellationStatusEnum.Acknowledged,
-            'Completed': CancellationStatusEnum.Completed,
-            'Rejected': CancellationStatusEnum.Rejected,
-            'Closed': CancellationStatusEnum.Closed,
-            'Pending': CancellationStatusEnum.Pending,
-            'Other': CancellationStatusEnum.Other,
-            '0': CancellationStatusEnum.Unassigned,
-            '1': CancellationStatusEnum.Assigned,
-            '2': CancellationStatusEnum.Acknowledged,
-            '3': CancellationStatusEnum.Completed,
-            '4': CancellationStatusEnum.Rejected,
-            '5': CancellationStatusEnum.Closed,
-            '6': CancellationStatusEnum.Pending,
-            '7': CancellationStatusEnum.Other,
+            NotSet: CancellationStatusEnum.NotSet,
+            Unassigned: CancellationStatusEnum.Unassigned,
+            Assigned: CancellationStatusEnum.Assigned,
+            Acknowledged: CancellationStatusEnum.Acknowledged,
+            Completed: CancellationStatusEnum.Completed,
+            Rejected: CancellationStatusEnum.Rejected,
+            Closed: CancellationStatusEnum.Closed,
+            Pending: CancellationStatusEnum.Pending,
+            Other: CancellationStatusEnum.Other,
+            '0': CancellationStatusEnum.NotSet,
+            '1': CancellationStatusEnum.Unassigned,
+            '2': CancellationStatusEnum.Assigned,
+            '3': CancellationStatusEnum.Acknowledged,
+            '4': CancellationStatusEnum.Completed,
+            '5': CancellationStatusEnum.Rejected,
+            '6': CancellationStatusEnum.Closed,
+            '7': CancellationStatusEnum.Pending,
+            '8': CancellationStatusEnum.Other,
         };
 
         return map[normalized] ?? null;

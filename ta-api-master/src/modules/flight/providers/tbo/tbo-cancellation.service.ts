@@ -3,6 +3,7 @@ import { Http } from 'src/shared/utilities/flight/http.utility';
 import { TboAuthTokenService } from './tbo-auth-token.service';
 import { SupplierLogUtility } from 'src/shared/utilities/flight/supplier-log.utility';
 import {
+    CancellationStatus,
     ReleasePNRRequestDto,
     SendChangeRequestDto,
     GetChangeRequestStatusRequestDto,
@@ -140,7 +141,7 @@ export class TboCancellationService {
     //         });
 
     //         finalResponse.success = getStatusResult.responseStatus === 1;
-    //         finalResponse.cancellationStatus = getStatusResult.responseStatus === 1 && getStatusResult.changeRequestStatus === 3; // 3 = Completed
+    //         finalResponse.cancellationStatus = getStatusResult.responseStatus === 1 && getStatusResult.changeRequestStatus === CancellationStatus.Completed;
     //         finalResponse.cancellationCharge = getStatusResult.cancellationCharge;
     //         finalResponse.refundedAmount = getStatusResult.refundedAmount;
     //         finalResponse.status = this.getCancellationStatusText(getStatusResult.changeRequestStatus);
@@ -390,7 +391,8 @@ export class TboCancellationService {
 
             finalResponse.cancellationStatus =
                 getStatusResult.responseStatus === 1 &&
-                getStatusResult.changeRequestStatus === 3;
+                getStatusResult.changeRequestStatus ===
+                    CancellationStatus.Completed;
 
             finalResponse.cancellationCharge =
                 getStatusResult.cancellationCharge;
@@ -1232,18 +1234,9 @@ export class TboCancellationService {
         return null;
     }
 
+    /** Maps TBO ChangeRequestStatus numeric code to label (see CancellationStatus enum). */
     private getCancellationStatusText(status: number): string {
-        const statusMap = {
-            0: 'Unassigned',
-            1: 'Assigned',
-            2: 'Acknowledged',
-            3: 'Completed',
-            4: 'Rejected',
-            5: 'Closed',
-            6: 'Pending',
-            7: 'Other',
-        };
-        return statusMap[status] || 'Other';
+        return CancellationStatus[status] ?? 'Other';
     }
 
     private getResponseStatusText(status: number): string {
