@@ -1,6 +1,7 @@
 import { Controller, Post, Body, UseGuards, Headers } from '@nestjs/common';
 import { BookService } from './book.service';
 import { BookConfirmationDto, BookDto } from './dtos/book.dto';
+import { BookReconcileDto } from './dtos/reconcile.dto';
 import {
     SWG_BAD_REQUEST_RESPONSE,
     SWG_INTERNAL_SERVER_ERROR_RESPONSE,
@@ -48,5 +49,16 @@ export class BookController {
     @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
     async bookingConfirmation(@Body() bookDto: BookConfirmationDto, @Headers() headers: Headers) {
         return this.bookService.bookingConfirmation({ bookReq: bookDto, headers });
+    }
+
+    @Post('book/reconcile')
+    @ApiOperation({ summary: 'Reconcile booking and payment status from database' })
+    @ApiResponse(SWG_SUCCESS_RESPONSE)
+    @ApiResponse(SWG_NOT_FOUND_RESPONSE)
+    @ApiResponse(SWG_BAD_REQUEST_RESPONSE)
+    @ApiResponse(SWG_UNPROCESSABLE_RESPONSE)
+    @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
+    async bookingReconcile(@Body() reconcileDto: BookReconcileDto) {
+        return this.bookService.bookingReconcile(reconcileDto);
     }
 }

@@ -829,4 +829,15 @@ export class BookRepository extends Repository<Booking> {
         booking.booking_status = BookingStatus.FAILED;
         return this.save(booking);
     }
+
+    async getBookingForReconcile(bookingId: string): Promise<Booking | null> {
+        return this.findOne({
+            where: { booking_id: bookingId },
+            relations: ['bookingAdditionalDetails'],
+        });
+    }
+
+    async getBookingLogByLogId(logId: string): Promise<BookingLog | null> {
+        return this.dataSource.getRepository(BookingLog).findOne({ where: { log_id: logId } });
+    }
 }

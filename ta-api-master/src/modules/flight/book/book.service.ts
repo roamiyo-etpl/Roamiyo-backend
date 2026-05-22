@@ -1,4 +1,9 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { BookReconcileDto } from "./dtos/reconcile.dto";
+import {
+  BookReconcileResponse,
+  ReconcileApiResponseData,
+} from "./interfaces/reconcile.interface";
 import { ProviderBookService } from "../providers/provider-book.service";
 import {
   BookInitiateResponse,
@@ -24,6 +29,34 @@ import {
   isIndigoAirlineCodeList,
   resolveIsAllowBookingWithoutSeat,
 } from "src/shared/utilities/flight/tbo-indigo-seat.utility";
+
+const BOOKING_STATUS_LABEL: Record<number, string> = {
+  [BookingStatus.PENDING]: "PENDING",
+  [BookingStatus.CONFIRMED]: "CONFIRMED",
+  [BookingStatus.BOOKED]: "BOOKED",
+  [BookingStatus.CANCELLED]: "CANCELLED",
+  [BookingStatus.FAILED]: "FAILED",
+  [BookingStatus.DATES_NOT_AVAILABLE]: "DATES_NOT_AVAILABLE",
+  [BookingStatus.DEPOSIT]: "DEPOSIT",
+  [BookingStatus.INPROGRESS]: "IN_PROGRESS",
+};
+
+const RECONCILE_MESSAGES: Record<string, string> = {
+  IN_PROGRESS:
+    "Booking is in progress. Payment or confirmation may not be completed yet.",
+  PENDING: "Booking is pending supplier confirmation.",
+  CONFIRMED: "Booking completed successfully.",
+  BOOKED: "Booking completed successfully.",
+  FAILED: "Booking failed.",
+  CANCELLED: "Booking has been cancelled.",
+  DATES_NOT_AVAILABLE: "Selected dates are not available.",
+  DEPOSIT: "Booking is on deposit status.",
+};
+
+const COMPLETED_BOOKING_STATUSES = [
+  BookingStatus.CONFIRMED,
+  BookingStatus.BOOKED,
+];
 
 @Injectable()
 export class BookService {
@@ -359,5 +392,113 @@ export class BookService {
         details: error,
       });
     }
+  }
+
+  async bookingReconcile(bookReq: BookReconcileDto): Promise<BookReconcileResponse> {
+    const booking = await this.bookRepository.getBookingForReconcile(
+      bookReq.bookingId,
+    );
+    if (!booking) {
+      throw new BadRequestException("Booking not found");
+    }
+
+    const bookingLog = await this.bookRepository.getBookingLogByLogId(
+      bookReq.bookingLogId,
+    );
+    if (!bookingLog) {
+      throw new BadRequestException("Booking log not found");
+    }
+
+    if (bookingLog.booking_reference_id !== booking.booking_reference_id) {
+      throw new BadRequestException(
+        "booking_id and booking_log_id do not belong to the same booking",
+      );
+    }
+
+    const statusLabel =
+      BOOKING_STATUS_LABEL[booking.booking_status] ?? "UNKNOWN";
+    const message =
+      RECONCILE_MESSAGES[statusLabel] ??
+      `Booking status is ${statusLabel}.`;
+
+    const storedBookResponse =
+      booking.bookingAdditionalDetails?.api_response?.booking?.response;
+    const isBookingComplete = this.isReconcileBookingComplete(
+      booking.booking_status,
+      storedBookResponse,
+    );
+    const hasStoredBookData = this.hasReconcileStoredBookData(
+      booking.booking_status,
+      storedBookResponse,
+    );
+
+    const response: BookReconcileResponse = {
+      error: booking.booking_status === BookingStatus.FAILED,
+      message,
+      status: statusLabel,
+      bookingStatus: booking.booking_status,
+      paymentStatus: bookingLog.payment_status,
+      isPaymentVerified: bookingLog.is_verified,
+      isBookingComplete,
+      bookingId: booking.booking_id,
+      bookingReferenceId: booking.booking_reference_id,
+      supplierReferenceId: booking.supplier_reference_id ?? null,
+      apiResponse: hasStoredBookData
+        ? this.buildReconcileApiResponse(
+            booking.bookingAdditionalDetails?.api_response,
+          )
+        : null,
+    };
+
+    return response;
+  }
+
+  /** Include leg-level data when confirmation saved TBO response (incl. partial domestic RT). */
+  private hasReconcileStoredBookData(
+    bookingStatus: BookingStatus,
+    storedBookResponse?: Record<string, unknown>,
+  ): boolean {
+    if (bookingStatus === BookingStatus.INPROGRESS) {
+      return false;
+    }
+    const orderDetail = storedBookResponse?.orderDetail;
+    return Array.isArray(orderDetail) && orderDetail.length > 0;
+  }
+
+  private isReconcileBookingComplete(
+    bookingStatus: BookingStatus,
+    storedBookResponse?: Record<string, unknown>,
+  ): boolean {
+    if (!COMPLETED_BOOKING_STATUSES.includes(bookingStatus)) {
+      return false;
+    }
+    const orderDetail = storedBookResponse?.orderDetail;
+    if (!Array.isArray(orderDetail) || orderDetail.length === 0) {
+      return false;
+    }
+    return orderDetail.every((order) => {
+      const legStatus = String(order?.orderStatus ?? "").toUpperCase();
+      return legStatus === "CONFIRMED" || legStatus === "BOOKED";
+    });
+  }
+
+  private buildReconcileApiResponse(storedApiResponse?: {
+    booking?: { response?: Record<string, unknown> };
+    orderDetails?: unknown;
+  }): ReconcileApiResponseData | null {
+    const bookResponse = storedApiResponse?.booking?.response;
+    if (!bookResponse) {
+      return null;
+    }
+    return {
+      mode: bookResponse.mode as string | undefined,
+      searchReqId: bookResponse.searchReqId as string | undefined,
+      orderDetail: (bookResponse.orderDetail as unknown[]) ?? [],
+      rawSupplierResponse:
+        (bookResponse.rawSupplierResponse as unknown[]) ?? [],
+      supplierOrderDetailResponse:
+        (bookResponse.supplierOrderDetailResponse as unknown[]) ?? [],
+      orderDetails: storedApiResponse?.orderDetails,
+    };
   }
 }
