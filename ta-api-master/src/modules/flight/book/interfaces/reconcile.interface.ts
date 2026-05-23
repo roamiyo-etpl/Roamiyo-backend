@@ -15,6 +15,8 @@ export class BookReconcileResponse {
     paymentStatus: string;
     isPaymentVerified: boolean;
     isBookingComplete: boolean;
+    /** Remaining minutes to keep polling reconcile from now (0 = stop). */
+    recommendedPollUntilMinutes: number;
     bookingId: string;
     bookingReferenceId: string;
     supplierReferenceId: string | null;

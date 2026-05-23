@@ -58,6 +58,21 @@ const COMPLETED_BOOKING_STATUSES = [
   BookingStatus.BOOKED,
 ];
 
+/** Backend marks INPROGRESS → FAILED after this many minutes (see order-detail.repository). */
+const IN_PROGRESS_AUTO_FAIL_MINUTES = 120;
+
+/** PENDING has no auto-fail; supplier recheck cron runs every 10 min — allow ~4–5 cycles. */
+const PENDING_POLL_MAX_MINUTES = 45;
+
+/** Minutes payment app should keep polling for terminal / fallback states (0 = stop). */
+const RECOMMENDED_POLL_UNTIL_MINUTES: Record<string, number> = {
+  FAILED: 0,
+  CANCELLED: 0,
+  DATES_NOT_AVAILABLE: 0,
+  DEPOSIT: 45,
+  UNKNOWN: 45,
+};
+
 @Injectable()
 export class BookService {
   constructor(
@@ -440,6 +455,11 @@ export class BookService {
       paymentStatus: bookingLog.payment_status,
       isPaymentVerified: bookingLog.is_verified,
       isBookingComplete,
+      recommendedPollUntilMinutes: this.getRecommendedPollUntilMinutes(
+        statusLabel,
+        isBookingComplete,
+        booking.created_at,
+      ),
       bookingId: booking.booking_id,
       bookingReferenceId: booking.booking_reference_id,
       supplierReferenceId: booking.supplier_reference_id ?? null,
@@ -451,6 +471,42 @@ export class BookService {
     };
 
     return response;
+  }
+
+  /**
+   * Remaining minutes to keep polling reconcile from this response (0 = stop).
+   * IN_PROGRESS: until backend auto-fail window (~2h from booking created_at).
+   * PENDING / incomplete CONFIRMED: up to PENDING_POLL_MAX_MINUTES (supplier cron every 10 min).
+   */
+  private getRecommendedPollUntilMinutes(
+    statusLabel: string,
+    isBookingComplete: boolean,
+    bookingCreatedAt?: Date,
+  ): number {
+    if (isBookingComplete) {
+      return 0;
+    }
+    if (["FAILED", "CANCELLED", "DATES_NOT_AVAILABLE"].includes(statusLabel)) {
+      return 0;
+    }
+    if (statusLabel === "IN_PROGRESS" && bookingCreatedAt) {
+      return this.getInProgressRemainingPollMinutes(bookingCreatedAt);
+    }
+    if (
+      statusLabel === "PENDING" ||
+      statusLabel === "CONFIRMED" ||
+      statusLabel === "BOOKED"
+    ) {
+      return PENDING_POLL_MAX_MINUTES;
+    }
+    return RECOMMENDED_POLL_UNTIL_MINUTES[statusLabel] ?? PENDING_POLL_MAX_MINUTES;
+  }
+
+  private getInProgressRemainingPollMinutes(createdAt: Date): number {
+    const elapsedMs = Date.now() - new Date(createdAt).getTime();
+    const remainingMs =
+      IN_PROGRESS_AUTO_FAIL_MINUTES * 60 * 1000 - elapsedMs;
+    return Math.max(0, Math.ceil(remainingMs / 60000));
   }
 
   /** Include leg-level data when confirmation saved TBO response (incl. partial domestic RT). */
