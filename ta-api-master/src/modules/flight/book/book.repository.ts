@@ -725,11 +725,15 @@ export class BookRepository extends Repository<Booking> {
         return this.dataSource.getRepository(BookingAdditionalDetail).save(additionalDetail);
     }
 
-    /** [@Description: This method is used to verify the booking log]
+    /** [@Description: Update payment status on booking log after confirm outcome]
      * @author: Prashant Joshi at 13-10-2025 **/
-    async verifyBookingLog(reqParams): Promise<BookingLog> {
-        const { bookingLogId } = reqParams;
-        // Validate bookingLogId
+    async updateBookingLogPaymentStatus(reqParams: {
+        bookingLogId: string;
+        paymentStatus: PaymentStatus;
+        isVerified: boolean;
+        transactionId?: string;
+    }): Promise<BookingLog> {
+        const { bookingLogId, paymentStatus, isVerified, transactionId } = reqParams;
         if (!bookingLogId) {
             throw new Error('Booking log ID is required');
         }
@@ -738,11 +742,26 @@ export class BookRepository extends Repository<Booking> {
         if (!bookingLog) {
             throw new Error(`Booking log not found with ID: ${bookingLogId}`);
         }
-        bookingLog.is_verified = true;
-        bookingLog.payment_status = PaymentStatus.CAPTURED;
-        bookingLog.transaction_id = uuid();
+
+        bookingLog.payment_status = paymentStatus;
+        bookingLog.is_verified = isVerified;
+        if (paymentStatus === PaymentStatus.CAPTURED) {
+            bookingLog.transaction_id = transactionId || uuid();
+        }
         bookingLog.updated_at = new Date();
         return this.dataSource.getRepository(BookingLog).save(bookingLog);
+    }
+
+    /** [@Description: This method is used to verify the booking log]
+     * @author: Prashant Joshi at 13-10-2025 **/
+    async verifyBookingLog(reqParams): Promise<BookingLog> {
+        const { bookingLogId, transactionId } = reqParams;
+        return this.updateBookingLogPaymentStatus({
+            bookingLogId,
+            paymentStatus: PaymentStatus.CAPTURED,
+            isVerified: true,
+            transactionId,
+        });
     }
 
     /** [@Description: Maps passengers to paxes format for booking entity]

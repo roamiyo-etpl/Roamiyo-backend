@@ -16,6 +16,7 @@ import {
 } from "./dtos/book.dto";
 import { BookRepository } from "./book.repository";
 import { Booking, BookingStatus } from "src/shared/entities/bookings.entity";
+import { PaymentStatus } from "src/shared/entities/booking-logs.entity";
 import { v4 as uuid } from "uuid";
 import { Generic } from "src/shared/utilities/flight/generic.utility";
 import { DuplicateBookingException } from "./exceptions/duplicate-booking.exception";
@@ -309,10 +310,6 @@ export class BookService {
         bookingLogId: bookReq.bookingLogId,
       });
       //   console.log("Booking log found:", bookingLog.id);
-      /* Verify booking log */
-      await this.bookRepository.verifyBookingLog({
-        bookingLogId: bookReq.bookingLogId,
-      });
       // Retrieve original booking request from booking log
       const originalBookRequest: BookDto = bookingLog.data?.originalBookRequest;
       //   console.log("originalBookRequest", originalBookRequest);
@@ -392,13 +389,31 @@ export class BookService {
       // delete supplierDetails.orderDetails;
       if (response.error) {
         await this.bookRepository.BookingStatusFailed({ bookingId: booking.booking_id });
+        await this.bookRepository.updateBookingLogPaymentStatus({
+          bookingLogId: bookReq.bookingLogId,
+          paymentStatus: PaymentStatus.FAILED,
+          isVerified: false,
+        });
+      } else {
+        await this.bookRepository.updateBookingLogPaymentStatus({
+          bookingLogId: bookReq.bookingLogId,
+          paymentStatus: PaymentStatus.CAPTURED,
+          isVerified: true,
+        });
       }
       console.log("===== BOOK CONFIRMATION END =====");
       return response;
     } catch (error) {
       console.error("Booking confirmation error:", error);
-      if (booking) {
+      if (booking?.booking_id) {
         await this.bookRepository.BookingStatusFailed({ bookingId: booking.booking_id });
+      }
+      if (bookReq?.bookingLogId) {
+        await this.bookRepository.updateBookingLogPaymentStatus({
+          bookingLogId: bookReq.bookingLogId,
+          paymentStatus: PaymentStatus.FAILED,
+          isVerified: false,
+        });
       }
       // Re-throw with more context
       throw new BadRequestException({
