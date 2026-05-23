@@ -391,14 +391,14 @@ export class BookService {
       // delete supplierDetails.rawSupplierResponse;
       // delete supplierDetails.orderDetails;
       if (response.error) {
-        await this.bookRepository.BookingStatusFailed(booking.booking_id);
+        await this.bookRepository.BookingStatusFailed({ bookingId: booking.booking_id });
       }
       console.log("===== BOOK CONFIRMATION END =====");
       return response;
     } catch (error) {
       console.error("Booking confirmation error:", error);
       if (booking) {
-        await this.bookRepository.BookingStatusFailed(booking.booking_id);
+        await this.bookRepository.BookingStatusFailed({ bookingId: booking.booking_id });
       }
       // Re-throw with more context
       throw new BadRequestException({
