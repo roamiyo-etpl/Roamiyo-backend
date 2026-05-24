@@ -50,12 +50,15 @@ export class OrderDetailService {
                 }
             }
 
+            // TBO GetBookingDetails requires ticket passenger name, not contact person
+            const { firstName, lastName } = this.getTicketPassengerName(booking);
+
             // Prepare bookingDetails array for provider request (each order has its own pnr/orderNo)
             const bookingDetailsArray = orderDetailsData.map((order) => ({
                 pnr: order.pnr,
                 orderNo: order.orderNo,
-                firstName: booking.contact_details.firstName,
-                lastName: booking.contact_details.lastName,
+                firstName,
+                lastName,
             }));
 
             // Call provider API
@@ -79,6 +82,28 @@ export class OrderDetailService {
             mode: 'Test',
             bookingDetails, // each has pnr, orderNo, names
             searchReqId: booking.search_id,
+        };
+    }
+
+    /** Lead passenger on ticket — TBO rejects GetBookingDetails when contact name differs from pax name. */
+    private getTicketPassengerName(booking: Booking): { firstName: string; lastName: string } {
+        const fromPaxes = booking.paxes?.[0]?.adult?.data?.[0];
+        if (fromPaxes?.firstName && fromPaxes?.lastName) {
+            return { firstName: fromPaxes.firstName, lastName: fromPaxes.lastName };
+        }
+
+        const bookRequest = booking.bookingAdditionalDetails?.api_response?.booking?.request;
+        const passengerDetail = bookRequest?.passengers?.[0]?.passengerDetail;
+        if (passengerDetail?.firstName && passengerDetail?.lastName) {
+            return { firstName: passengerDetail.firstName, lastName: passengerDetail.lastName };
+        }
+
+        console.warn(
+            `[OrderDetail] Falling back to contact_details for booking ${booking.booking_id} — passenger name not found in paxes or api_response`,
+        );
+        return {
+            firstName: booking.contact_details?.firstName ?? '',
+            lastName: booking.contact_details?.lastName ?? '',
         };
     }
 
