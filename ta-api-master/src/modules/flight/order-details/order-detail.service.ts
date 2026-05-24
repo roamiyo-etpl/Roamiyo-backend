@@ -57,6 +57,8 @@ export class OrderDetailService {
             const bookingDetailsArray = orderDetailsData.map((order) => ({
                 pnr: order.pnr,
                 orderNo: order.orderNo,
+                // firstName: booking.contact_details.firstName,
+//                 lastName: booking.contact_details.lastName,
                 firstName,
                 lastName,
             }));
