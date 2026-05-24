@@ -2,11 +2,31 @@ import { Injectable } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { Booking, BookingStatus } from 'src/shared/entities/bookings.entity';
 import { Cancellation, CancellationStatusEnum, CancellationRequestType, CancellationTypeEnum } from 'src/shared/entities/cancellations.entity';
+import {
+    parseSupplierReferenceIds,
+    supplierReferenceIncludes,
+} from 'src/shared/utilities/flight/supplier-reference.utility';
 
 @Injectable()
 export class CancelRepository extends Repository<Booking> {
     constructor(private readonly dataSource: DataSource) {
         super(Booking, dataSource.createEntityManager());
+    }
+
+    async findBookingByInternalIdAndTboRef(params: {
+        booking_id: string;
+        bookingId: string | number;
+    }): Promise<Booking | null> {
+        const booking = await this.findOne({
+            where: { booking_id: params.booking_id.trim() },
+        });
+        if (!booking) {
+            return null;
+        }
+        if (!supplierReferenceIncludes(booking.supplier_reference_id, params.bookingId)) {
+            return null;
+        }
+        return booking;
     }
 
     /**
@@ -17,17 +37,18 @@ export class CancelRepository extends Repository<Booking> {
      */
     async createCancellationRecord(params: {
         bookingId: string;
+        booking_id: string;
         cancellationResponse: any;
         cancellationStatus: boolean; 
         requestType?: string;
         cancellationType?: string;
         ticketIds?: number[];
     }): Promise<Cancellation> {
-        const { bookingId, cancellationResponse, cancellationStatus, requestType, cancellationType, ticketIds } = params;
+        const { bookingId, booking_id, cancellationResponse, cancellationStatus, requestType, cancellationType, ticketIds } = params;
 
-        // Find the booking
-        const booking = await this.findOne({
-            where: { supplier_reference_id: bookingId },
+        const booking = await this.findBookingByInternalIdAndTboRef({
+            booking_id,
+            bookingId,
         });
 
         if (!booking) {
@@ -52,8 +73,14 @@ export class CancelRepository extends Repository<Booking> {
         cancellation.credit_note_created_on = cancellationResponse.creditNoteCreatedOn ? new Date(cancellationResponse.creditNoteCreatedOn) : null;
         cancellation.ticket_ids = ticketIds && ticketIds.length > 0 ? ticketIds : null;
 
-        // Update booking status to CANCELLED only for full cancellations
-        if (cancellationStatus && requestType === 'FullCancellation') {
+        const supplierRefCount = parseSupplierReferenceIds(
+            booking.supplier_reference_id,
+        ).length;
+        if (
+            cancellationStatus &&
+            requestType === 'FullCancellation' &&
+            supplierRefCount <= 1
+        ) {
             booking.booking_status = BookingStatus.CANCELLED;
             await this.save(booking);
         }
@@ -82,6 +109,7 @@ export class CancelRepository extends Repository<Booking> {
      */
     async updateCancellationDetails(params: {
         bookingId: string;
+        booking_id: string;
         cancellationResponse: any;
         cancellationStatus: boolean;
         requestType?: string;

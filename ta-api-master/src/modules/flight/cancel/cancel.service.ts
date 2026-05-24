@@ -94,39 +94,23 @@ export class CancelService {
                 cancelReq.bookingId.toString()
             );
 
-            const booking = await this.cancelRepository.findOne({
-                where: {
-                    supplier_reference_id: cancelReq.bookingId.toString()
-                },
-            });
+            const booking = await this.resolveBooking(cancelReq);
 
             console.log("[CANCEL-FLIGHT][STEP-2] Booking DB response:",
                 JSON.stringify(booking, null, 2)
             );
 
-            if (!booking) {
-                console.log("[CANCEL-FLIGHT][STEP-2] Booking not found");
+            const providerCancelReq = this.toProviderCancelReq(cancelReq, booking.supplier_name);
 
-                throw new BadRequestException('Booking not found');
-            }
-
-            // STEP 3: SET PROVIDER CODE
-            console.log("[CANCEL-FLIGHT][STEP-3] Setting provider code");
-
-            cancelReq.supplierParams = {
-                ...(cancelReq.supplierParams || {}),
-                providerCode: booking.supplier_name,
-            };
-
-            console.log("[CANCEL-FLIGHT][STEP-3] supplierParams:",
-                JSON.stringify(cancelReq.supplierParams, null, 2)
+            console.log("[CANCEL-FLIGHT][STEP-3] Provider cancelReq:",
+                JSON.stringify(providerCancelReq, null, 2)
             );
 
             // STEP 4: CALL PROVIDER SERVICE
             console.log("[CANCEL-FLIGHT][STEP-4] Calling providerCancellationService.providerCancel");
 
             const result = await this.providerCancellationService.providerCancel({
-                cancelReq,
+                cancelReq: providerCancelReq,
                 headers,
                 booking,
             });
@@ -142,6 +126,7 @@ export class CancelService {
                 try {
                     const dbPayload = {
                         bookingId: cancelReq.bookingId.toString(),
+                        booking_id: cancelReq.booking_id,
                         cancellationResponse: result,
                         cancellationStatus: result.cancellationStatus === true,
                         requestType: cancelReq.requestType,
@@ -202,6 +187,10 @@ export class CancelService {
         console.log('Headers =>', JSON.stringify(headers, null, 2));
         console.log('Cancel Request =>', JSON.stringify(cancelReq, null, 2));
 
+        if (!cancelReq?.booking_id) {
+            throw new BadRequestException('booking_id is required');
+        }
+
         if (!cancelReq?.bookingId) {
             console.log('Validation Failed => bookingId missing');
 
@@ -215,35 +204,27 @@ export class CancelService {
         this.normalizeCancellationChargesRequest(cancelReq);
         this.validatePartialCancellationParams(cancelReq);
 
-        console.log('Finding booking from DB using supplier_reference_id =>', cancelReq.bookingId.toString());
+        console.log(
+            'Finding booking => booking_id:',
+            cancelReq.booking_id,
+            'TBO bookingId:',
+            cancelReq.bookingId.toString(),
+        );
 
-        // Fetch booking details to get provider code
-        const booking = await this.cancelRepository.findOne({
-            where: { supplier_reference_id: cancelReq.bookingId.toString() },
-        });
+        const booking = await this.resolveBooking(cancelReq);
 
         console.log('DB Query Executed');
 
-        if (!booking) {
-            console.log('Booking not found in DB');
-
-            throw new BadRequestException('Booking not found');
-        }
-
         console.log('Booking Found =>', JSON.stringify(booking, null, 2));
 
-        // Get provider code from booking details
-        cancelReq.supplierParams = {
-            ...(cancelReq.supplierParams || {}),
-            providerCode: booking.supplier_name,
-        };
+        const providerCancelReq = this.toProviderCancelReq(cancelReq, booking.supplier_name);
 
-        console.log('Updated cancelReq with supplierParams =>', JSON.stringify(cancelReq, null, 2));
+        console.log('Provider cancelReq =>', JSON.stringify(providerCancelReq, null, 2));
 
         console.log('Calling providerCancellationService.providerCancellationCharges');
 
         return this.providerCancellationService.providerCancellationCharges({
-            cancelReq,
+            cancelReq: providerCancelReq,
             headers,
             booking,
         });
@@ -254,6 +235,10 @@ export class CancelService {
      * @param cancelReq - Cancellation request DTO
      */
     private validateCancelRequest(cancelReq: GenericCancelDto): void {
+        if (!cancelReq.booking_id) {
+            throw new BadRequestException('booking_id is required');
+        }
+
         if (!cancelReq.bookingId) {
             throw new BadRequestException('Booking ID is required');
         }
@@ -281,6 +266,38 @@ export class CancelService {
             sectors: cancelReq.supplierParams?.sectors?.length
                 ? cancelReq.supplierParams.sectors
                 : segments,
+        };
+    }
+
+    private async resolveBooking(
+        cancelReq: GenericGetCancellationChargesDto | GenericCancelDto,
+    ) {
+        const booking = await this.cancelRepository.findBookingByInternalIdAndTboRef({
+            booking_id: cancelReq.booking_id,
+            bookingId: cancelReq.bookingId,
+        });
+
+        if (!booking) {
+            throw new BadRequestException(
+                'Booking not found or bookingId does not match supplier reference',
+            );
+        }
+
+        return booking;
+    }
+
+    /** TBO-facing payload — excludes internal booking_id. */
+    private toProviderCancelReq(
+        cancelReq: GenericGetCancellationChargesDto | GenericCancelDto,
+        supplierName: string,
+    ) {
+        return {
+            bookingId: cancelReq.bookingId,
+            requestType: cancelReq.requestType,
+            supplierParams: {
+                ...(cancelReq.supplierParams || {}),
+                providerCode: supplierName,
+            },
         };
     }
 

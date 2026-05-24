@@ -70,10 +70,18 @@ export class GenericCancelDto {
     @IsEnum(CancelMode)
     mode: CancelMode;
 
-    @ApiProperty({ description: 'Unique booking ID', example: 123456 })
+    @ApiProperty({ description: 'TBO supplier booking id', example: 2131696 })
     @IsNumber()
     @IsNotEmpty()
     bookingId: number;
+
+    @ApiProperty({
+        description: 'Internal booking UUID (DB lookup only, not sent to TBO)',
+        example: '2b52fc08-fde0-43e4-9f34-b9d65b1b00b5',
+    })
+    @IsString()
+    @IsNotEmpty()
+    booking_id: string;
 
     @ApiProperty({ description: 'Request type', example: 'FullCancellation', enum: ['FullCancellation', 'PartialCancellation', 'Reissuance', 'NotSet'] })
     @IsString()
@@ -103,10 +111,18 @@ export class GenericGetCancellationChargesDto {
     @IsEnum(CancelMode)
     mode: CancelMode;
 
-    @ApiProperty({ description: 'Unique booking ID (TBO supplier reference id)', example: 2131126 })
+    @ApiProperty({ description: 'TBO supplier booking id', example: 2131696 })
     @IsNumber()
     @IsNotEmpty()
     bookingId: number;
+
+    @ApiProperty({
+        description: 'Internal booking UUID (DB lookup only, not sent to TBO)',
+        example: '2b52fc08-fde0-43e4-9f34-b9d65b1b00b5',
+    })
+    @IsString()
+    @IsNotEmpty()
+    booking_id: string;
 
     @ApiProperty({ description: 'Request type', example: 'FullCancellation', enum: ['FullCancellation', 'PartialCancellation', 'Reissuance'] })
     @IsString()

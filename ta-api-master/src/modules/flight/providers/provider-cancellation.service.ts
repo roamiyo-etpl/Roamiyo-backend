@@ -3,6 +3,7 @@ import { CancelResponse } from 'src/modules/cancel/interfaces/cancel.interface';
 import { ConfigurationService } from '../configuration/configuration.service';
 import { TboCancellationService } from './tbo/tbo-cancellation.service';
 import { redactTboCredentialsForLog } from 'src/shared/utilities/flight/tbo-request-context.utility';
+import { supplierReferenceIncludes } from 'src/shared/utilities/flight/supplier-reference.utility';
 
 @Injectable()
 export class ProviderCancellationService {
@@ -81,8 +82,10 @@ export class ProviderCancellationService {
 
             if (
                 !booking ||
-                cancelReq.bookingId.toString() !==
-                (booking.supplier_reference_id || '').toString()
+                !supplierReferenceIncludes(
+                    booking.supplier_reference_id,
+                    cancelReq.bookingId,
+                )
             ) {
 
                 console.log("[PROVIDER-CANCEL][STEP-1] Booking mismatch found");
@@ -199,8 +202,10 @@ export class ProviderCancellationService {
 
         if (
             !booking ||
-            cancelReq.bookingId.toString() !==
-            (booking.supplier_reference_id || '').toString()
+            !supplierReferenceIncludes(
+                booking.supplier_reference_id,
+                cancelReq.bookingId,
+            )
         ) {
             console.log('Booking mismatch detected');
             console.log('cancelReq.bookingId =>', cancelReq.bookingId);
