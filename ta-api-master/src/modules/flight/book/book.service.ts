@@ -404,6 +404,19 @@ export class BookService {
           isVerified: false,
         });
       } else {
+        const legs = supplierDetails?.orderDetail ?? [];
+        const allLegsConfirmed =
+          legs.length > 0 &&
+          legs.every(
+            (leg) => leg?.orderStatus === "CONFIRMED" && !!leg?.pnr,
+          );
+
+        if (allLegsConfirmed) {
+          await this.bookRepository.BookingStatusConfirmed({
+            bookingId: booking.booking_id,
+          });
+        }
+
         await this.bookRepository.updateBookingLogPaymentStatus({
           bookingLogId: bookReq.bookingLogId,
           paymentStatus: PaymentStatus.CAPTURED,

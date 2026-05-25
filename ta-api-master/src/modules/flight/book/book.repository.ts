@@ -267,8 +267,11 @@ export class BookRepository extends Repository<Booking> {
             if (orderDetail.bookingStatus) {
                 const mappedStatus = this.mapBookingStatus(orderDetail.bookingStatus);
                 if (mappedStatus === BookingStatus.CONFIRMED) {
-                    booking.booking_status = BookingStatus.PENDING; // TBO will confirm the booking later
-                } else if (booking.booking_status !== BookingStatus.CONFIRMED) {
+                    booking.booking_status = BookingStatus.CONFIRMED;
+                } else if (
+                    booking.booking_status !== BookingStatus.CONFIRMED &&
+                    mappedStatus !== BookingStatus.FAILED
+                ) {
                     booking.booking_status = mappedStatus || BookingStatus.PENDING;
                 }
             }
@@ -846,6 +849,16 @@ export class BookRepository extends Repository<Booking> {
             throw new Error('Booking not found');
         }
         booking.booking_status = BookingStatus.FAILED;
+        return this.save(booking);
+    }
+
+    async BookingStatusConfirmed(reqParams): Promise<Booking> {
+        const { bookingId } = reqParams;
+        const booking = await this.findOne({ where: { booking_id: bookingId } });
+        if (!booking) {
+            throw new Error('Booking not found');
+        }
+        booking.booking_status = BookingStatus.CONFIRMED;
         return this.save(booking);
     }
 

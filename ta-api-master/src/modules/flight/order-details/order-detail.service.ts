@@ -69,10 +69,27 @@ export class OrderDetailService {
                 headers: { 'ip-address': '127.0.0.1' },
             });
 
-            // Determine final booking status
-            const bookingStatus = orderDetails?.[0]?.bookingStatus || 'PENDING';
+            // Cron is a refresh job: only upgrade PENDING → CONFIRMED.
+            // NEVER write FAILED here — a read failure is not a booking failure.
+            if (!Array.isArray(orderDetails) || orderDetails.length === 0) {
+                continue;
+            }
 
-            await this.orderDetailRepository.updateBookingStatus(booking.booking_id, BookingStatus[bookingStatus.toUpperCase() as keyof typeof BookingStatus]);
+            const anyReadFailed = orderDetails.some(
+                (o: any) => o?.error === true || String(o?.bookingStatus).toUpperCase() === 'FAILED',
+            );
+            if (anyReadFailed) {
+                console.warn(`[Cron] Skipping booking ${booking.booking_id}: TBO read failed for one or more legs.`);
+                continue;
+            }
+
+            const allLegsConfirmed = orderDetails.every(
+                (o: any) => String(o?.bookingStatus).toUpperCase() === 'CONFIRMED',
+            );
+
+            if (allLegsConfirmed) {
+                await this.orderDetailRepository.updateBookingStatus(booking.booking_id, BookingStatus.CONFIRMED);
+            }
         }
 
         return;

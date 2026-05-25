@@ -251,9 +251,11 @@ export class TboOrderDetailService {
                 orderResponse.mode = 'TBO-' + orderRequest.providerCred.mode;
             } else {
                 const message = tripResult?.Response?.Error?.ErrorMessage || 'Order details not found.';
-                orderResponse.bookingStatus = BookingStatus.FAILED;
+                // Read failure is NOT a booking failure. Keep status PENDING and signal the read error to callers.
+                orderResponse.bookingStatus = BookingStatus.PENDING;
                 Object.assign(orderResponse, {
                     success: false,
+                    error: true,
                     message: message,
                     data: [],
                     searchReqId: orderReq.searchReqId,
