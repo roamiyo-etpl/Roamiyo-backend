@@ -23,7 +23,11 @@ export class BookResponse {
   orderDetail: Order[];
   orderDetails?: OrderDetailResponse;
   supplierOrderDetailResponse?: any[];
-  rawSupplierResponse?: any; // Raw response from supplier (TBO, etc.)
+  /**
+   * Raw response from supplier (TBO, etc.).
+   * Enriched with `is_refundable` so booking screen can show "Cancel booking".
+   */
+  rawSupplierResponse?: any;
 }
 
 export class BookInitiateResponse {

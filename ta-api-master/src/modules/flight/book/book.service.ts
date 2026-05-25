@@ -3,6 +3,7 @@ import { BookReconcileDto } from "./dtos/reconcile.dto";
 import {
   BookReconcileResponse,
   ReconcileApiResponseData,
+  RefundablePerPnr,
 } from "./interfaces/reconcile.interface";
 import { ProviderBookService } from "../providers/provider-book.service";
 import {
@@ -354,6 +355,15 @@ export class BookService {
       );
       console.log("OrderDetails:", supplierDetails?.orderDetail);
 
+      const isRefundablePerPnr = this.computeIsRefundablePerPnr(
+        supplierDetails.orderDetails,
+      );
+
+      const rawSupplierResponse = this.attachIsRefundableToRawSupplierResponse(
+        supplierDetails.rawSupplierResponse,
+        isRefundablePerPnr,
+      );
+
       const response = new BookResponse();
       Object.assign(response, {
         error: supplierDetails.error,
@@ -362,8 +372,7 @@ export class BookService {
         searchReqId: supplierDetails.searchReqId,
         supplierMessage: supplierDetails.supplierMessage,
         orderDetail: supplierDetails.orderDetail ?? [],
-        rawSupplierResponse:
-          supplierDetails.rawSupplierResponse ?? [],
+        rawSupplierResponse,
 
         supplierOrderDetailResponse:
           supplierDetails.supplierOrderDetailResponse ?? [],
@@ -553,6 +562,39 @@ export class BookService {
     });
   }
 
+  /**
+   * Per-PNR refundability — domestic round trip can have one PNR refundable
+   * and the other non-refundable. Returns one entry per supplier order.
+   */
+  private computeIsRefundablePerPnr(orderDetails: unknown): RefundablePerPnr[] {
+    if (!orderDetails) return [];
+    const orders = Array.isArray(orderDetails) ? orderDetails : [orderDetails];
+    return orders
+      .filter((o: any) => o && !o.error)
+      .map((o: any) => ({
+        pnr: o?.pnr ?? null,
+        bookingId: o?.bookingId != null ? o.bookingId.toString() : null,
+        is_refundable: o?.routes?.isRefundable === true,
+      }));
+  }
+
+  /**
+   * Attach per-PNR is_refundable inside rawSupplierResponse so it travels with
+   * the confirmation payload and gets persisted for the booking screen to read.
+   */
+  private attachIsRefundableToRawSupplierResponse(
+    rawSupplierResponse: unknown,
+    isRefundablePerPnr: RefundablePerPnr[],
+  ): any {
+    if (Array.isArray(rawSupplierResponse)) {
+      return Object.assign([...rawSupplierResponse], { is_refundable: isRefundablePerPnr });
+    }
+    if (rawSupplierResponse && typeof rawSupplierResponse === "object") {
+      return { ...(rawSupplierResponse as Record<string, unknown>), is_refundable: isRefundablePerPnr };
+    }
+    return { data: rawSupplierResponse ?? [], is_refundable: isRefundablePerPnr };
+  }
+
   private buildReconcileApiResponse(storedApiResponse?: {
     booking?: { response?: Record<string, unknown> };
     orderDetails?: unknown;
@@ -561,6 +603,10 @@ export class BookService {
     if (!bookResponse) {
       return null;
     }
+
+    const storedOrderDetails = storedApiResponse?.orderDetails;
+    const isRefundablePerPnr = this.computeIsRefundablePerPnr(storedOrderDetails);
+
     return {
       mode: bookResponse.mode as string | undefined,
       searchReqId: bookResponse.searchReqId as string | undefined,
@@ -569,7 +615,8 @@ export class BookService {
         (bookResponse.rawSupplierResponse as unknown[]) ?? [],
       supplierOrderDetailResponse:
         (bookResponse.supplierOrderDetailResponse as unknown[]) ?? [],
-      orderDetails: storedApiResponse?.orderDetails,
+      orderDetails: storedOrderDetails,
+      is_refundable: isRefundablePerPnr,
     };
   }
 }

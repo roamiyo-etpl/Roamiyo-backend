@@ -1,3 +1,9 @@
+export class RefundablePerPnr {
+    pnr: string | null;
+    bookingId: string | null;
+    is_refundable: boolean;
+}
+
 export class ReconcileApiResponseData {
     mode?: string;
     searchReqId?: string;
@@ -5,6 +11,8 @@ export class ReconcileApiResponseData {
     rawSupplierResponse?: unknown[];
     supplierOrderDetailResponse?: unknown[];
     orderDetails?: unknown;
+    /** Per-PNR refundability for domestic round trip (one entry per supplier order). */
+    is_refundable?: RefundablePerPnr[];
 }
 
 export class BookReconcileResponse {
