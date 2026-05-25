@@ -1,5 +1,6 @@
 import { BookingStatus } from "src/shared/enums/flight/booking.enum";
 import { OrderDetailResponse } from "../../order-details/interfaces/order-detail.interface";
+import { RefundablePerPnr } from "./reconcile.interface";
 import { Fare } from "../../search/interfaces/start-routing.interface";
 
 export class Order {
@@ -23,11 +24,10 @@ export class BookResponse {
   orderDetail: Order[];
   orderDetails?: OrderDetailResponse;
   supplierOrderDetailResponse?: any[];
-  /**
-   * Raw response from supplier (TBO, etc.).
-   * Enriched with `is_refundable` so booking screen can show "Cancel booking".
-   */
+  /** Raw response from supplier (TBO, etc.). */
   rawSupplierResponse?: any;
+  /** Per-PNR refundability so the booking screen can show/hide "Cancel booking". */
+  is_refundable?: RefundablePerPnr[];
 }
 
 export class BookInitiateResponse {

@@ -359,11 +359,6 @@ export class BookService {
         supplierDetails.orderDetails,
       );
 
-      const rawSupplierResponse = this.attachIsRefundableToRawSupplierResponse(
-        supplierDetails.rawSupplierResponse,
-        isRefundablePerPnr,
-      );
-
       const response = new BookResponse();
       Object.assign(response, {
         error: supplierDetails.error,
@@ -372,10 +367,10 @@ export class BookService {
         searchReqId: supplierDetails.searchReqId,
         supplierMessage: supplierDetails.supplierMessage,
         orderDetail: supplierDetails.orderDetail ?? [],
-        rawSupplierResponse,
-
+        rawSupplierResponse: supplierDetails.rawSupplierResponse ?? [],
         supplierOrderDetailResponse:
           supplierDetails.supplierOrderDetailResponse ?? [],
+        is_refundable: isRefundablePerPnr,
         // orderDetails: supplierDetails.orderDetails ?? null,
       });
 
@@ -589,23 +584,6 @@ export class BookService {
         bookingId: o?.bookingId != null ? o.bookingId.toString() : null,
         is_refundable: o?.routes?.isRefundable === true,
       }));
-  }
-
-  /**
-   * Attach per-PNR is_refundable inside rawSupplierResponse so it travels with
-   * the confirmation payload and gets persisted for the booking screen to read.
-   */
-  private attachIsRefundableToRawSupplierResponse(
-    rawSupplierResponse: unknown,
-    isRefundablePerPnr: RefundablePerPnr[],
-  ): any {
-    if (Array.isArray(rawSupplierResponse)) {
-      return Object.assign([...rawSupplierResponse], { is_refundable: isRefundablePerPnr });
-    }
-    if (rawSupplierResponse && typeof rawSupplierResponse === "object") {
-      return { ...(rawSupplierResponse as Record<string, unknown>), is_refundable: isRefundablePerPnr };
-    }
-    return { data: rawSupplierResponse ?? [], is_refundable: isRefundablePerPnr };
   }
 
   private buildReconcileApiResponse(storedApiResponse?: {
