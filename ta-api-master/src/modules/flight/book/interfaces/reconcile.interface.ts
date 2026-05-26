@@ -28,5 +28,7 @@ export class BookReconcileResponse {
     bookingId: string;
     bookingReferenceId: string;
     supplierReferenceId: string | null;
+    /** Per-PNR refundability so the booking screen can show/hide "Cancel booking". Mirrors confirm response. */
+    is_refundable?: RefundablePerPnr[];
     apiResponse: ReconcileApiResponseData | null;
 }

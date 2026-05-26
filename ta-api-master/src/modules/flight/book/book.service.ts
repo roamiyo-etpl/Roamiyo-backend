@@ -422,15 +422,71 @@ export class BookService {
       return response;
     } catch (error) {
       console.error("Booking confirmation error:", error);
+
+      // ─── BUG #3 GUARD ───────────────────────────────────────────────
+      // A post-success exception (DB blip, missing booking_log, restart, etc.)
+      // must NEVER corrupt a booking whose ticket is already issued at the supplier.
+      // Truth-of-ticket check: per leg we require PNR + orderNo + orderStatus=CONFIRMED
+      // AND a non-empty TicketId in the raw TBO response. If proven, do not write FAILED.
       if (booking?.booking_id) {
-        await this.bookRepository.BookingStatusFailed({ bookingId: booking.booking_id });
+        let alreadyTicketed = false;
+        try {
+          const fresh = await this.bookRepository.getBookingForReconcile(
+            booking.booking_id,
+          );
+          const stored =
+            fresh?.bookingAdditionalDetails?.api_response?.booking?.response;
+          alreadyTicketed =
+            !!fresh?.supplier_reference_id &&
+            this.allLegsFullyTicketedFromStored(stored);
+        } catch (lookupErr) {
+          console.error(
+            "[Confirm catch] Booking re-read failed; defaulting to safe behaviour (no FAILED write):",
+            lookupErr,
+          );
+          alreadyTicketed = true;
+        }
+
+        if (!alreadyTicketed) {
+          await this.bookRepository.BookingStatusFailed({
+            bookingId: booking.booking_id,
+          });
+        } else {
+          console.warn(
+            `[Confirm catch] Skipping BookingStatusFailed for ${booking.booking_id} — supplier already issued ticket (PNR + orderNo + TicketId verified).`,
+          );
+        }
       }
+
       if (bookReq?.bookingLogId) {
-        await this.bookRepository.updateBookingLogPaymentStatus({
-          bookingLogId: bookReq.bookingLogId,
-          paymentStatus: PaymentStatus.FAILED,
-          isVerified: false,
-        });
+        let alreadyCaptured = false;
+        try {
+          const log = await this.bookRepository.getBookingLogByLogId(
+            bookReq.bookingLogId,
+          );
+          alreadyCaptured =
+            !!log &&
+            (log.is_verified === true ||
+              log.payment_status === PaymentStatus.CAPTURED);
+        } catch (logErr) {
+          console.error(
+            "[Confirm catch] Log lookup failed; defaulting to safe behaviour (no FAILED write):",
+            logErr,
+          );
+          alreadyCaptured = true;
+        }
+
+        if (!alreadyCaptured) {
+          await this.bookRepository.updateBookingLogPaymentStatus({
+            bookingLogId: bookReq.bookingLogId,
+            paymentStatus: PaymentStatus.FAILED,
+            isVerified: false,
+          });
+        } else {
+          console.warn(
+            `[Confirm catch] Skipping payment FAILED write for log ${bookReq.bookingLogId} — already CAPTURED.`,
+          );
+        }
       }
       // Re-throw with more context
       throw new BadRequestException({
@@ -462,28 +518,67 @@ export class BookService {
       );
     }
 
+    const storedBookResponse =
+      booking.bookingAdditionalDetails?.api_response?.booking?.response;
+
+    // ─── BUG #4 ────────────────────────────────────────────────────────
+    // Source of truth for "is the ticket really issued?" is the supplier
+    // response, not the bookings.booking_status column. We require per leg:
+    // PNR + orderNo + orderStatus=CONFIRMED AND a non-empty TicketId in the
+    // raw TBO response. If proven, treat as CONFIRMED regardless of column,
+    // and self-heal the column back to 1 so future reads stay correct.
+    const allLegsTicketed =
+      this.allLegsFullyTicketedFromStored(storedBookResponse);
+
+    let effectiveStatus: BookingStatus = booking.booking_status;
+    if (
+      allLegsTicketed &&
+      booking.booking_status !== BookingStatus.CONFIRMED
+    ) {
+      const previousLabel =
+        BOOKING_STATUS_LABEL[booking.booking_status] ??
+        String(booking.booking_status);
+      effectiveStatus = BookingStatus.CONFIRMED;
+      try {
+        await this.bookRepository.BookingStatusConfirmed({
+          bookingId: booking.booking_id,
+        });
+        booking.booking_status = BookingStatus.CONFIRMED;
+        console.warn(
+          `[Reconcile self-heal] booking ${booking.booking_id}: column was ${previousLabel}, supplier proves CONFIRMED → corrected.`,
+        );
+      } catch (healErr) {
+        console.error(
+          `[Reconcile self-heal] booking ${booking.booking_id}: column was ${previousLabel}, supplier proves CONFIRMED, but DB update failed. Reporting CONFIRMED in response only:`,
+          healErr,
+        );
+      }
+    }
+
     const statusLabel =
-      BOOKING_STATUS_LABEL[booking.booking_status] ?? "UNKNOWN";
+      BOOKING_STATUS_LABEL[effectiveStatus] ?? "UNKNOWN";
     const message =
       RECONCILE_MESSAGES[statusLabel] ??
       `Booking status is ${statusLabel}.`;
 
-    const storedBookResponse =
-      booking.bookingAdditionalDetails?.api_response?.booking?.response;
     const isBookingComplete = this.isReconcileBookingComplete(
-      booking.booking_status,
+      effectiveStatus,
       storedBookResponse,
     );
     const hasStoredBookData = this.hasReconcileStoredBookData(
-      booking.booking_status,
+      effectiveStatus,
       storedBookResponse,
     );
 
+    const isRefundablePerPnr = this.computeIsRefundablePerPnr(
+      booking.bookingAdditionalDetails?.api_response?.orderDetails,
+    );
+
     const response: BookReconcileResponse = {
-      error: booking.booking_status === BookingStatus.FAILED,
+      error: effectiveStatus === BookingStatus.FAILED,
       message,
       status: statusLabel,
-      bookingStatus: booking.booking_status,
+      bookingStatus: effectiveStatus,
       paymentStatus: bookingLog.payment_status,
       isPaymentVerified: bookingLog.is_verified,
       isBookingComplete,
@@ -495,6 +590,7 @@ export class BookService {
       bookingId: booking.booking_id,
       bookingReferenceId: booking.booking_reference_id,
       supplierReferenceId: booking.supplier_reference_id ?? null,
+      is_refundable: isRefundablePerPnr,
       apiResponse: hasStoredBookData
         ? this.buildReconcileApiResponse(
             booking.bookingAdditionalDetails?.api_response,
@@ -503,6 +599,63 @@ export class BookService {
     };
 
     return response;
+  }
+
+  /**
+   * Strict per-leg "ticket is really issued" check used by Bug #3 and Bug #4.
+   * A leg is considered fully ticketed only when ALL hold:
+   *   - orderStatus is CONFIRMED (or BOOKED)
+   *   - leg.pnr is present
+   *   - leg.orderNo is present
+   *   - the matching raw TBO response has every Passenger.Ticket.TicketId set
+   * Returns true only if every leg passes — partial bookings return false.
+   */
+  private allLegsFullyTicketedFromStored(storedBookResponse: any): boolean {
+    if (!storedBookResponse) return false;
+    const legs = storedBookResponse?.orderDetail;
+    const raw = storedBookResponse?.rawSupplierResponse;
+    if (!Array.isArray(legs) || legs.length === 0) return false;
+    if (!Array.isArray(raw) || raw.length === 0) return false;
+    return legs.every((leg: any) =>
+      this.isLegFullyTicketedFromStored(leg, raw),
+    );
+  }
+
+  private isLegFullyTicketedFromStored(
+    leg: any,
+    rawSupplierResponse: any[],
+  ): boolean {
+    if (!leg) return false;
+
+    const orderStatus = String(leg?.orderStatus ?? "").toUpperCase();
+    if (orderStatus !== "CONFIRMED" && orderStatus !== "BOOKED") {
+      return false;
+    }
+
+    const pnr = leg?.pnr ? String(leg.pnr).trim() : "";
+    const orderNo =
+      leg?.orderNo != null && leg.orderNo !== "" ? String(leg.orderNo).trim() : "";
+    if (!pnr || !orderNo) return false;
+
+    const matchingRaw = rawSupplierResponse.find((r: any) => {
+      const innerResponse = r?.response?.Response?.Response;
+      const rPnr = innerResponse?.PNR;
+      const rBookingId = innerResponse?.BookingId;
+      return (
+        (rPnr && String(rPnr).trim() === pnr) ||
+        (rBookingId != null && String(rBookingId) === orderNo)
+      );
+    });
+    if (!matchingRaw) return false;
+
+    const passengers =
+      matchingRaw?.response?.Response?.Response?.FlightItinerary?.Passenger;
+    if (!Array.isArray(passengers) || passengers.length === 0) return false;
+
+    return passengers.every(
+      (p: any) =>
+        p?.Ticket?.TicketId != null && String(p.Ticket.TicketId).length > 0,
+    );
   }
 
   /**
