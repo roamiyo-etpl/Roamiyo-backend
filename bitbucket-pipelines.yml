@@ -15,11 +15,10 @@
 #   testing    → rg-roamiyo-travel-tek-testing     / ca-roamiyo-travel-tek-testing
 #   production → rg-roamiyo-travel-tek-production  / ca-roamiyo-travel-tek-production
 #
-# ACR repository: travel-app-travel-tek (check this exact name in Azure Portal → Repositories).
-# Tags per dev push:
-#   dev-<BITBUCKET_BUILD_NUMBER>  — immutable; ACA deploy uses this (forces new revision).
-#   dev                         — moving alias; updates in ACR UI when you filter tag "dev".
-# Also logged: BITBUCKET_COMMIT for traceability.
+# ACR images (unique tag per build → new ACA revision each push):
+#   ${ACR_LOGIN_SERVER}/travel-app-travel-tek:dev-<BITBUCKET_BUILD_NUMBER>
+#   ${ACR_LOGIN_SERVER}/travel-app-travel-tek:testing-<BITBUCKET_BUILD_NUMBER>
+#   ${ACR_LOGIN_SERVER}/travel-app-travel-tek:production-<BITBUCKET_BUILD_NUMBER>
 #
 # Runtime: `node dist/src/main.js`. Ingress target-port=5050 (SERVER_PORT in .env.development).
 
@@ -35,17 +34,12 @@ definitions:
           - docker
         script:
           - cd ta-api-master
-          - export IMAGE_REPO="${ACR_LOGIN_SERVER}/travel-app-travel-tek"
           - export IMAGE_TAG=dev-${BITBUCKET_BUILD_NUMBER}
-          - export IMAGE_NAME="${IMAGE_REPO}:${IMAGE_TAG}"
-          - echo "Build ${BITBUCKET_BUILD_NUMBER} commit ${BITBUCKET_COMMIT} → ${IMAGE_NAME}"
-          - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
+          - export IMAGE_NAME="${ACR_LOGIN_SERVER}/travel-app-travel-tek:${IMAGE_TAG}"
           - docker build ${NPM_TOKEN:+--build-arg NPM_TOKEN=${NPM_TOKEN}} -t "${IMAGE_NAME}" .
+          - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
           - docker push "${IMAGE_NAME}"
-          - docker tag "${IMAGE_NAME}" "${IMAGE_REPO}:dev"
-          - docker push "${IMAGE_REPO}:dev"
           - echo "${IMAGE_NAME}" > ../image-name.txt
-          - echo "Pushed ${IMAGE_NAME} and alias ${IMAGE_REPO}:dev"
         artifacts:
           - image-name.txt
 
@@ -86,17 +80,11 @@ definitions:
           - export IMAGE_NAME=$(cat image-name.txt)
           - export AZURE_RESOURCE_GROUP=rg-roamiyo-dev-resource
           - export ACA_NAME=ca-roamiyo-travel-tek-dev
-          - echo "Deploying image from build artifact: ${IMAGE_NAME}"
           - az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}" --allow-no-subscriptions
           - az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
           - az extension add --name containerapp --upgrade -y
-          - export ACR_NAME="${ACR_LOGIN_SERVER%%.azurecr.io}"
-          - echo "Recent tags in ACR ${ACR_NAME} / travel-app-travel-tek:"
-          - az acr repository show-tags --name "${ACR_NAME}" --repository travel-app-travel-tek --orderby time_desc --top 8 -o tsv || true
           - export ACA_CONTAINER=$(az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].name" -o tsv)
           - az containerapp update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --container-name "${ACA_CONTAINER}" --image "${IMAGE_NAME}" --command "node" --args "dist/src/main.js"
-          - echo "ACA image after update:"
-          - az containerapp show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.template.containers[0].image" -o tsv
           - (az containerapp ingress show --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" -o none 2>/dev/null && az containerapp ingress update --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --target-port 5050) || az containerapp ingress enable --name "${ACA_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type external --target-port 5050 --transport auto
 
     - step: &deploy-azure-testing
