@@ -4,6 +4,7 @@ import { ContactDetailsDto } from "../dtos/hotel-book-initiate.dto";
 import { HotelImageSizes } from "src/modules/dump/hotel/interfaces/hotel-detail.interface";
 
 export interface BookingDetailResponse {
+    mode?: string;
     bookingId: string;
     bookingReferenceId: string;
     supplierBookingId?: string;

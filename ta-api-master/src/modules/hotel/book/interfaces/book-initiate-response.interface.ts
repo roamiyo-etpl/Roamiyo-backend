@@ -3,6 +3,7 @@ import { HotelPrice } from "../../search/interfaces/initiate-result-response.int
 export interface HotelBookInitiateResponse {
     success: boolean;
     searchReqId: string;
+    mode: string;
     message: string;
     bookingRefId?: string;
     price?: HotelPrice;

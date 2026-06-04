@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { TboAuthTokenService } from "./tbo-auth-token.service";
 import { Http } from "src/shared/utilities/flight/http.utility";
+import { HotelProviderUtility } from "src/shared/utilities/hotel/hotel-provider.utility";
 
 @Injectable()
 export class TboOrderDetailService {
@@ -16,7 +17,8 @@ export class TboOrderDetailService {
 
         getTokenRequest['providerCred'] = JSON.parse(activeProviders[0].providerCredentials);
         getTokenRequest['headers'] = headers;
-    
+
+        const responseMode = HotelProviderUtility.modeFromCredentials(providerCredentials);
 
         try {
 
@@ -48,6 +50,7 @@ export class TboOrderDetailService {
 
             return {
                 success: true,
+                mode: responseMode,
                 // errorCode: response.BookResult.Error.ErrorCode,
                 // message: response.BookResult.HotelBookingStatus,
                 bookDetailsResponse: getBookingDetails.GetBookingDetailResult,

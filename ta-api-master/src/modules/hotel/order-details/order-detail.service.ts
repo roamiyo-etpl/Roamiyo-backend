@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProviderOrderDetailService } from '../providers/provider-order-detail.service';
 import { SupplierCredService } from 'src/modules/generic/supplier-credientials/supplier-cred.service';
+import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { Generic } from 'src/shared/utilities/flight/generic.utility';
 
 
@@ -23,12 +24,8 @@ export class HotelOrderDetailService {
       const providersData = await this.supplierCred.getActiveProviders(headers);
 
       /* setting up only provider config in the response */
-      const activeProviders: any[] = providersData.map((data) => ({
-        providerId: data.provider_id,
-        code: data.code,
-        assignedId: data.provider_id, // Using provider_id as assignedId for now
-        providerCredentials: data.provider_credentials,
-      }));
+      const activeProviders = HotelProviderUtility.mapActiveProviders(providersData);
+      const responseMode = HotelProviderUtility.resolveResponseMode(activeProviders);
 
       Object.assign(orderReq, { activeProviders: activeProviders });
       const response = await this.providerOrderDetailService.orderDetail(orderReq, headers);
@@ -36,7 +33,8 @@ export class HotelOrderDetailService {
       const getBookingResponse = this.convertBookingResponse(response.bookDetailsResponse)
       return {
         success: true,
-        ...getBookingResponse
+        ...getBookingResponse,
+        mode: response.mode || responseMode,
       };
     } catch (error) {
       this.logger.error('Hotel Order Detail failed:', error);

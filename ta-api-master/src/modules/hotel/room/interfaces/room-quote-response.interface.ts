@@ -15,6 +15,7 @@ export interface ValidationInfo {
 export interface HotelRoomQuoteResponse {
     rateKey: string;
     searchReqId: string;
+    mode: string;
     status: string;
     remarks: string;
     prices?: HotelPrice;

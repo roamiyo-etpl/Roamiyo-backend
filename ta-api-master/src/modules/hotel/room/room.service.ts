@@ -6,6 +6,7 @@ import { HotelRoomQuoteDto } from './dtos/hotel-room-quote.dto';
 import { HotelRoomQuoteResponse } from './interfaces/room-quote-response.interface';
 import { v4 as uuidv4 } from 'uuid';
 import { SupplierCredService } from 'src/modules/generic/supplier-credientials/supplier-cred.service';
+import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 
 @Injectable()
 export class HotelRoomService {
@@ -31,17 +32,12 @@ export class HotelRoomService {
             /* Check active provider details */
             const providersData = await this.supplierCred.getActiveProviders(headers);
 
-            /* setting up only provider config in the response */
-            const activeProviders: any[] = providersData.map((data) => ({
-                providerId: data.provider_id,
-                code: data.code,
-                assignedId: data.provider_id, // Using provider_id as assignedId for now
-                providerCredentials: data.provider_credentials,
-            }));
+            const activeProviders = HotelProviderUtility.mapActiveProviders(providersData);
 
             Object.assign(apiReqData, { activeProviders: activeProviders });
             // apiReqData['searchReqId'] = uuidv4();
-            return await this.providerRoomsService.searchRoom(apiReqData, headers);
+            const roomResponse = await this.providerRoomsService.searchRoom(apiReqData, headers);
+            return { ...roomResponse, mode: roomResponse.mode || HotelProviderUtility.resolveResponseMode(activeProviders) };
         } catch (error) {
             this.logger.error('Hotel Room List failed:', error);
             throw new Error(`Hotel Room List failed: ${error.message}`);
@@ -63,15 +59,10 @@ export class HotelRoomService {
             }
             /* Check active provider details */
             const providersData = await this.supplierCred.getActiveProviders(headers);
-            /* setting up only provider config in the response */
-            const activeProviders: any[] = providersData.map((data) => ({
-                providerId: data.provider_id,
-                code: data.code,
-                assignedId: data.provider_id, // Using provider_id as assignedId for now
-                providerCredentials: data.provider_credentials,
-            }));
+            const activeProviders = HotelProviderUtility.mapActiveProviders(providersData);
             Object.assign(hotelRoomQuoteDto, { activeProviders: activeProviders });
-            return await this.providerRoomsService.searchRoomQuote(hotelRoomQuoteDto, headers);
+            const roomQuoteResponse = await this.providerRoomsService.searchRoomQuote(hotelRoomQuoteDto, headers);
+            return { ...roomQuoteResponse, mode: roomQuoteResponse.mode || HotelProviderUtility.resolveResponseMode(activeProviders) };
         } catch (error) {
             this.logger.error('Hotel Room Quote failed:', error);
             throw new Error(`Hotel Room Quote failed: ${error.message}`);

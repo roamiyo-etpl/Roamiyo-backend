@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TboHotelAdditionalDetailsEntity } from 'src/modules/dump/hotel/entities/tbo-hotel-additional-details.entity';
 import { Generic } from 'src/shared/utilities/flight/generic.utility';
+import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { HotelPrice } from '../../search/interfaces/initiate-result-response.interface';
 
 /**
@@ -75,7 +76,7 @@ export class TboRoomService {
 
             // console.log(response, 'data');
             // Convert TBO response to our standard format
-            const roomResponse = this.convertTboRoomResponseToStandard(response, hotelData, searchReqId, rooms, currency);
+            const roomResponse = this.convertTboRoomResponseToStandard(response, hotelData, searchReqId, rooms, currency, providerCredentials);
 
             return roomResponse;
         } catch (error) {
@@ -121,7 +122,7 @@ export class TboRoomService {
 
             // console.log(response);
             // Convert TBO response to our standard format
-            const quoteResponse = this.convertTboQuoteResponseToStandard(response, rateKey, currency, searchReqId, supplierCode);
+            const quoteResponse = this.convertTboQuoteResponseToStandard(response, rateKey, currency, searchReqId, supplierCode, providerCredentials);
 
             return quoteResponse;
         } catch (error) {
@@ -219,10 +220,20 @@ export class TboRoomService {
      * @param searchReqId - Search request ID
      * @returns HotelRoomResponse - Standardized room response
      */
-    private async convertTboRoomResponseToStandard(response: any, hotelData: any, searchReqId: string, searchReqRoom: any, currency: string): Promise<HotelRoomResponse> {
+    private async convertTboRoomResponseToStandard(
+        response: any,
+        hotelData: any,
+        searchReqId: string,
+        searchReqRoom: any,
+        currency: string,
+        providerCredentials: any,
+    ): Promise<HotelRoomResponse> {
+        const mode = HotelProviderUtility.modeFromCredentials(providerCredentials);
+
         if (!response?.HotelResult?.length) {
             return {
                 searchReqId,
+                mode,
                 message: 'No rooms available',
                 roomData: {
                     hotelName: hotelData.hotelName || 'Unknown Hotel',
@@ -376,6 +387,7 @@ export class TboRoomService {
 
         return {
             searchReqId,
+            mode,
             message: 'Rooms fetched successfully',
             roomData: {
                 hotelName: hotelData.hotelName || 'Unknown Hotel',
@@ -404,7 +416,9 @@ export class TboRoomService {
         currency: string,
         searchReqId: string,
         supplierCode: string,
+        providerCredentials: any,
     ): HotelRoomQuoteResponse {
+        const mode = HotelProviderUtility.modeFromCredentials(providerCredentials);
 
         const preferredCurrency = currency;
         const isSuccessful = response?.Status?.Code === 200;
@@ -423,6 +437,7 @@ export class TboRoomService {
         const baseResponse: HotelRoomQuoteResponse = {
             rateKey: rateKey,
             searchReqId: searchReqId,
+            mode,
             status: isSuccessful ? 'AVAILABLE' : response?.Status?.Description || 'NOT AVAILABLE',
             ...(isSuccessful ? {
             prices: {

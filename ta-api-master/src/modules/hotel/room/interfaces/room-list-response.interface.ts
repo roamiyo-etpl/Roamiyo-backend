@@ -2,6 +2,7 @@ import { CancellationPolicy, HotelPrice } from "../../search/interfaces/initiate
 
 export interface HotelRoomResponse {
     searchReqId: string;
+    mode: string;
     message: string;
     roomData: RoomData;
     success: boolean;
