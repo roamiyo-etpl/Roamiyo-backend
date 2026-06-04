@@ -32,12 +32,11 @@ export class TboSearchService {
      * @returns Promise<HotelResult[]> - Array of hotel results
      */
     async search(searchRequest: any, providerCredentials: any): Promise<HotelResult[]> {
-        const searchReqId = uuid();
-        // console.log('providerCredentials in tbo-search.service', searchRequest, providerCredentials);
+        const searchReqId = searchRequest?.searchReqId || uuid();
+        console.log('[Hotel Search] providerCredentials:', providerCredentials);
         try {
             // Extract search parameters
             const { searchCriteria, currency, searchMetadata, activeProviders } = searchRequest;
-            console.log(currency,"currency check");
             const { checkIn, checkOut, rooms, location } = searchCriteria;
             const { guestNationality } = searchMetadata;
 
