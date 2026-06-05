@@ -42,6 +42,7 @@ export class TboSearchService {
 
             // Get hotel data from database based on search type
             let hotelData = await this.getHotelDataByLocation(location);
+            console.log('hotelData count', hotelData?.length);
 
             if (!hotelData || hotelData.length === 0) {
                 return [];
@@ -70,7 +71,7 @@ export class TboSearchService {
             const endpoint = `${providerCredentials.hotel_url}/Search`;
 
             // console.log('auth in tbo-search.service', auth);
-            // console.log('endpoint in tbo-search.service', endpoint);
+            console.log('endpoint in tbo-search.service', endpoint);
             // Create search promises for each chunk
             const searchPromises = hotelChunks.map((chunk, index) => {
                 const chunkRequest = this.createTboSearchRequest({

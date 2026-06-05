@@ -96,9 +96,12 @@ export class OrderDetailService {
     }
 
     createOrderDetailRequest(booking, bookingDetails: any[]) {
+        const storedMode = booking.bookingAdditionalDetails?.api_response?.booking?.response?.mode;
+        const mode = storedMode ? storedMode.split('-').pop().toLowerCase() : 'Test';
+
         return {
             providerCode: booking.supplier_name,
-            mode: 'Test',
+            mode,
             bookingDetails, // each has pnr, orderNo, names
             searchReqId: booking.search_id,
         };
