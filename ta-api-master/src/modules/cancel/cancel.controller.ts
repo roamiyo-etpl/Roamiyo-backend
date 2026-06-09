@@ -64,11 +64,13 @@ export class GenericCancelController {
 
     @Post('cancellation-charges')
     @ApiOperation({
-        summary: 'Get estimated cancellation charges (flight/hotel)',
+        summary: 'Get estimated cancellation charges (flight only)',
         description:
             'Flight: returns TBO refund/cancellation charge estimate before confirm. ' +
             'Use FullCancellation or PartialCancellation; partial requires supplierParams.sectors or ticketIds. ' +
-            'See docs/cancellation-charges-api.md.',
+            'See docs/cancellation-charges-api.md. ' +
+            'Hotel charges are not supported here — use the payment service. ' +
+            'Hotel cancel: POST /cancel — see docs/hotel-cancellation-api.md.',
     })
     @ApiResponse(SWG_SUCCESS_RESPONSE)
     @ApiResponse(SWG_NOT_FOUND_RESPONSE)

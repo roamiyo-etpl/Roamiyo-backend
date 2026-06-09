@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CancelService as FlightCancelService } from '../flight/cancel/cancel.service';
+import { HotelCancelService } from '../hotel/cancel/cancel.service';
 import { GenericCancelDto, GenericGetCancellationChargesDto } from './dto/cancel.dto';
 
 @Injectable()
 export class GenericCancelService {
-    constructor(private readonly flightCancelService: FlightCancelService) {}
+    constructor(
+        private readonly flightCancelService: FlightCancelService,
+        private readonly hotelCancelService: HotelCancelService,
+    ) {}
 
     // async cancel(reqParams: { cancelReq: GenericCancelDto; headers: any }) {
     //     const { cancelReq, headers } = reqParams;
@@ -56,9 +60,23 @@ export class GenericCancelService {
         }
     
         if (mode === 'hotel') {
-            console.log("[CANCEL][ENTRY] Hotel cancellation not implemented");
-    
-            throw new BadRequestException('Hotel cancellation is not implemented');
+            console.log('[CANCEL][ENTRY] Hotel cancellation flow started');
+
+            const hotelReq = { ...cancelReq } as GenericCancelDto;
+            delete (hotelReq as { mode?: string }).mode;
+
+            const response = await this.hotelCancelService.cancelHotel({
+                cancelReq: hotelReq,
+                headers,
+            });
+
+            console.log('[CANCEL][ENTRY] Hotel cancellation response:',
+                JSON.stringify(response, null, 2),
+            );
+
+            console.log('════════════════ CANCEL API END ════════════════');
+
+            return response;
         }
     
         console.log("[CANCEL][ENTRY] Invalid mode received:", mode);
@@ -94,9 +112,11 @@ export class GenericCancelService {
         }
     
         if (mode === 'hotel') {
-            console.log('Hotel mode received but not implemented');
-    
-            throw new BadRequestException('Hotel cancellation charges are not implemented');
+            console.log('[CANCEL-CHARGES] Hotel mode not supported in Travel Tek — use payment service');
+
+            throw new BadRequestException(
+                'Hotel cancellation charges are handled by the payment service. Use POST /cancel to cancel a hotel booking.',
+            );
         }
     
         console.log('Invalid mode received =>', mode);

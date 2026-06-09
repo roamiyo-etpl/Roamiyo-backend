@@ -17,10 +17,11 @@ import { ConfigurationModule } from '../configuration/configuration.module';
 import { ProviderOrderDetailService } from './provider-order-detail.service';
 import { TboOrderDetailService } from './tbo/tbo-order-detail.service';
 import { TboCancellationService } from './tbo/tbo-cancellation.service';
+import { ProviderCancellationService } from './provider-cancellation.service';
 
 @Module({
     imports: [TypeOrmModule.forFeature([ProviderMaster,HotelMasterEntity, TboHotelAdditionalDetailsEntity, TboHotelImagesEntity]), ConfigurationModule],
-    providers: [ProvidersSearchService, ProviderRoomsService, ProviderBookService, ProviderOrderDetailService, HotelbedsSearchService, TboSearchService, TboRoomService,TboBookService, TboCancellationService, TboOrderDetailService, TboAuthTokenService, TboRepository],
-    exports: [ProvidersSearchService, ProviderRoomsService, ProviderBookService, ProviderOrderDetailService, TboAuthTokenService],
+    providers: [ProvidersSearchService, ProviderRoomsService, ProviderBookService, ProviderOrderDetailService, HotelbedsSearchService, TboSearchService, TboRoomService,TboBookService, TboCancellationService, TboOrderDetailService, TboAuthTokenService, TboRepository, ProviderCancellationService],
+    exports: [ProvidersSearchService, ProviderRoomsService, ProviderBookService, ProviderOrderDetailService, TboAuthTokenService, ProviderCancellationService],
 })
 export class ProvidersModule {}
