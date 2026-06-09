@@ -5,6 +5,8 @@ import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.
 import { CancelResponse } from 'src/modules/cancel/interfaces/cancel.interface';
 import {
     HOTEL_BOOKING_MODE,
+    HOTEL_CANCEL_POLL_DELAY_MS,
+    HOTEL_CANCEL_POLL_MAX_ATTEMPTS,
     HOTEL_CANCEL_REQUEST_TYPE,
     HotelChangeRequestStatus,
     getHotelChangeRequestStatusLabel,
@@ -14,8 +16,6 @@ import {
 } from '../../cancel/dtos/hotel-cancel.dto';
 
 const DEFAULT_IP_ADDRESS = '192.000.000.000';
-const STATUS_POLL_MAX_ATTEMPTS = 5;
-const STATUS_POLL_DELAY_MS = 2000;
 
 interface TboHotelError {
     ErrorCode?: number;
@@ -49,6 +49,23 @@ interface TboHotelGetChangeStatusResponse {
     HotelChangeRequestStatusResult?: TboHotelGetChangeRequestStatusResult;
 }
 
+type HotelCancelExtendedResponse = CancelResponse & {
+    hotelChangeRequestStatus?: number;
+    sendChangeRequestResponse?: unknown;
+    getChangeRequestStatusResponse?: unknown;
+};
+
+interface StatusPollResult {
+    changeRequestId: number;
+    changeRequestStatus: number;
+    cancellationCharge: number;
+    refundedAmount: number;
+    responseStatus: number;
+    traceId?: string;
+    error?: TboHotelError;
+    raw: unknown;
+}
+
 @Injectable()
 export class TboCancellationService {
     constructor(
@@ -63,21 +80,13 @@ export class TboCancellationService {
         providerCred: Record<string, unknown>;
         headers: Record<string, unknown>;
         booking?: { booking_reference_id?: string; search_id?: string };
-    }): Promise<CancelResponse & {
-        hotelChangeRequestStatus?: number;
-        sendChangeRequestResponse?: unknown;
-        getChangeRequestStatusResponse?: unknown;
-    }> {
+    }): Promise<HotelCancelExtendedResponse> {
         const { cancelReq, providerCred, headers, booking } = cancelRequest;
 
         console.log('════════════════ TBO HOTEL CANCEL START ════════════════');
         console.log('[TBO-HOTEL-CANCEL] bookingId:', cancelReq.bookingId);
 
-        const finalResponse: CancelResponse & {
-            hotelChangeRequestStatus?: number;
-            sendChangeRequestResponse?: unknown;
-            getChangeRequestStatusResponse?: unknown;
-        } = {
+        const finalResponse: HotelCancelExtendedResponse = {
             success: false,
             message: 'Hotel cancellation failed',
             mode: HotelProviderUtility.modeFromCredentials(providerCred) || 'TBO',
@@ -172,38 +181,12 @@ export class TboCancellationService {
                 initialStatus: sendChangeResult.ChangeRequestStatus,
             });
 
-            console.log('[TBO-HOTEL-CANCEL][STEP-4] Final status result:', JSON.stringify(statusResult, null, 2));
-
-            finalResponse.getChangeRequestStatusResponse = statusResult.raw;
-            finalResponse.hotelChangeRequestStatus = statusResult.changeRequestStatus;
-            finalResponse.cancellationCharge = statusResult.cancellationCharge;
-            finalResponse.refundedAmount = statusResult.refundedAmount;
-            finalResponse.traceId = statusResult.traceId ?? finalResponse.traceId;
-            finalResponse.status = getHotelChangeRequestStatusLabel(statusResult.changeRequestStatus);
-            finalResponse.remarks = remarks;
-
-            const isProcessed = isHotelCancellationSuccessful(statusResult.changeRequestStatus);
-            const isRejected = statusResult.changeRequestStatus === HotelChangeRequestStatus.Rejected;
-
-            finalResponse.success = statusResult.responseStatus === 1 && !isRejected;
-            finalResponse.cancellationStatus = isProcessed;
-            finalResponse.message = isProcessed
-                ? 'Hotel booking cancelled successfully'
-                : isRejected
-                  ? 'Hotel cancellation was rejected by supplier'
-                  : `Hotel cancellation in status: ${finalResponse.status}`;
-
-            if (statusResult.error?.ErrorCode) {
-                finalResponse.error = {
-                    errorCode: statusResult.error.ErrorCode ?? -1,
-                    errorMessage: statusResult.error.ErrorMessage || finalResponse.message,
-                };
-            }
-
-            console.log('[TBO-HOTEL-CANCEL] Final response:', JSON.stringify(finalResponse, null, 2));
-            console.log('════════════════ TBO HOTEL CANCEL END ════════════════');
-
-            return finalResponse;
+            return this.applyStatusToResponse({
+                finalResponse,
+                statusResult,
+                remarks,
+                changeRequestId,
+            });
         } catch (error) {
             console.error('[TBO-HOTEL-CANCEL] ERROR:', error);
             finalResponse.message = error.message || 'Hotel cancellation failed';
@@ -215,6 +198,115 @@ export class TboCancellationService {
         }
     }
 
+    /** Poll existing ChangeRequestId only — no SendChangeRequest */
+    async pollCancelStatus(cancelRequest: {
+        changeRequestId: number;
+        providerCred: Record<string, unknown>;
+        headers: Record<string, unknown>;
+        booking?: { search_id?: string };
+    }): Promise<HotelCancelExtendedResponse> {
+        const { changeRequestId, providerCred, headers, booking } = cancelRequest;
+
+        console.log('════════════════ TBO HOTEL POLL STATUS START ════════════════');
+        console.log('[TBO-HOTEL-POLL] changeRequestId:', changeRequestId);
+
+        const finalResponse: HotelCancelExtendedResponse = {
+            success: false,
+            message: 'Hotel cancellation status check failed',
+            mode: HotelProviderUtility.modeFromCredentials(providerCred) || 'TBO',
+            cancellationStatus: false,
+            changeRequestId,
+        };
+
+        try {
+            const auth = {
+                username: String(providerCred.username ?? ''),
+                password: String(providerCred.password ?? ''),
+            };
+
+            const tokenRequest = {
+                providerCred,
+                headers,
+                searchReqId: booking?.search_id,
+            };
+
+            const authToken = await this.tboAuthTokenService.getAuthToken(tokenRequest);
+            const endUserIp = String(headers['ip-address'] || DEFAULT_IP_ADDRESS);
+
+            const statusResult = await this.pollChangeRequestStatus({
+                changeRequestId,
+                authToken,
+                endUserIp,
+                providerCred,
+                auth,
+            });
+
+            return this.applyStatusToResponse({
+                finalResponse,
+                statusResult,
+                changeRequestId,
+            });
+        } catch (error) {
+            console.error('[TBO-HOTEL-POLL] ERROR:', error);
+            finalResponse.message = error.message || 'Hotel cancellation status check failed';
+            finalResponse.error = {
+                errorCode: -1,
+                errorMessage: finalResponse.message,
+            };
+            return finalResponse;
+        }
+    }
+
+    private applyStatusToResponse(params: {
+        finalResponse: HotelCancelExtendedResponse;
+        statusResult: StatusPollResult;
+        remarks?: string;
+        changeRequestId: number;
+    }): HotelCancelExtendedResponse {
+        const { finalResponse, statusResult, remarks, changeRequestId } = params;
+
+        finalResponse.getChangeRequestStatusResponse = statusResult.raw;
+        finalResponse.hotelChangeRequestStatus = statusResult.changeRequestStatus;
+        finalResponse.cancellationCharge = statusResult.cancellationCharge;
+        finalResponse.refundedAmount = statusResult.refundedAmount;
+        finalResponse.traceId = statusResult.traceId ?? finalResponse.traceId;
+        finalResponse.status = getHotelChangeRequestStatusLabel(statusResult.changeRequestStatus);
+        finalResponse.changeRequestId = changeRequestId;
+
+        if (remarks) {
+            finalResponse.remarks = remarks;
+        }
+
+        const isProcessed = isHotelCancellationSuccessful(statusResult.changeRequestStatus);
+        const isRejected = statusResult.changeRequestStatus === HotelChangeRequestStatus.Rejected;
+        const pending = shouldPollHotelChangeRequestStatus(statusResult.changeRequestStatus);
+
+        finalResponse.cancelSubmitted = true;
+        finalResponse.cancelCompleted = isProcessed;
+        finalResponse.pendingCompletion = pending;
+        finalResponse.success = statusResult.responseStatus === 1 && !isRejected;
+        finalResponse.cancellationStatus = isProcessed;
+        finalResponse.message = isProcessed
+            ? 'Hotel cancellation processed successfully'
+            : isRejected
+              ? 'Hotel cancellation was rejected by supplier'
+              : pending
+                ? `Hotel cancellation is ${finalResponse.status}. Poll POST /cancel/status with changeRequestId until Processed.`
+                : `Hotel cancellation in status: ${finalResponse.status}`;
+
+        if (statusResult.error?.ErrorCode) {
+            finalResponse.error = {
+                errorCode: statusResult.error.ErrorCode ?? -1,
+                errorMessage: statusResult.error.ErrorMessage || finalResponse.message,
+            };
+        }
+
+        console.log('[TBO-HOTEL-CANCEL] Final response:', JSON.stringify(finalResponse, null, 2));
+        console.log('════════════════ TBO HOTEL CANCEL END ════════════════');
+
+        return finalResponse;
+    }
+
     private async pollChangeRequestStatus(params: {
         changeRequestId: number;
         authToken: string;
@@ -222,30 +314,31 @@ export class TboCancellationService {
         providerCred: Record<string, unknown>;
         auth: { username: string; password: string };
         initialStatus?: number;
-    }): Promise<{
-        changeRequestId: number;
-        changeRequestStatus: number;
-        cancellationCharge: number;
-        refundedAmount: number;
-        responseStatus: number;
-        traceId?: string;
-        error?: TboHotelError;
-        raw: unknown;
-    }> {
-        const { changeRequestId, authToken, endUserIp, providerCred, auth } = params;
+        maxAttempts?: number;
+        delayMs?: number;
+    }): Promise<StatusPollResult> {
+        const {
+            changeRequestId,
+            authToken,
+            endUserIp,
+            providerCred,
+            auth,
+            maxAttempts = HOTEL_CANCEL_POLL_MAX_ATTEMPTS,
+            delayMs = HOTEL_CANCEL_POLL_DELAY_MS,
+        } = params;
 
-        let lastResult = {
+        let lastResult: StatusPollResult = {
             changeRequestId,
             changeRequestStatus: params.initialStatus ?? HotelChangeRequestStatus.NotSet,
             cancellationCharge: 0,
             refundedAmount: 0,
             responseStatus: 0,
-            traceId: undefined as string | undefined,
-            error: undefined as TboHotelError | undefined,
-            raw: null as unknown,
+            traceId: undefined,
+            error: undefined,
+            raw: null,
         };
 
-        for (let attempt = 1; attempt <= STATUS_POLL_MAX_ATTEMPTS; attempt++) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             const statusBody = {
                 BookingMode: HOTEL_BOOKING_MODE,
                 ChangeRequestId: changeRequestId,
@@ -304,9 +397,9 @@ export class TboCancellationService {
                 return lastResult;
             }
 
-            if (attempt < STATUS_POLL_MAX_ATTEMPTS) {
-                console.log(`[TBO-HOTEL-CANCEL][POLL-${attempt}] Waiting ${STATUS_POLL_DELAY_MS}ms before retry`);
-                await new Promise((resolve) => setTimeout(resolve, STATUS_POLL_DELAY_MS));
+            if (attempt < maxAttempts) {
+                console.log(`[TBO-HOTEL-CANCEL][POLL-${attempt}] Waiting ${delayMs}ms before retry`);
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
             }
         }
 

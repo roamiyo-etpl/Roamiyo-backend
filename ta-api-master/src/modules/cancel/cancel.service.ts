@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { CancelService as FlightCancelService } from '../flight/cancel/cancel.service';
 import { HotelCancelService } from '../hotel/cancel/cancel.service';
 import { GenericCancelDto, GenericGetCancellationChargesDto } from './dto/cancel.dto';
+import { HotelCancelStatusDto } from '../hotel/cancel/dtos/hotel-cancel-status.dto';
 
 @Injectable()
 export class GenericCancelService {
@@ -82,6 +83,20 @@ export class GenericCancelService {
         console.log("[CANCEL][ENTRY] Invalid mode received:", mode);
     
         throw new BadRequestException('Invalid mode. Allowed: "flight" | "hotel"');
+    }
+
+    async getCancelStatus(reqParams: { statusReq: HotelCancelStatusDto; headers: any }) {
+        const { statusReq, headers } = reqParams;
+
+        const mode = (statusReq.mode || '').toString().toLowerCase();
+
+        if (mode === 'hotel') {
+            return this.hotelCancelService.getHotelCancelStatus({ statusReq, headers });
+        }
+
+        throw new BadRequestException(
+            'Cancel status polling is only supported for hotel. Use mode: "hotel".',
+        );
     }
 
     async getCancellationCharges(reqParams: { cancelReq: GenericGetCancellationChargesDto; headers: any }) {

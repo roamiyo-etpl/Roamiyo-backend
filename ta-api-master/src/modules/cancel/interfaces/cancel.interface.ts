@@ -15,6 +15,14 @@ export class CancelResponse {
     traceId?: string;
     /** UUID of the row saved in `cancellations` after a successful supplier call */
     cancellationId?: string;
+    /** Hotel: true when TBO returned ChangeRequestId (cancel submitted) */
+    cancelSubmitted?: boolean;
+    /** Hotel: true only when TBO ChangeRequestStatus = Processed (3) */
+    cancelCompleted?: boolean;
+    /** Hotel: true when status is Pending or InProgress — poll POST /cancel/status */
+    pendingCompletion?: boolean;
+    /** Hotel: raw TBO ChangeRequestStatus 0–4 */
+    hotelChangeRequestStatus?: number;
     error?: {
         errorCode: number;
         errorMessage: string;

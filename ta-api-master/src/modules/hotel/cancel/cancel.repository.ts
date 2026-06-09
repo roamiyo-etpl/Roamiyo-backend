@@ -10,6 +10,7 @@ import { supplierReferenceIncludes } from 'src/shared/utilities/flight/supplier-
 import {
     HotelChangeRequestStatus,
     getHotelChangeRequestStatusLabel,
+    isHotelCancellationInFlight,
     isHotelCancellationSuccessful,
 } from './dtos/hotel-cancel.dto';
 
@@ -66,6 +67,113 @@ export class HotelCancelRepository extends Repository<Booking> {
                 row.additional_data?.cancellationStatus === true
             );
         });
+    }
+
+    async findInFlightHotelCancellation(booking_id: string): Promise<Cancellation | null> {
+        const cancellations = await this.dataSource.getRepository(Cancellation).find({
+            where: { booking_id },
+            order: { created_at: 'DESC' },
+        });
+
+        return (
+            cancellations.find((row) =>
+                isHotelCancellationInFlight(row.additional_data?.hotelChangeRequestStatus ?? -1),
+            ) ?? null
+        );
+    }
+
+    async findHotelCancellationByChangeRequestId(params: {
+        booking_id: string;
+        changeRequestId: number;
+    }): Promise<Cancellation | null> {
+        const cancellations = await this.dataSource.getRepository(Cancellation).find({
+            where: { booking_id: params.booking_id },
+            order: { created_at: 'DESC' },
+        });
+
+        return (
+            cancellations.find(
+                (row) => Number(row.change_request_id) === Number(params.changeRequestId),
+            ) ?? null
+        );
+    }
+
+    async updateHotelCancellationRecord(params: {
+        cancellation_id: string;
+        bookingId: string;
+        booking_id: string;
+        cancellationResponse: {
+            changeRequestId?: number;
+            traceId?: string;
+            status?: string;
+            hotelChangeRequestStatus?: number;
+            cancellationCharge?: number;
+            refundedAmount?: number;
+            remarks?: string;
+            getChangeRequestStatusResponse?: unknown;
+        };
+        cancellationStatus: boolean;
+    }): Promise<Cancellation> {
+        const { cancellation_id, bookingId, booking_id, cancellationResponse, cancellationStatus } =
+            params;
+
+        const cancellationRepo = this.dataSource.getRepository(Cancellation);
+        const cancellation = await cancellationRepo.findOne({
+            where: { cancellation_id },
+        });
+
+        if (!cancellation) {
+            throw new Error(`Cancellation record not found: ${cancellation_id}`);
+        }
+
+        const booking = await this.findHotelBookingByInternalIdAndTboRef({
+            booking_id,
+            bookingId,
+        });
+
+        if (!booking) {
+            throw new Error(`Hotel booking not found with reference ID: ${bookingId}`);
+        }
+
+        cancellation.trace_id = cancellationResponse.traceId ?? cancellation.trace_id;
+        cancellation.status = this.mapHotelChangeRequestStatusToDb(
+            cancellationResponse.hotelChangeRequestStatus,
+        );
+        cancellation.cancellation_charge =
+            cancellationResponse.cancellationCharge ?? cancellation.cancellation_charge;
+        cancellation.refunded_amount =
+            cancellationResponse.refundedAmount ?? cancellation.refunded_amount;
+        cancellation.remarks = cancellationResponse.remarks ?? cancellation.remarks;
+        cancellation.additional_data = {
+            ...cancellation.additional_data,
+            module: 'hotel',
+            hotelChangeRequestStatus:
+                cancellationResponse.hotelChangeRequestStatus ??
+                cancellation.additional_data?.hotelChangeRequestStatus ??
+                null,
+            hotelChangeRequestStatusText:
+                cancellationResponse.status ??
+                cancellation.additional_data?.hotelChangeRequestStatusText ??
+                null,
+            cancellationStatus,
+            getChangeRequestStatusResponse:
+                cancellationResponse.getChangeRequestStatusResponse ??
+                cancellation.additional_data?.getChangeRequestStatusResponse ??
+                null,
+        };
+
+        if (
+            cancellationStatus &&
+            isHotelCancellationSuccessful(
+                cancellationResponse.hotelChangeRequestStatus ?? -1,
+            )
+        ) {
+            booking.booking_status = BookingStatus.CANCELLED;
+            booking.updated_at = new Date();
+            await this.save(booking);
+        }
+
+        return cancellationRepo.save(cancellation);
     }
 
     async createHotelCancellationRecord(params: {

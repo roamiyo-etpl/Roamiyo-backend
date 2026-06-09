@@ -19,11 +19,12 @@ TBO hotel has no pre-cancel quote API. Final `CancellationCharge` and `RefundedA
 
 ---
 
-## Endpoint
+## Endpoints
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/cancel` | Cancel hotel booking via TBO |
+| `POST` | `/cancel` | Submit cancel + poll TBO until Processed/Rejected or timeout |
+| `POST` | `/cancel/status` | Poll existing `changeRequestId` only (no new `SendChangeRequest`) |
 
 Controller: `src/modules/cancel/cancel.controller.ts`
 
@@ -89,19 +90,55 @@ Your API uses **two IDs**. TBO docs only show one — both are needed in Travel 
 | `requestType` | Yes | Use `FullCancellation` (DTO validation) |
 | `supplierParams.remarks` | Optional | Sent to TBO `SendChangeRequest.Remarks` |
 
-### Success response
+### Response fields (payment service must read these)
+
+| Field | Meaning |
+|-------|---------|
+| `success` | `true` when cancel submitted and not Rejected |
+| `cancelSubmitted` | `true` when TBO returned a `changeRequestId` |
+| `cancelCompleted` | `true` only when TBO status = Processed (3) |
+| `pendingCompletion` | `true` when status is Pending or InProgress — **poll `POST /cancel/status`** |
+| `cancellationStatus` | Same as `cancelCompleted` (legacy boolean) |
+| `hotelChangeRequestStatus` | Raw TBO enum 0–4 |
+| `status` | Human label: `Pending`, `InProgress`, `Processed`, `Rejected` |
+
+**Do not treat `pendingCompletion: true` as failure.** TBO often stays `InProgress` longer than the inline poll window.
+
+### Success — fully processed
 
 ```json
 {
   "success": true,
-  "message": "Hotel booking cancelled successfully",
-  "mode": "TBO",
+  "message": "Hotel cancellation processed successfully",
+  "mode": "hotel",
+  "cancelSubmitted": true,
+  "cancelCompleted": true,
+  "pendingCompletion": false,
   "cancellationStatus": true,
+  "hotelChangeRequestStatus": 3,
   "cancellationCharge": 450,
   "refundedAmount": 4262.5,
   "status": "Processed",
-  "remarks": "Customer requested cancellation via payment service",
   "changeRequestId": 199925,
+  "traceId": "51f76eaf-c4ec-43f7-8d96-6288fcba7da1",
+  "cancellationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+### Success — submitted but still in progress (poll later)
+
+```json
+{
+  "success": true,
+  "message": "Hotel cancellation is InProgress. Poll POST /cancel/status with changeRequestId until Processed.",
+  "mode": "hotel",
+  "cancelSubmitted": true,
+  "cancelCompleted": false,
+  "pendingCompletion": true,
+  "cancellationStatus": false,
+  "hotelChangeRequestStatus": 2,
+  "status": "InProgress",
+  "changeRequestId": 404404,
   "traceId": "51f76eaf-c4ec-43f7-8d96-6288fcba7da1",
   "cancellationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 }
@@ -123,6 +160,49 @@ Your API uses **two IDs**. TBO docs only show one — both are needed in Travel 
   }
 }
 ```
+
+---
+
+## Poll cancellation status (`POST /cancel/status`)
+
+Use when `POST /cancel` returns `pendingCompletion: true`, or payment retries later.
+
+### Request
+
+```json
+{
+  "mode": "hotel",
+  "booking_id": "2b52fc08-fde0-43e4-9f34-b9d65b1b00b5",
+  "bookingId": 2139857,
+  "changeRequestId": 404404,
+  "cancellationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `mode` | Yes | `"hotel"` |
+| `booking_id` | Yes | Internal booking UUID |
+| `bookingId` | Yes | TBO supplier booking id |
+| `changeRequestId` | Yes | From `POST /cancel` response |
+| `cancellationId` | Optional | Existing `cancellations` row — speeds DB update |
+
+This endpoint calls **only** `GetChangeRequestStatus` (no second `SendChangeRequest`). When status becomes `Processed`, Travel Tek updates `cancellations` and sets `bookings.booking_status` to CANCELLED.
+
+### Inline polling config
+
+Inside both `/cancel` and `/cancel/status`, Travel Tek polls TBO up to:
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `HOTEL_CANCEL_POLL_MAX_ATTEMPTS` | `20` | Max `GetChangeRequestStatus` calls per request |
+| `HOTEL_CANCEL_POLL_DELAY_MS` | `3000` | Delay between polls (ms) |
+
+Default window ≈ **60 seconds**. Increase env vars if TBO is slow; payment should still poll `/cancel/status` if `pendingCompletion` remains true.
+
+### Duplicate `POST /cancel` while in flight
+
+If a prior cancel is still `Pending` or `InProgress`, a new `POST /cancel` **does not** call `SendChangeRequest` again. It resumes polling the existing `changeRequestId` and updates the same `cancellations` row.
 
 ---
 
@@ -151,12 +231,15 @@ Payment service
       → hotel/cancel/cancel.service.ts (HotelCancelService)
           1. Validate booking_id + bookingId match in DB
           2. Duplicate / status checks
-          3. hotel/providers/provider-cancellation.service.ts
-          4. hotel/providers/tbo/tbo-cancellation.service.ts
+          3. If in-flight cancel (Pending/InProgress) → poll only, else SendChangeRequest
+          4. hotel/providers/provider-cancellation.service.ts
+          5. hotel/providers/tbo/tbo-cancellation.service.ts
               a. Authenticate → TokenId
-              b. SendChangeRequest (BookingId = bookingId only)
-              c. GetChangeRequestStatus (poll if Pending/InProgress)
-          5. hotel/cancel/cancel.repository.ts → save + update booking
+              b. SendChangeRequest (BookingId = bookingId only) — skipped on resume
+              c. GetChangeRequestStatus (poll until Processed/Rejected or timeout)
+          6. hotel/cancel/cancel.repository.ts → save or update + update booking on Processed
+
+POST /cancel/status → steps 4–6 only (poll existing changeRequestId)
 ```
 
 ### Log prefixes (server debugging)
@@ -270,7 +353,17 @@ Read cancel policy from **payment service DB**. Do not call Travel Tek `/cancell
 POST https://<travel-tek-host>/cancel
 ```
 
-Use `cancellationCharge` and `refundedAmount` from the response for refund processing when `cancellationStatus: true`.
+### Step 3 — Poll if needed
+
+If `pendingCompletion: true`:
+
+```http
+POST https://<travel-tek-host>/cancel/status
+```
+
+Repeat until `cancelCompleted: true` (or `status: "Processed"`). Map `InProgress` / `Pending` to **in_progress**, not rejected.
+
+Use `cancellationCharge` and `refundedAmount` for refund processing **only when** `cancelCompleted: true`.
 
 ### cURL example
 
@@ -310,7 +403,9 @@ curl -X POST 'https://<travel-tek-host>/cancel' \
 
 - [ ] Payment service shows estimate from its own DB
 - [ ] `POST /cancel` with valid `booking_id` + `bookingId`
-- [ ] Response `status: "Processed"` and `cancellationStatus: true`
+- [ ] Response `status: "Processed"` and `cancelCompleted: true`
+- [ ] If `pendingCompletion: true`, `POST /cancel/status` eventually returns Processed
+- [ ] Second `POST /cancel` while InProgress resumes poll (no duplicate SendChangeRequest)
 - [ ] `bookings.booking_status` = CANCELLED
 - [ ] Row in `cancellations` with `additional_data`
 - [ ] Second cancel returns 400

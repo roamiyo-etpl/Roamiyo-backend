@@ -45,3 +45,15 @@ export function shouldPollHotelChangeRequestStatus(status: number): boolean {
         status === HotelChangeRequestStatus.InProgress
     );
 }
+
+export function isHotelCancellationInFlight(status: number): boolean {
+    return shouldPollHotelChangeRequestStatus(status);
+}
+
+/** Default: 20 polls × 3s ≈ 60s wait inside POST /cancel or POST /cancel/status */
+export const HOTEL_CANCEL_POLL_MAX_ATTEMPTS = Number(
+    process.env.HOTEL_CANCEL_POLL_MAX_ATTEMPTS ?? 20,
+);
+export const HOTEL_CANCEL_POLL_DELAY_MS = Number(
+    process.env.HOTEL_CANCEL_POLL_DELAY_MS ?? 6000,
+);

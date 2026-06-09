@@ -2,6 +2,7 @@ import { Body, Controller, Headers, Post, UseGuards, BadRequestException } from 
 import { ApiHeaders, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GenericCancelService } from './cancel.service';
 import { GenericCancelDto, GenericGetCancellationChargesDto } from './dto/cancel.dto';
+import { HotelCancelStatusDto } from '../hotel/cancel/dtos/hotel-cancel-status.dto';
 import { RequiredHeaders } from 'src/shared/decorators/common/custom-header.decorator';
 import { HeaderValidationGuard } from 'src/shared/guards/common/header.validation.guard';
 import {
@@ -60,6 +61,26 @@ export class GenericCancelController {
             throw new BadRequestException('mode is required ("flight" | "hotel")');
         }
         return this.cancelService.cancel({ cancelReq: dto, headers });
+    }
+
+    @Post('cancel/status')
+    @ApiOperation({
+        summary: 'Poll hotel cancellation status (TBO GetChangeRequestStatus)',
+        description:
+            'Hotel only. Polls TBO until Processed/Rejected or timeout. ' +
+            'Use when POST /cancel returns pendingCompletion: true. ' +
+            'See docs/hotel-cancellation-api.md.',
+    })
+    @ApiResponse(SWG_SUCCESS_RESPONSE)
+    @ApiResponse(SWG_NOT_FOUND_RESPONSE)
+    @ApiResponse(SWG_BAD_REQUEST_RESPONSE)
+    @ApiResponse(SWG_UNPROCESSABLE_RESPONSE)
+    @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
+    async getCancelStatus(@Body() dto: HotelCancelStatusDto, @Headers() headers: Headers) {
+        if (!dto?.mode) {
+            throw new BadRequestException('mode is required ("hotel")');
+        }
+        return this.cancelService.getCancelStatus({ statusReq: dto, headers });
     }
 
     @Post('cancellation-charges')
