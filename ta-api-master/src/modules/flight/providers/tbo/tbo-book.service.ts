@@ -943,8 +943,7 @@ export class TboBookService {
       TraceId: res.Response.TraceId,
       ResultIndex: res.Response.Results.ResultIndex,
     };
-    // const ssrEndpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SSR`;
-    // console.log("🔥 CALLING SSR API WITH:", ssrPayload, "url:", ssrEndpoint);
+
     const ssrResponse = await Http.httpRequestTBO(
       "POST",
       `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
