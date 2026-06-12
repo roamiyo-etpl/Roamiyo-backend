@@ -267,8 +267,11 @@ export class BookRepository extends Repository<Booking> {
             if (orderDetail.bookingStatus) {
                 const mappedStatus = this.mapBookingStatus(orderDetail.bookingStatus);
                 if (mappedStatus === BookingStatus.CONFIRMED) {
-                    booking.booking_status = BookingStatus.PENDING; // TBO will confirm the booking later
-                } else if (booking.booking_status !== BookingStatus.CONFIRMED) {
+                    booking.booking_status = BookingStatus.CONFIRMED;
+                } else if (
+                    booking.booking_status !== BookingStatus.CONFIRMED &&
+                    mappedStatus !== BookingStatus.FAILED
+                ) {
                     booking.booking_status = mappedStatus || BookingStatus.PENDING;
                 }
             }
@@ -725,11 +728,15 @@ export class BookRepository extends Repository<Booking> {
         return this.dataSource.getRepository(BookingAdditionalDetail).save(additionalDetail);
     }
 
-    /** [@Description: This method is used to verify the booking log]
+    /** [@Description: Update payment status on booking log after confirm outcome]
      * @author: Prashant Joshi at 13-10-2025 **/
-    async verifyBookingLog(reqParams): Promise<BookingLog> {
-        const { bookingLogId } = reqParams;
-        // Validate bookingLogId
+    async updateBookingLogPaymentStatus(reqParams: {
+        bookingLogId: string;
+        paymentStatus: PaymentStatus;
+        isVerified: boolean;
+        transactionId?: string;
+    }): Promise<BookingLog> {
+        const { bookingLogId, paymentStatus, isVerified, transactionId } = reqParams;
         if (!bookingLogId) {
             throw new Error('Booking log ID is required');
         }
@@ -738,11 +745,26 @@ export class BookRepository extends Repository<Booking> {
         if (!bookingLog) {
             throw new Error(`Booking log not found with ID: ${bookingLogId}`);
         }
-        bookingLog.is_verified = true;
-        bookingLog.payment_status = PaymentStatus.CAPTURED;
-        bookingLog.transaction_id = uuid();
+
+        bookingLog.payment_status = paymentStatus;
+        bookingLog.is_verified = isVerified;
+        if (paymentStatus === PaymentStatus.CAPTURED) {
+            bookingLog.transaction_id = transactionId || uuid();
+        }
         bookingLog.updated_at = new Date();
         return this.dataSource.getRepository(BookingLog).save(bookingLog);
+    }
+
+    /** [@Description: This method is used to verify the booking log]
+     * @author: Prashant Joshi at 13-10-2025 **/
+    async verifyBookingLog(reqParams): Promise<BookingLog> {
+        const { bookingLogId, transactionId } = reqParams;
+        return this.updateBookingLogPaymentStatus({
+            bookingLogId,
+            paymentStatus: PaymentStatus.CAPTURED,
+            isVerified: true,
+            transactionId,
+        });
     }
 
     /** [@Description: Maps passengers to paxes format for booking entity]
@@ -828,5 +850,26 @@ export class BookRepository extends Repository<Booking> {
         }
         booking.booking_status = BookingStatus.FAILED;
         return this.save(booking);
+    }
+
+    async BookingStatusConfirmed(reqParams): Promise<Booking> {
+        const { bookingId } = reqParams;
+        const booking = await this.findOne({ where: { booking_id: bookingId } });
+        if (!booking) {
+            throw new Error('Booking not found');
+        }
+        booking.booking_status = BookingStatus.CONFIRMED;
+        return this.save(booking);
+    }
+
+    async getBookingForReconcile(bookingId: string): Promise<Booking | null> {
+        return this.findOne({
+            where: { booking_id: bookingId },
+            relations: ['bookingAdditionalDetails'],
+        });
+    }
+
+    async getBookingLogByLogId(logId: string): Promise<BookingLog | null> {
+        return this.dataSource.getRepository(BookingLog).findOne({ where: { log_id: logId } });
     }
 }

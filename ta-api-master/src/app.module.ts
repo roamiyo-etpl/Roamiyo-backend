@@ -14,6 +14,8 @@ import { DumpModule } from './modules/dump/dump.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { mailConfig } from 'config/mail.config';
 import { BookingStatusUpdateScheduler } from './shared/schedulers/flight/booking-status-update.scheduler';
+import { TboAuthTokenRefreshScheduler } from './shared/schedulers/flight/tbo-auth-token-refresh.scheduler';
+import { ProviderMaster } from './shared/entities/provider-master.entity';
 
 @Module({
     imports: [
@@ -29,6 +31,7 @@ import { BookingStatusUpdateScheduler } from './shared/schedulers/flight/booking
 
         // Postgres main DB
         TypeOrmModule.forRootAsync(typeOrmConfig),
+        TypeOrmModule.forFeature([ProviderMaster]),
         HotelModule,
         GenericModule,
         HotelModule,
@@ -37,6 +40,10 @@ import { BookingStatusUpdateScheduler } from './shared/schedulers/flight/booking
         GenericCancelModule,
     ],
     controllers: [],
-    providers: [CommonScheduler, BookingStatusUpdateScheduler],
+    providers: [
+        CommonScheduler,
+        BookingStatusUpdateScheduler,
+        TboAuthTokenRefreshScheduler,
+    ],
 })
 export class AppModule {}

@@ -3,10 +3,12 @@ import { SearchModule } from './search/search.module';
 import { ProvidersModule } from './providers/providers.module';
 import { RoomModule } from './room/room.module';
 import { HotelBookModule } from './book/book.module';
+import { HotelCancelModule } from './cancel/cancel.module';
 
 @Module({
     controllers: [],
     providers: [],
-    imports: [SearchModule, ProvidersModule, RoomModule, HotelBookModule],
+    imports: [SearchModule, ProvidersModule, RoomModule, HotelBookModule, HotelCancelModule],
+    exports: [HotelCancelModule],
 })
 export class HotelModule {}

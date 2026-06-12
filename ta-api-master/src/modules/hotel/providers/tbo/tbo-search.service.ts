@@ -32,17 +32,17 @@ export class TboSearchService {
      * @returns Promise<HotelResult[]> - Array of hotel results
      */
     async search(searchRequest: any, providerCredentials: any): Promise<HotelResult[]> {
-        const searchReqId = uuid();
-        // console.log('providerCredentials in tbo-search.service', searchRequest, providerCredentials);
+        const searchReqId = searchRequest?.searchReqId || uuid();
+        console.log('[Hotel Search] providerCredentials:', providerCredentials);
         try {
             // Extract search parameters
             const { searchCriteria, currency, searchMetadata, activeProviders } = searchRequest;
-            console.log(currency,"currency check");
             const { checkIn, checkOut, rooms, location } = searchCriteria;
             const { guestNationality } = searchMetadata;
 
             // Get hotel data from database based on search type
             let hotelData = await this.getHotelDataByLocation(location);
+            console.log('hotelData count', hotelData?.length);
 
             if (!hotelData || hotelData.length === 0) {
                 return [];
@@ -71,7 +71,7 @@ export class TboSearchService {
             const endpoint = `${providerCredentials.hotel_url}/Search`;
 
             // console.log('auth in tbo-search.service', auth);
-            // console.log('endpoint in tbo-search.service', endpoint);
+            console.log('endpoint in tbo-search.service', endpoint);
             // Create search promises for each chunk
             const searchPromises = hotelChunks.map((chunk, index) => {
                 const chunkRequest = this.createTboSearchRequest({

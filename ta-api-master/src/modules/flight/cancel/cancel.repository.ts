@@ -2,11 +2,31 @@ import { Injectable } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { Booking, BookingStatus } from 'src/shared/entities/bookings.entity';
 import { Cancellation, CancellationStatusEnum, CancellationRequestType, CancellationTypeEnum } from 'src/shared/entities/cancellations.entity';
+import {
+    parseSupplierReferenceIds,
+    supplierReferenceIncludes,
+} from 'src/shared/utilities/flight/supplier-reference.utility';
 
 @Injectable()
 export class CancelRepository extends Repository<Booking> {
     constructor(private readonly dataSource: DataSource) {
         super(Booking, dataSource.createEntityManager());
+    }
+
+    async findBookingByInternalIdAndTboRef(params: {
+        booking_id: string;
+        bookingId: string | number;
+    }): Promise<Booking | null> {
+        const booking = await this.findOne({
+            where: { booking_id: params.booking_id.trim() },
+        });
+        if (!booking) {
+            return null;
+        }
+        if (!supplierReferenceIncludes(booking.supplier_reference_id, params.bookingId)) {
+            return null;
+        }
+        return booking;
     }
 
     /**
@@ -17,17 +37,18 @@ export class CancelRepository extends Repository<Booking> {
      */
     async createCancellationRecord(params: {
         bookingId: string;
+        booking_id: string;
         cancellationResponse: any;
         cancellationStatus: boolean; 
         requestType?: string;
         cancellationType?: string;
         ticketIds?: number[];
     }): Promise<Cancellation> {
-        const { bookingId, cancellationResponse, cancellationStatus, requestType, cancellationType, ticketIds } = params;
+        const { bookingId, booking_id, cancellationResponse, cancellationStatus, requestType, cancellationType, ticketIds } = params;
 
-        // Find the booking
-        const booking = await this.findOne({
-            where: { supplier_reference_id: bookingId },
+        const booking = await this.findBookingByInternalIdAndTboRef({
+            booking_id,
+            bookingId,
         });
 
         if (!booking) {
@@ -52,8 +73,14 @@ export class CancelRepository extends Repository<Booking> {
         cancellation.credit_note_created_on = cancellationResponse.creditNoteCreatedOn ? new Date(cancellationResponse.creditNoteCreatedOn) : null;
         cancellation.ticket_ids = ticketIds && ticketIds.length > 0 ? ticketIds : null;
 
-        // Update booking status to CANCELLED only for full cancellations
-        if (cancellationStatus && requestType === 'FullCancellation') {
+        const supplierRefCount = parseSupplierReferenceIds(
+            booking.supplier_reference_id,
+        ).length;
+        if (
+            cancellationStatus &&
+            requestType === 'FullCancellation' &&
+            supplierRefCount <= 1
+        ) {
             booking.booking_status = BookingStatus.CANCELLED;
             await this.save(booking);
         }
@@ -82,6 +109,7 @@ export class CancelRepository extends Repository<Booking> {
      */
     async updateCancellationDetails(params: {
         bookingId: string;
+        booking_id: string;
         cancellationResponse: any;
         cancellationStatus: boolean;
         requestType?: string;
@@ -126,28 +154,36 @@ export class CancelRepository extends Repository<Booking> {
     private mapCancellationStatus(status?: string | number): CancellationStatusEnum | null {
         if (status === undefined || status === null) return null;
         if (typeof status === 'number') {
-            // Guard for valid enum range 0..7
-            return status in CancellationStatusEnum ? (status as CancellationStatusEnum) : null;
+            if (
+                status >= CancellationStatusEnum.NotSet &&
+                status <= CancellationStatusEnum.Other &&
+                CancellationStatusEnum[status] !== undefined
+            ) {
+                return status as CancellationStatusEnum;
+            }
+            return null;
         }
 
         const normalized = (status || '').toString().trim();
         const map: Record<string, CancellationStatusEnum> = {
-            'Unassigned': CancellationStatusEnum.Unassigned,
-            'Assigned': CancellationStatusEnum.Assigned,
-            'Acknowledged': CancellationStatusEnum.Acknowledged,
-            'Completed': CancellationStatusEnum.Completed,
-            'Rejected': CancellationStatusEnum.Rejected,
-            'Closed': CancellationStatusEnum.Closed,
-            'Pending': CancellationStatusEnum.Pending,
-            'Other': CancellationStatusEnum.Other,
-            '0': CancellationStatusEnum.Unassigned,
-            '1': CancellationStatusEnum.Assigned,
-            '2': CancellationStatusEnum.Acknowledged,
-            '3': CancellationStatusEnum.Completed,
-            '4': CancellationStatusEnum.Rejected,
-            '5': CancellationStatusEnum.Closed,
-            '6': CancellationStatusEnum.Pending,
-            '7': CancellationStatusEnum.Other,
+            NotSet: CancellationStatusEnum.NotSet,
+            Unassigned: CancellationStatusEnum.Unassigned,
+            Assigned: CancellationStatusEnum.Assigned,
+            Acknowledged: CancellationStatusEnum.Acknowledged,
+            Completed: CancellationStatusEnum.Completed,
+            Rejected: CancellationStatusEnum.Rejected,
+            Closed: CancellationStatusEnum.Closed,
+            Pending: CancellationStatusEnum.Pending,
+            Other: CancellationStatusEnum.Other,
+            '0': CancellationStatusEnum.NotSet,
+            '1': CancellationStatusEnum.Unassigned,
+            '2': CancellationStatusEnum.Assigned,
+            '3': CancellationStatusEnum.Acknowledged,
+            '4': CancellationStatusEnum.Completed,
+            '5': CancellationStatusEnum.Rejected,
+            '6': CancellationStatusEnum.Closed,
+            '7': CancellationStatusEnum.Pending,
+            '8': CancellationStatusEnum.Other,
         };
 
         return map[normalized] ?? null;

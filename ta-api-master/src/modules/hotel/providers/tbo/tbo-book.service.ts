@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { HotelBookConfirmationResponse } from "../../book/interfaces/book-confirmation-response.interface";
 import { Http } from "src/shared/utilities/flight/http.utility";
+import { HotelProviderUtility } from "src/shared/utilities/hotel/hotel-provider.utility";
 import { TboAuthTokenService } from "./tbo-auth-token.service";
 
 @Injectable()
@@ -19,10 +20,8 @@ export class TboBookService {
         getTokenRequest['providerCred'] = JSON.parse(activeProviders[0].providerCredentials);
         getTokenRequest['headers'] = headers;
 
+        const responseMode = HotelProviderUtility.modeFromCredentials(providerCredentials);
 
-
-        // console.log(getTokenRequest, 'providerCred');
-        /* get authentication token*/
         try {
             const authToken = await this.tboAuthTokenService.getAuthToken(getTokenRequest);
             // console.log(authToken, "token");
@@ -97,6 +96,7 @@ export class TboBookService {
                     success: true,
                     errorCode: response.BookResult.Error.ErrorCode,
                     message: response.BookResult.HotelBookingStatus,
+                    mode: responseMode,
                     supplierRequest: tboBookRequest,
                     supplierResponse: response.BookResult,
                     supplierOrderDetails: responseBookingDetails.GetBookingDetailResult,
@@ -106,6 +106,7 @@ export class TboBookService {
                     success: false,
                     errorCode: response.BookResult.Error.ErrorCode,
                     message: response.BookResult.Error.ErrorMessage,
+                    mode: responseMode,
                     supplierRequest: tboBookRequest,
                     supplierResponse: '',
                     supplierOrderDetails: '',

@@ -2,6 +2,7 @@ import { HotelSearchBy, SortOrder } from 'src/shared/enums/hotel/hotel.enum';
 
 export interface InitiateResultResponse {
     searchReqId: string;
+    mode: string;
     status: 'inProgress' | 'completed' | 'failed' | 'expired';
     message: string;
     timestamp: string; // ISO date string

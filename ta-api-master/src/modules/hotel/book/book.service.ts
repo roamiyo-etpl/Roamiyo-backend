@@ -11,6 +11,7 @@ import { BookRepository } from './book.repository';
 import { v4 as uuid } from 'uuid';
 import { HotelPrice } from '../search/interfaces/initiate-result-response.interface';
 import { SupplierCredService } from 'src/modules/generic/supplier-credientials/supplier-cred.service';
+import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { BookingDetailResponse } from './interfaces/booking-detail-response.interface';
 
 @Injectable()
@@ -41,6 +42,7 @@ export class HotelBookService {
         };
         try {
             const roomQuote = await this.hotelRoomService.getHotelRoomQuote(roomValidationPayload, headers);
+            const responseMode = roomQuote.mode;
             // console.log(roomQuote, 'revalidateRoom');
 
             if (roomQuote.status !== 'AVAILABLE') {
@@ -87,6 +89,7 @@ export class HotelBookService {
             return {
                 success: true,
                 searchReqId: searchReqId,
+                mode: responseMode,
                 message: 'Book initiate successful',
                 bookingRefId: booking.booking_reference_id,
                 price: roomQuote.prices,
@@ -134,13 +137,8 @@ export class HotelBookService {
             /* Check active provider details */
             const providersData = await this.supplierCred.getActiveProviders(headers);
 
-            /* setting up only provider config in the response */
-            const activeProviders: any[] = providersData.map((data) => ({
-                providerId: data.provider_id,
-                code: data.code,
-                assignedId: data.provider_id, // Using provider_id as assignedId for now
-                providerCredentials: data.provider_credentials,
-            }));
+            const activeProviders = HotelProviderUtility.mapActiveProviders(providersData);
+            const responseMode = HotelProviderUtility.resolveResponseMode(activeProviders);
 
             Object.assign(originalBookRequestResponse, { activeProviders: activeProviders });
             // Object.assign(originalBookRequestResponse, { bookingId: bookReq.searchReqId });
@@ -150,8 +148,8 @@ export class HotelBookService {
             // console.log(booking);
             // return await this.providerBookService.bookConfirmation(originalBookRequestResponse, headers);
             const supplierDetailsResponse = await this.providerBookService.bookConfirmation(originalBookRequestResponse, headers);
-            // console.log(supplierDetails,'responseProvider');
-            const { success, errorCode, message, ...supplierDetails } = supplierDetailsResponse;
+            const { success, errorCode, message, mode: supplierMode, ...supplierDetails } = supplierDetailsResponse;
+            const bookingMode = supplierMode || responseMode;
             if (supplierDetailsResponse.success && supplierDetailsResponse.errorCode === 0) {
 
                 const apiResponse = {
@@ -163,6 +161,7 @@ export class HotelBookService {
                             bookingStatus: supplierDetails.supplierResponse.HotelBookingStatus,
                             bookingRefId: bookingRefId,
                             searchReqId: searchReqId,
+                            mode: bookingMode,
                             supplierBookingId: supplierDetails.supplierResponse.BookingId,
                         },
                     },
@@ -184,6 +183,7 @@ export class HotelBookService {
                     bookingStatus: supplierDetails.supplierResponse.HotelBookingStatus,
                     bookingRefId: bookingRefId,
                     searchReqId: searchReqId,
+                    mode: bookingMode,
                     supplierBookingId: supplierDetails.supplierResponse.BookingId,
                 }
             } else {
@@ -198,6 +198,7 @@ export class HotelBookService {
                     bookingStatus: 'failed',
                     bookingRefId: bookingRefId,
                     searchReqId: searchReqId,
+                    mode: bookingMode,
                     supplierBookingId: '',
                 };
 
@@ -210,6 +211,7 @@ export class HotelBookService {
                 bookingStatus: 'failed',
                 bookingRefId: bookingRefId,
                 searchReqId: searchReqId,
+                mode: '',
                 supplierBookingId: '',
             });
 
@@ -220,6 +222,9 @@ export class HotelBookService {
 
     async getBookingDetails(bookingRefId: string, headers: Record<string, string>): Promise<BookingDetailResponse> {
         try {
+            const providersData = await this.supplierCred.getActiveProviders(headers as unknown as Headers);
+            const fallbackMode = HotelProviderUtility.resolveResponseMode(HotelProviderUtility.mapActiveProviders(providersData));
+
             // Fetch booking details (simulating a database or external API call here)
             const bookingData = await this.bookRepository.getBookingAdditionalDetailByBookingRefId({ bookingRefId });
 
@@ -232,7 +237,10 @@ export class HotelBookService {
                 );
             }
 
-            return bookingData.api_response.orderDetails[0];
+            return {
+                ...bookingData.api_response.orderDetails[0],
+                mode: bookingData.api_response?.booking?.response?.mode || fallbackMode,
+            };
 
         } catch (error) {
             // Catch any errors and rethrow them

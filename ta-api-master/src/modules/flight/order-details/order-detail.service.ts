@@ -50,12 +50,17 @@ export class OrderDetailService {
                 }
             }
 
+            // TBO GetBookingDetails requires ticket passenger name, not contact person
+            const { firstName, lastName } = this.getTicketPassengerName(booking);
+
             // Prepare bookingDetails array for provider request (each order has its own pnr/orderNo)
             const bookingDetailsArray = orderDetailsData.map((order) => ({
                 pnr: order.pnr,
                 orderNo: order.orderNo,
-                firstName: booking.contact_details.firstName,
-                lastName: booking.contact_details.lastName,
+                // firstName: booking.contact_details.firstName,
+//                 lastName: booking.contact_details.lastName,
+                firstName,
+                lastName,
             }));
 
             // Call provider API
@@ -64,21 +69,63 @@ export class OrderDetailService {
                 headers: { 'ip-address': '127.0.0.1' },
             });
 
-            // Determine final booking status
-            const bookingStatus = orderDetails?.[0]?.bookingStatus || 'PENDING';
+            // Cron is a refresh job: only upgrade PENDING → CONFIRMED.
+            // NEVER write FAILED here — a read failure is not a booking failure.
+            if (!Array.isArray(orderDetails) || orderDetails.length === 0) {
+                continue;
+            }
 
-            await this.orderDetailRepository.updateBookingStatus(booking.booking_id, BookingStatus[bookingStatus.toUpperCase() as keyof typeof BookingStatus]);
+            const anyReadFailed = orderDetails.some(
+                (o: any) => o?.error === true || String(o?.bookingStatus).toUpperCase() === 'FAILED',
+            );
+            if (anyReadFailed) {
+                console.warn(`[Cron] Skipping booking ${booking.booking_id}: TBO read failed for one or more legs.`);
+                continue;
+            }
+
+            const allLegsConfirmed = orderDetails.every(
+                (o: any) => String(o?.bookingStatus).toUpperCase() === 'CONFIRMED',
+            );
+
+            if (allLegsConfirmed) {
+                await this.orderDetailRepository.updateBookingStatus(booking.booking_id, BookingStatus.CONFIRMED);
+            }
         }
 
         return;
     }
 
     createOrderDetailRequest(booking, bookingDetails: any[]) {
+        const storedMode = booking.bookingAdditionalDetails?.api_response?.booking?.response?.mode;
+        const mode = storedMode ? storedMode.split('-').pop().toLowerCase() : 'Test';
+
         return {
             providerCode: booking.supplier_name,
-            mode: 'Test',
+            mode,
             bookingDetails, // each has pnr, orderNo, names
             searchReqId: booking.search_id,
+        };
+    }
+
+    /** Lead passenger on ticket — TBO rejects GetBookingDetails when contact name differs from pax name. */
+    private getTicketPassengerName(booking: Booking): { firstName: string; lastName: string } {
+        const fromPaxes = booking.paxes?.[0]?.adult?.data?.[0];
+        if (fromPaxes?.firstName && fromPaxes?.lastName) {
+            return { firstName: fromPaxes.firstName, lastName: fromPaxes.lastName };
+        }
+
+        const bookRequest = booking.bookingAdditionalDetails?.api_response?.booking?.request;
+        const passengerDetail = bookRequest?.passengers?.[0]?.passengerDetail;
+        if (passengerDetail?.firstName && passengerDetail?.lastName) {
+            return { firstName: passengerDetail.firstName, lastName: passengerDetail.lastName };
+        }
+
+        console.warn(
+            `[OrderDetail] Falling back to contact_details for booking ${booking.booking_id} — passenger name not found in paxes or api_response`,
+        );
+        return {
+            firstName: booking.contact_details?.firstName ?? '',
+            lastName: booking.contact_details?.lastName ?? '',
         };
     }
 

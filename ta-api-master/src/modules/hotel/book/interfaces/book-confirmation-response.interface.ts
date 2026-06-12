@@ -2,6 +2,7 @@ export class HotelBookConfirmationResponse {
     success: boolean;
     message: string;
     searchReqId: string;
+    mode: string;
     bookingRefId: string;
     supplierBookingId: string;
     bookingStatus: string;

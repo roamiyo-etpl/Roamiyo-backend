@@ -8,6 +8,7 @@ import { Generic } from 'src/shared/utilities/flight/generic.utility';
 import { DateUtility } from 'src/shared/utilities/flight/date.utility';
 import { SupplierCredService } from 'src/modules/generic/supplier-credientials/supplier-cred.service';
 import { CachingUtility } from 'src/shared/utilities/common/caching.utility';
+import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -36,11 +37,8 @@ export class SearchService {
             /* Check active provider details */
             const providersData = await this.supplierCred.getActiveProviders(headers);
 
-            /* setting up only provider config in the response */
-            const activeProviders: any[] = providersData.map((data) => ({
-                providerId: data.provider_id,
-                providerCredentials: typeof data.provider_credentials === 'string' ? JSON.parse(data.provider_credentials) : data.provider_credentials,
-            }));
+            const activeProviders = HotelProviderUtility.mapActiveProviders(providersData, true);
+            const responseMode = HotelProviderUtility.resolveResponseMode(activeProviders);
 
             Object.assign(apiReqData, { activeProviders: activeProviders });
             apiReqData['searchReqId'] = uuidv4();
@@ -57,7 +55,7 @@ export class SearchService {
                     by: apiReqData.sort.by,
                     order: apiReqData.sort.order,
                 },
-            });
+            }, responseMode);
 
             const cacheData = {
                 ...searchResponse,
@@ -76,6 +74,8 @@ export class SearchService {
     async searchCheckResults(searchCheckResultsRequest: HotelSearchCheckResultsDto, headers: Headers): Promise<InitiateResultResponse> {
         try {
             const { searchReqId, sort } = searchCheckResultsRequest;
+            const providersData = await this.supplierCred.getActiveProviders(headers);
+            const fallbackMode = HotelProviderUtility.resolveResponseMode(HotelProviderUtility.mapActiveProviders(providersData));
 
             // Get cached search results using searchReqId
             const cachedData = await this.cachingUtility.getCachedDataBySearchReqId(searchReqId);
@@ -89,6 +89,7 @@ export class SearchService {
                     sort,
                     'completed',
                     'No search results found or search results expired. Please perform a new search.',
+                    fallbackMode,
                 );
             }
 
@@ -104,6 +105,7 @@ export class SearchService {
                     sort,
                     'expired',
                     'Your search session has expired. Please perform a new search.',
+                    fallbackMode,
                 );
             }
 
@@ -116,6 +118,7 @@ export class SearchService {
                     sort,
                     'expired',
                     'Your search session has expired or is invalid. Please perform a new search.',
+                    searchResponse?.mode || fallbackMode,
                 );
             }
 
@@ -131,7 +134,7 @@ export class SearchService {
                     by: sort.by,
                     order: sort.order,
                 },
-            });
+            }, searchResponse.mode || fallbackMode);
 
             return completeResponse;
         } catch (error) {
@@ -150,13 +153,15 @@ export class SearchService {
         try {
             const { searchReqId, sort, pagination } = filtrationRequest;
             let { filters } = filtrationRequest;
+            const providersData = await this.supplierCred.getActiveProviders(headers);
+            const fallbackMode = HotelProviderUtility.resolveResponseMode(HotelProviderUtility.mapActiveProviders(providersData));
 
             // Get cached search results using searchReqId
             const cachedData = await this.cachingUtility.getCachedDataBySearchReqId(searchReqId);
 
             // Handle no cached data or expired data
             if (!cachedData || !cachedData.data) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'completed', 'No search results found or search results expired. Please perform a new search.');
+                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'completed', 'No search results found or search results expired. Please perform a new search.', fallbackMode);
             }
 
             // Parse cached data
@@ -164,12 +169,12 @@ export class SearchService {
             try {
                 searchResponse = JSON.parse(cachedData.data);
             } catch (parseError) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'expired', 'Your search session has expired. Please perform a new search.');
+                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'expired', 'Your search session has expired. Please perform a new search.', fallbackMode);
             }
 
             // Validate search response structure
             if (!searchResponse || !searchResponse.results || !Array.isArray(searchResponse.results)) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'expired', 'Your search session has expired or is invalid. Please perform a new search.');
+                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'expired', 'Your search session has expired or is invalid. Please perform a new search.', searchResponse?.mode || fallbackMode);
             }
 
             // Get ALL results from cache (not paginated)
@@ -206,6 +211,7 @@ export class SearchService {
             // Create complete response with paginated results
             const completeResponse: InitiateResultResponse = {
                 searchReqId,
+                mode: searchResponse.mode || fallbackMode,
                 status: 'completed' as const,
                 message: `Found ${totalFilteredResults} hotels matching your criteria`,
                 timestamp: DateUtility.toISOString(),
@@ -259,9 +265,10 @@ export class SearchService {
      * @param message - Response message
      * @returns Empty InitiateResultResponse object
      */
-    private createEmptyResponse(searchReqId: string, pagination: any, filters: any, sort: any, status: 'completed' | 'expired', message: string): InitiateResultResponse {
+    private createEmptyResponse(searchReqId: string, pagination: any, filters: any, sort: any, status: 'completed' | 'expired', message: string, mode: string): InitiateResultResponse {
         return {
             searchReqId,
+            mode,
             status,
             message,
             timestamp: DateUtility.toISOString(),
@@ -310,7 +317,7 @@ export class SearchService {
      * @param searchReq - Original search request
      * @returns Complete InitiateResultResponse object
      */
-    private createCompleteResponse(results: InitiateResultResponse['results'], searchReqId: string, searchReq: any): InitiateResultResponse {
+    private createCompleteResponse(results: InitiateResultResponse['results'], searchReqId: string, searchReq: any, mode: string): InitiateResultResponse {
         // Extract pagination parameters
         const page = parseInt(searchReq.page) || 1;
         const limit = parseInt(searchReq.limit) || 10;
@@ -318,6 +325,7 @@ export class SearchService {
         if (!results || results.length === 0) {
             return {
                 searchReqId,
+                mode,
                 status: 'completed' as const,
                 message: 'No hotels found',
                 timestamp: DateUtility.toISOString(),
@@ -369,6 +377,7 @@ export class SearchService {
 
         return {
             searchReqId,
+            mode,
             status: 'completed' as const,
             message: 'Search completed successfully',
             timestamp: DateUtility.toISOString(),

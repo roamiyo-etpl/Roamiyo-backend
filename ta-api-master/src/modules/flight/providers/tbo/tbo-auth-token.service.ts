@@ -64,8 +64,10 @@ export class TboAuthTokenService {
           folderName: "auth",
           logId: null,
           title: "Auth-TBO",
-          searchReqId: searchRequest?.searchReqId,
-          bookingReferenceId: null,
+          searchReqId:
+            searchRequest?.searchReqId ??
+            searchRequest?.tokenReqData?.searchReqId,
+          bookingReferenceId: searchRequest?.bookingReferenceId ?? null,
         });
       }
       return authToken;
@@ -123,8 +125,10 @@ export class TboAuthTokenService {
         folderName: "auth",
         logId: null,
         title: "Auth-TBO",
-        searchReqId: searchRequest?.searchReqId,
-        bookingReferenceId: null,
+        searchReqId:
+          searchRequest?.searchReqId ??
+          searchRequest?.tokenReqData?.searchReqId,
+        bookingReferenceId: searchRequest?.bookingReferenceId ?? null,
       });
       if (sessionData.Status == 1 && sessionData.TokenId != "") {
         return sessionData.TokenId;

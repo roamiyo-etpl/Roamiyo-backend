@@ -278,6 +278,15 @@ export class GetCancellationChargesRequestDto {
 
     @ApiProperty({ description: 'Booking mode (5 for API)', required: false })
     BookingMode?: number;
+
+    @ApiProperty({ description: 'Ticket IDs for partial cancellation', required: false })
+    TicketId?: number[] | string;
+
+    @ApiProperty({ description: 'Sectors for partial cancellation', required: false })
+    Sectors?: Array<{
+        Origin: string;
+        Destination: string;
+    }>;
 }
 
 /**

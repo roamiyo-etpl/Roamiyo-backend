@@ -2,15 +2,17 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 import { Booking } from './bookings.entity';
 
 // Enums
+/** TBO ChangeRequestStatus (GetChangeRequestStatus / TicketCRInfo) */
 export enum CancellationStatusEnum {
-    Unassigned = 0,
-    Assigned = 1,
-    Acknowledged = 2,
-    Completed = 3,
-    Rejected = 4,
-    Closed = 5,
-    Pending = 6,
-    Other = 7,
+    NotSet = 0,
+    Unassigned = 1,
+    Assigned = 2,
+    Acknowledged = 3,
+    Completed = 4,
+    Rejected = 5,
+    Closed = 6,
+    Pending = 7,
+    Other = 8,
 }
 
 export enum CancellationRequestType {

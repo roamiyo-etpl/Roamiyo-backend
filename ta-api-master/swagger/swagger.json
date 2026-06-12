@@ -904,6 +904,74 @@
         ]
       }
     },
+    "/flight/book/reconcile": {
+      "post": {
+        "operationId": "BookController_bookingReconcile",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookReconcileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Entity not found"
+          },
+          "422": {
+            "description": "Unprocessable entity"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Reconcile booking and payment status from database",
+        "tags": [
+          "Flight"
+        ]
+      }
+    },
     "/flight/revalidate": {
       "post": {
         "operationId": "RevalidateController_revalidate",
@@ -2101,6 +2169,7 @@
     },
     "/cancellation-charges": {
       "post": {
+        "description": "Flight: returns TBO refund/cancellation charge estimate before confirm. Use FullCancellation or PartialCancellation; partial requires supplierParams.sectors or ticketIds. See docs/cancellation-charges-api.md. Hotel charges are not supported here — use the payment service. Hotel cancel: POST /cancel — see docs/hotel-cancellation-api.md.",
         "operationId": "GenericCancelController_getCancellationCharges",
         "parameters": [
           {
@@ -2188,7 +2257,7 @@
             "description": "Internal server error"
           }
         },
-        "summary": "Generic cancellation charges (flight/hotel)",
+        "summary": "Get estimated cancellation charges (flight only)",
         "tags": [
           "Cancel"
         ]
@@ -3402,6 +3471,12 @@
             "example": "2030-12-31",
             "format": "date"
           },
+          "issueDate": {
+            "type": "string",
+            "description": "Passport issue date (required by some international fares / TBO)",
+            "example": "2015-06-20",
+            "format": "date"
+          },
           "country": {
             "type": "string",
             "description": "Country that issued the document",
@@ -3463,6 +3538,7 @@
               "documentType": "Passport",
               "documentNumber": "A1234567",
               "expiryDate": "2030-12-31",
+              "issueDate": "2015-06-20",
               "country": "US"
             },
             "allOf": [
@@ -3567,6 +3643,69 @@
           "mobile",
           "mobileCountryCode",
           "postalCode"
+        ]
+      },
+      "RouteDetails": {
+        "type": "object",
+        "properties": {
+          "airline": {
+            "type": "string",
+            "description": "Airline code",
+            "example": "AA"
+          },
+          "departureCode": {
+            "type": "string",
+            "description": "Departure airport code",
+            "example": "LGA"
+          },
+          "departureDate": {
+            "type": "string",
+            "description": "Departure date",
+            "example": "2026-01-15",
+            "format": "date"
+          },
+          "departureTime": {
+            "type": "string",
+            "description": "Departure time",
+            "example": "09:29 AM"
+          },
+          "arrivalCode": {
+            "type": "string",
+            "description": "Arrival airport code",
+            "example": "ORD"
+          },
+          "arrivalDate": {
+            "type": "string",
+            "description": "Arrival date",
+            "example": "2026-01-15",
+            "format": "date"
+          },
+          "arrivalTime": {
+            "type": "string",
+            "description": "Arrival time",
+            "example": "11:10 AM"
+          },
+          "bookingCode": {
+            "type": "string",
+            "description": "Booking class code",
+            "example": "Q"
+          },
+          "flightNum": {
+            "type": "string",
+            "description": "Flight number",
+            "example": "3234"
+          }
+        },
+        "required": [
+          "airline",
+          "departureCode",
+          "departureDate",
+          "departureTime",
+          "arrivalCode",
+          "arrivalDate",
+          "arrivalTime",
+          "bookingCode",
+          "flightNum"
         ]
       },
       "GSTDetails": {
@@ -3745,6 +3884,13 @@
             },
             "type": "array"
           },
+          "selectedSegment": {
+            "description": "Segments for the current split-RT booking leg (TBO). When set, SSR is restricted to these flights so return baggage is not sent on the outbound Ticket request.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteDetails"
+            }
+          },
           "gst": {
             "description": "GST details (optional; may be required for some fares/suppliers). Blank strings are normalized before TBO.",
             "example": {
@@ -3779,6 +3925,11 @@
                 ]
               }
             }
+          },
+          "isAllowBookingWithoutSeat": {
+            "type": "boolean",
+            "description": "Deprecated / ignored for IndiGo: when FareQuote `IsBookableIfSeatNotAvailable` is true, the API always sends `IsAllowBookingWithoutSeat: true` on Book/Ticket. Non-IndiGo: field has no effect.",
+            "example": true
           }
         },
         "required": [
@@ -3806,6 +3957,23 @@
             "type": "string",
             "description": "Booking log ID",
             "example": "1234567890"
+          }
+        },
+        "required": [
+          "bookingId",
+          "bookingLogId"
+        ]
+      },
+      "BookReconcileDto": {
+        "type": "object",
+        "properties": {
+          "bookingId": {
+            "type": "string",
+            "description": "Booking ID from initiate response"
+          },
+          "bookingLogId": {
+            "type": "string",
+            "description": "Booking log ID from initiate response"
           }
         },
         "required": [
@@ -4133,8 +4301,13 @@
           },
           "bookingId": {
             "type": "number",
-            "description": "Unique booking ID",
-            "example": 123456
+            "description": "TBO supplier booking id",
+            "example": 2131696
+          },
+          "booking_id": {
+            "type": "string",
+            "description": "Internal booking UUID (DB lookup only, not sent to TBO)",
+            "example": "2b52fc08-fde0-43e4-9f34-b9d65b1b00b5"
           },
           "requestType": {
             "type": "string",
@@ -4154,11 +4327,19 @@
                 "$ref": "#/components/schemas/SupplierParamsDto"
               }
             ]
+          },
+          "segments": {
+            "description": "Alias for supplierParams.sectors (partial cancellation only). Prefer supplierParams.sectors.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SectorDto"
+            }
           }
         },
         "required": [
           "mode",
           "bookingId",
+          "booking_id",
           "requestType"
         ]
       },
@@ -4176,8 +4357,13 @@
           },
           "bookingId": {
             "type": "number",
-            "description": "Unique booking ID",
-            "example": 123456
+            "description": "TBO supplier booking id",
+            "example": 2131696
+          },
+          "booking_id": {
+            "type": "string",
+            "description": "Internal booking UUID (DB lookup only, not sent to TBO)",
+            "example": "2b52fc08-fde0-43e4-9f34-b9d65b1b00b5"
           },
           "requestType": {
             "type": "string",
@@ -4188,11 +4374,27 @@
               "PartialCancellation",
               "Reissuance"
             ]
+          },
+          "supplierParams": {
+            "description": "Required for PartialCancellation: sectors or ticketIds. Ignored for FullCancellation.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SupplierParamsDto"
+              }
+            ]
+          },
+          "segments": {
+            "description": "Alias for supplierParams.sectors (partial cancellation only). Prefer supplierParams.sectors.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SectorDto"
+            }
           }
         },
         "required": [
           "mode",
           "bookingId",
+          "booking_id",
           "requestType"
         ]
       }
