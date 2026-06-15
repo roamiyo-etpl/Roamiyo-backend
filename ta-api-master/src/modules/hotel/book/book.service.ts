@@ -95,14 +95,18 @@ export class HotelBookService {
                 price: roomQuote.prices,
                 // price: {} as unknown as HotelPrice
             };
-        } catch (error) {
-            this.logger.error('Hotel Book failed:', error);
-            // return {
-            //     success: false,
-            //     searchReqId: searchReqId,
-            //     message: error.response.errors || 'Booking initiated failed',
-
-            // };
+        } catch (error: any) {
+            this.logger.error("Hotel Book failed");
+        
+            console.error("FULL ERROR:", JSON.stringify(error, null, 2));
+        
+            console.error("error.response:",
+                JSON.stringify(error?.response, null, 2));
+        
+            console.error("error.message:", error?.message);
+        
+            console.error("error.stack:", error?.stack);
+        
             throw error;
         }
     }
