@@ -114,26 +114,19 @@ export class HotelBookService {
     async bookConfirmation(bookReq: HotelBookConfirmationDto, headers: Headers): Promise<HotelBookConfirmationResponse> {
 
         const { bookingRefId, searchReqId, paymentLogId } = bookReq;
+        this.logger.log(`[bookConfirmation] start | bookingRefId=${bookingRefId} searchReqId=${searchReqId} paymentLogId=${paymentLogId}`);
 
         try {
 
             /* Get booking from database */
             const booking = await this.bookRepository.getBookingByBookingId({ bookingRefId: bookingRefId });
-            // console.log('Booking found:', booking.booking_reference_id);
-            // console.log('Booking found:', booking);
-
 
             /* Get booking log from database */
-            // console.log('bookReq.bookingLogId', bookReq.bookingLogId);
             const bookingLog = await this.bookRepository.getBookingLogByBookingLogId({ bookingRefId: bookingRefId });
-            // console.log('Booking log found:', bookingLog.data.originalBookRequest.passengers);
-            // console.log('Booking log found:', bookingLog.id);
 
             /* Verify booking log */
             await this.bookRepository.verifyBookingLog({ bookingRefId: bookingRefId });
-            // Retrieve original booking request from booking log
             const originalBookRequestResponse = bookingLog.data;
-            // console.log('originalBookRequestResponse', originalBookRequestResponse);
             if (!originalBookRequestResponse) {
                 throw new Error('Original booking request not found in booking log');
             }
@@ -145,12 +138,8 @@ export class HotelBookService {
             const responseMode = HotelProviderUtility.resolveResponseMode(activeProviders);
 
             Object.assign(originalBookRequestResponse, { activeProviders: activeProviders });
-            // Object.assign(originalBookRequestResponse, { bookingId: bookReq.searchReqId });
-            // Object.assign(originalBookRequestResponse, { searchReqId: bookReq.bookingId });
-            // Object.assign(originalBookRequestResponse, { bookingLogId: bookReq.bookingLogId });
 
-            // console.log(booking);
-            // return await this.providerBookService.bookConfirmation(originalBookRequestResponse, headers);
+            this.logger.log(`[bookConfirmation] calling supplier | bookingRefId=${bookingRefId}`);
             const supplierDetailsResponse = await this.providerBookService.bookConfirmation(originalBookRequestResponse, headers);
             const { success, errorCode, message, mode: supplierMode, ...supplierDetails } = supplierDetailsResponse;
             const bookingMode = supplierMode || responseMode;
@@ -174,13 +163,15 @@ export class HotelBookService {
                     ]
                 }
 
-                /* Update booking with supplier details including order details and original request */
                 await this.bookRepository.updateBookingWithSupplierDetails({
                     bookingId: booking.booking_id,
-                    supplierDetails, // Processed BookResponse with orderDetail, orderDetails, etc.
-                    apiResponse: apiResponse, // Original client request            
-                    bookingItem: 1, // booking item number
+                    supplierDetails,
+                    apiResponse: apiResponse,
+                    bookingItem: 1,
                 });
+                this.logger.log(
+                    `[bookConfirmation] success | bookingRefId=${bookingRefId} supplierBookingId=${supplierDetails.supplierResponse.BookingId} status=${supplierDetails.supplierResponse.HotelBookingStatus}`,
+                );
                 return {
                     success: true,
                     message: 'Book confirmation successful',
@@ -193,9 +184,11 @@ export class HotelBookService {
             } else {
                 await this.bookRepository.updateBookingWithSupplierFailed({
                     bookingId: booking.booking_id,
-                    supplierDetails, // Processed BookResponse with Get booking Details etc.            
+                    supplierDetails,
                 });
-                // console.log(supplierDetails, "supplierDetails")
+                this.logger.warn(
+                    `[bookConfirmation] supplier failed | bookingRefId=${bookingRefId} errorCode=${errorCode} message=${message}`,
+                );
                 return {
                     success: false,
                     message: message,
@@ -209,6 +202,9 @@ export class HotelBookService {
             }
 
         } catch (error) {
+            this.logger.error(
+                `[bookConfirmation] error | bookingRefId=${bookingRefId} searchReqId=${searchReqId} | ${error?.message || error}`,
+            );
             throw new BadRequestException({
                 success: false,
                 message: 'Booking confirmation failed',
@@ -225,30 +221,29 @@ export class HotelBookService {
 
 
     async getBookingDetails(bookingRefId: string, headers: Record<string, string>): Promise<BookingDetailResponse> {
+        this.logger.log(`[getBookingDetails] start | bookingRefId=${bookingRefId}`);
         try {
             const providersData = await this.supplierCred.getActiveProviders(headers as unknown as Headers);
             const fallbackMode = HotelProviderUtility.resolveResponseMode(HotelProviderUtility.mapActiveProviders(providersData));
 
-            // Fetch booking details (simulating a database or external API call here)
             const bookingData = await this.bookRepository.getBookingAdditionalDetailByBookingRefId({ bookingRefId });
 
-            // console.log(bookingData,"jjjj");
-            // If no booking data is found, throw a NotFound error
             if (!bookingData) {
+                this.logger.warn(`[getBookingDetails] not found | bookingRefId=${bookingRefId}`);
                 throw new HttpException(
                     `Booking not found with bookingRefId: ${bookingRefId}`,
                     HttpStatus.NOT_FOUND,
                 );
             }
 
+            this.logger.log(`[getBookingDetails] success | bookingRefId=${bookingRefId}`);
             return {
                 ...bookingData.api_response.orderDetails[0],
                 mode: bookingData.api_response?.booking?.response?.mode || fallbackMode,
             };
 
         } catch (error) {
-            // Catch any errors and rethrow them
-            console.error('Error in getBookingDetails service method:', error);
+            this.logger.error(`[getBookingDetails] error | bookingRefId=${bookingRefId} | ${error?.message || error}`);
             throw error;
         }
 

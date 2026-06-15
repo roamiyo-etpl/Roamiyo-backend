@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpException, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { HotelBookService } from './book.service';
 import { ApiHeaders, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HotelBookInitiateResponse } from './interfaces/book-initiate-response.interface';
@@ -75,17 +75,9 @@ export class HotelBookController {
     @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
     @HttpCode(HttpStatus.OK)
     async bookingDetails(
-        @Param('bookingRefId') bookingRefId: string,  // Extract bookingRefId from the route
+        @Param('bookingRefId') bookingRefId: string,
         @Headers() headers): Promise<BookingDetailResponse> {
-        try {
-            const bookingDetails = await this.bookService.getBookingDetails(bookingRefId, headers);
-
-            return bookingDetails;
-        } catch (error) {
-            // Log the error for debugging purposes
-            console.error('Error retrieving booking details:', error);
-            throw error;
-        }
+        return this.bookService.getBookingDetails(bookingRefId, headers);
     }
 
 
