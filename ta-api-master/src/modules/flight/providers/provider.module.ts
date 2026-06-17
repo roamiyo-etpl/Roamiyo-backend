@@ -23,9 +23,10 @@ import { SupplierLogUtility } from 'src/shared/utilities/flight/supplier-log.uti
 import { ConfigurationModule } from '../configuration/configuration.module';
 import { ProviderBalanceService } from './provider-balance.service';
 import { RevalidateResponseEntity } from 'src/shared/entities/revalidate-response.entity';
+import { SsrModule } from '../ssr/ssr.module';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([ProviderMaster, SearchResponse, RevalidateResponseEntity, ErrorLogs]), ConfigurationModule, ConfigModule],
+    imports: [TypeOrmModule.forFeature([ProviderMaster, SearchResponse, RevalidateResponseEntity, ErrorLogs]), ConfigurationModule, ConfigModule, SsrModule],
     providers: [
         ConfigurationService,
         ProviderRepoService,

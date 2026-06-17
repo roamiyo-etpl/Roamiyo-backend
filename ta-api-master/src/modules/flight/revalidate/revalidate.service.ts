@@ -7,10 +7,7 @@ import { ProviderRevalidateService } from '../providers/provider-revalidate.serv
 export class RevalidateService {
     constructor(private readonly providerRevalidateService: ProviderRevalidateService) {}
 
-    /** [@Description: This method is used to revalidate the flight]
-     * @author: Prashant Joshi at 29-09-2025 **/
     async revalidate(revalidateDto: RevalidateDto, headers: Headers): Promise<RevalidateResponse> {
-        let response = await this.providerRevalidateService.providerRevalidate(revalidateDto, headers);
-        return response;
+        return this.providerRevalidateService.providerRevalidate(revalidateDto, headers);
     }
 }

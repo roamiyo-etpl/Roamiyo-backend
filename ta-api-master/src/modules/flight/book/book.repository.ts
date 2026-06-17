@@ -235,6 +235,54 @@ export class BookRepository extends Repository<Booking> {
         return savedBooking;
     }
 
+    /** Patch order details asynchronously after confirmation when GetBookingDetails was deferred. */
+    async patchBookingOrderDetails(reqParams: {
+        bookingId: string;
+        orderDetails: unknown;
+        supplierOrderDetailResponse: unknown;
+    }): Promise<void> {
+        const { bookingId, orderDetails, supplierOrderDetailResponse } = reqParams;
+        const booking = await this.findOne({ where: { booking_id: bookingId } });
+        if (!booking) return;
+
+        const orderDetailsList = Array.isArray(orderDetails)
+            ? orderDetails
+            : orderDetails
+              ? [orderDetails]
+              : [];
+        const isRoundTrip = orderDetailsList.length > 1;
+
+        if (isRoundTrip) {
+            this.mapRoundTripOrderDetails(booking, orderDetailsList);
+        } else if (orderDetailsList[0] && !(orderDetailsList[0] as { error?: boolean }).error) {
+            this.mapSingleTripOrderDetails(booking, orderDetailsList[0]);
+        }
+
+        booking.updated_at = new Date();
+        await this.save(booking);
+
+        const existingDetail = await this.dataSource
+            .getRepository(BookingAdditionalDetail)
+            .findOne({ where: { booking_id: bookingId } });
+
+        if (!existingDetail) return;
+
+        const apiResponse = existingDetail.api_response ?? {};
+        existingDetail.api_response = {
+            ...apiResponse,
+            orderDetails: orderDetailsList,
+        };
+        if (supplierOrderDetailResponse) {
+            const supplierResponse = existingDetail.supplier_response ?? {};
+            existingDetail.supplier_response = {
+                ...supplierResponse,
+                orderDetailsSupplierResponse: supplierOrderDetailResponse,
+            };
+        }
+        existingDetail.updated_at = new Date();
+        await this.dataSource.getRepository(BookingAdditionalDetail).save(existingDetail);
+    }
+
     private mapRoundTripOrderDetails(booking: Booking, orderDetailsArray: any[]): void {
         const confirmedOrders = orderDetailsArray.filter(
             (orderDetail) => orderDetail?.bookingStatus?.toLowerCase() === 'confirmed' || orderDetail?.bookingStatus === BookingStatus.CONFIRMED || orderDetail?.bookingStatus === 'CONFIRMED',

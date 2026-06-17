@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { BookReconcileDto } from "./dtos/reconcile.dto";
 import {
   BookReconcileResponse,
@@ -31,7 +31,11 @@ import {
   isIndigoAirlineCodeList,
   resolveIsAllowBookingWithoutSeat,
 } from "src/shared/utilities/flight/tbo-indigo-seat.utility";
-
+import { flightBookingDebug } from "src/shared/utilities/flight/flight-booking-logger.utility";
+import {
+  getTboCallSummary,
+  runWithTboInstrumentationAsync,
+} from "src/shared/utilities/flight/tbo-api-instrumentation.utility";
 const BOOKING_STATUS_LABEL: Record<number, string> = {
   [BookingStatus.PENDING]: "PENDING",
   [BookingStatus.CONFIRMED]: "CONFIRMED",
@@ -77,6 +81,8 @@ const RECOMMENDED_POLL_UNTIL_MINUTES: Record<string, number> = {
 
 @Injectable()
 export class BookService {
+  private readonly logger = new Logger(BookService.name);
+
   constructor(
     private readonly providerBookService: ProviderBookService,
     private readonly bookRepository: BookRepository,
@@ -87,12 +93,19 @@ export class BookService {
    * @author: Prashant Joshi at 13-10-2025 **/
   async bookingInitiate(reqParams): Promise<BookInitiateResponse> {
     const { bookReq, headers } = reqParams;
+    return runWithTboInstrumentationAsync(
+      { searchReqId: bookReq?.searchReqId, phase: 'initiate' },
+      () => this.bookingInitiateInternal({ bookReq, headers }),
+    );
+  }
+
+  private async bookingInitiateInternal(reqParams): Promise<BookInitiateResponse> {
+    const { bookReq, headers } = reqParams;
     const userId = uuid();
     try {
       normalizeBookRequestGst(bookReq);
 
       let fare: Fare[] = [];
-      // Calculate the total count for each passenger type
       const adultCount = bookReq.passengers.filter(
         (p) => p.passengerType === "ADT",
       ).length;
@@ -103,14 +116,13 @@ export class BookService {
         (p) => p.passengerType === "INF",
       ).length;
 
-      console.log("👥 Passenger Summary:", {
+      flightBookingDebug('Book initiate passenger summary', {
         totalPassengers: bookReq.passengers.length,
         adults: adultCount,
         children: childrenCount,
         infants: infantCount,
       });
 
-      // Build paxes array with the correct counts
       bookReq.paxes = [
         {
           adult: adultCount,
@@ -119,20 +131,19 @@ export class BookService {
         },
       ];
 
-      console.log("===== BOOK INITIATE START =====");
-      console.log("searchReqId:", bookReq.searchReqId);
-      console.log("solutionId:", bookReq.solutionId);
-      console.log("tripType:", bookReq.airTripType);
+      flightBookingDebug('Book initiate start', {
+        searchReqId: bookReq.searchReqId,
+        solutionId: bookReq.solutionId,
+        tripType: bookReq.airTripType,
+      });
 
-      /* Call revalidate service to revalidate the booking */
       const revalidateResult = await this.revalidateService.revalidate(
         bookReq,
         headers,
       );
-      console.log(
-        "REVALIDATE RESPONSE:",
-        revalidateResult?.error ? "FAILED" : "SUCCESS",
-      );
+      flightBookingDebug('Revalidate result', {
+        success: !revalidateResult?.error,
+      });
       if (revalidateResult.error) {
         return {
           error: true,
@@ -172,26 +183,21 @@ export class BookService {
       const ssrTotal = mealFare + seatFare + baggageFare;
 
       fare = revalidateResult.route?.fare as unknown as Fare[];
-      console.log("💰 FINAL FARE ARRAY:", JSON.stringify(fare, null, 2));
       const tboFare = fare?.[0]?.searchTotalFare ?? 0;
       const payableAmount = tboFare + ssrTotal;
 
       fare = fare.map((f) => ({
         ...f,
       }));
-      console.log(
-        "💰 RAW FARE FROM REVALIDATE:",
-        JSON.stringify(revalidateResult.route?.fare, null, 2),
-      );
 
-      console.log(
-        "💰 FINAL TOTAL FARE (searchTotalFare):",
-        fare?.[0]?.searchTotalFare,
-      );
+      flightBookingDebug('Book initiate fare', {
+        searchTotalFare: fare?.[0]?.searchTotalFare,
+        payableAmount,
+      });
 
       const mwrLogId = Generic.generateRandomString(10);
 
-      console.log("Saving booking in DB...");
+      flightBookingDebug('Saving booking in DB');
       const booking = await this.bookRepository.insertBooking({
         booking: bookReq,
         userId,
@@ -223,7 +229,9 @@ export class BookService {
 
       // STORE ONLY IF SSR EXISTS
       if (Object.keys(formattedSSR).length > 0) {
-        console.log("Formatted SSR::::::::::::", JSON.stringify(formattedSSR));
+        flightBookingDebug('Storing formatted SSR', {
+          passengerKeys: Object.keys(formattedSSR).length,
+        });
 
         await this.bookRepository.update(
           { booking_id: booking.booking_id },
@@ -261,7 +269,11 @@ export class BookService {
           },
         },
       });
-      console.log("===== BOOK INITIATE SUCCESS =====");
+      const summary = getTboCallSummary();
+      if (summary) {
+        flightBookingDebug('Book initiate TBO call summary', summary);
+      }
+      flightBookingDebug('Book initiate success', { bookingId: booking.booking_id });
 
       return {
         error: false,
@@ -276,7 +288,7 @@ export class BookService {
         isAllowBookingWithoutSeat: resolvedAllowWithoutSeat,
       };
     } catch (error) {
-      console.log(error);
+      flightBookingDebug('Book initiate failed', error?.message);
       return {
         error: true,
         message: "Booking initiated failed",
@@ -293,25 +305,31 @@ export class BookService {
    * @author: Prashant Joshi at 13-10-2025 **/
   async bookingConfirmation(reqParams): Promise<BookResponse> {
     const { bookReq, headers } = reqParams;
+    return runWithTboInstrumentationAsync(
+      { searchReqId: bookReq?.searchReqId, phase: 'confirm' },
+      () => this.bookingConfirmationInternal({ bookReq, headers }),
+    );
+  }
+
+  private async bookingConfirmationInternal(reqParams): Promise<BookResponse> {
+    const { bookReq, headers } = reqParams;
     let booking: Booking = new Booking();
     try {
-      console.log("===== BOOK CONFIRMATION START =====");
-      console.log("bookingId:", bookReq.bookingId);
-      console.log("bookingLogId:", bookReq.bookingLogId);
-
-      /* Get booking from database */
-      booking = await this.bookRepository.getBookingByBookingId({
+      flightBookingDebug('Book confirmation start', {
         bookingId: bookReq.bookingId,
-      });
-      //   console.log("Booking found:", booking.booking_id);
-
-      /* Get booking log from database */
-      console.log("Booking fetched:", booking?.booking_id);
-      const bookingLog = await this.bookRepository.getBookingLogByBookingLogId({
         bookingLogId: bookReq.bookingLogId,
       });
-      //   console.log("Booking log found:", bookingLog.id);
-      // Retrieve original booking request from booking log
+
+      const [bookingResult, bookingLog] = await Promise.all([
+        this.bookRepository.getBookingByBookingId({
+          bookingId: bookReq.bookingId,
+        }),
+        this.bookRepository.getBookingLogByBookingLogId({
+          bookingLogId: bookReq.bookingLogId,
+        }),
+      ]);
+      booking = bookingResult;
+
       const originalBookRequest: BookDto = bookingLog.data?.originalBookRequest;
       //   console.log("originalBookRequest", originalBookRequest);
       if (!originalBookRequest) {
@@ -320,16 +338,10 @@ export class BookService {
 
       normalizeBookRequestGst(originalBookRequest);
 
-      console.log("Calling PROVIDER BOOK API (TBO)...");
+      flightBookingDebug('Calling provider book API');
 
-      // ===== FETCH SSR FROM DB =====
       const ssrData = booking?.ssr_response;
-      console.log(
-        "SSR fetched from DB:::::::::::::::",
-        JSON.stringify(ssrData),
-      );
 
-      // ===== ADD SSR INTO REQUEST =====
       const updatedBookRequest = {
         ...originalBookRequest,
         ssr: ssrData,
@@ -341,19 +353,19 @@ export class BookService {
         logId: bookReq.bookingLogId,
       });
 
-      /* Call provider API to confirm booking */
-      // const supplierDetails = await this.providerBookService.providerBook({
-      //   bookReq: originalBookRequest,
-      //   headers,
-      //   logId: bookReq.bookingLogId,
-      // });
-      //   console.log("supplierDetails", supplierDetails);
+      flightBookingDebug('Provider book response', {
+        error: supplierDetails?.error,
+        orderCount: supplierDetails?.orderDetail?.length ?? 0,
+      });
 
-      console.log(
-        "TBO BOOK RESPONSE:",
-        supplierDetails?.error ? "FAILED" : "SUCCESS",
-      );
-      console.log("OrderDetails:", supplierDetails?.orderDetail);
+      if (!supplierDetails.error) {
+        void this.fetchOrderDetailsInBackground({
+          bookReq: updatedBookRequest,
+          supplierDetails,
+          bookingId: booking.booking_id,
+          headers,
+        });
+      }
 
       const isRefundablePerPnr = this.computeIsRefundablePerPnr(
         supplierDetails.orderDetails,
@@ -374,9 +386,8 @@ export class BookService {
         // orderDetails: supplierDetails.orderDetails ?? null,
       });
 
-      console.log("Updating booking with supplier response...");
+      flightBookingDebug('Updating booking with supplier response');
 
-      /* Update booking with supplier details including order details and original request */
       await this.bookRepository.updateBookingWithSupplierDetails({
         bookingId: booking.booking_id,
         supplierDetails, // Processed BookResponse with orderDetail, orderDetails, etc.
@@ -418,7 +429,11 @@ export class BookService {
           isVerified: true,
         });
       }
-      console.log("===== BOOK CONFIRMATION END =====");
+      const summary = getTboCallSummary();
+      if (summary) {
+        flightBookingDebug('Book confirmation TBO call summary', summary);
+      }
+      flightBookingDebug('Book confirmation end');
       return response;
     } catch (error) {
       console.error("Booking confirmation error:", error);
@@ -721,6 +736,31 @@ export class BookService {
       const legStatus = String(order?.orderStatus ?? "").toUpperCase();
       return legStatus === "CONFIRMED" || legStatus === "BOOKED";
     });
+  }
+
+  private fetchOrderDetailsInBackground(reqParams: {
+    bookReq: BookDto;
+    supplierDetails: BookResponse;
+    bookingId: string;
+    headers: Headers;
+  }): void {
+    const { bookReq, supplierDetails, bookingId, headers } = reqParams;
+    void this.providerBookService
+      .fetchOrderDetails({ bookReq, bookResult: supplierDetails, headers })
+      .then(async (detail) => {
+        if (!detail) return;
+        await this.bookRepository.patchBookingOrderDetails({
+          bookingId,
+          orderDetails: detail.orderDetails,
+          supplierOrderDetailResponse: detail.supplierOrderDetailResponse,
+        });
+        flightBookingDebug('Async order details patched', { bookingId });
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Async order detail fetch failed for ${bookingId}: ${err?.message ?? err}`,
+        ),
+      );
   }
 
   /**

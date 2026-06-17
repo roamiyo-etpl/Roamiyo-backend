@@ -673,6 +673,20 @@
         ]
       }
     },
+    "/flight/ssr/seat-map": {
+      "post": {
+        "operationId": "SsrController_getSeatMap",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Ssr"
+        ]
+      }
+    },
     "/flight/order-detail": {
       "post": {
         "operationId": "OrderDetailController_getOrderDetails",
@@ -1105,20 +1119,6 @@
         "summary": "Check balance",
         "tags": [
           "Flight"
-        ]
-      }
-    },
-    "/flight/ssr/seat-map": {
-      "post": {
-        "operationId": "SsrController_getSeatMap",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Ssr"
         ]
       }
     },
@@ -2162,6 +2162,102 @@
           }
         },
         "summary": "Generic cancel API (flight/hotel)",
+        "tags": [
+          "Cancel"
+        ]
+      }
+    },
+    "/cancel/status": {
+      "post": {
+        "description": "Hotel only. Polls TBO until Processed/Rejected or timeout. Use when POST /cancel returns pendingCompletion: true. See docs/hotel-cancellation-api.md.",
+        "operationId": "GenericCancelController_getCancelStatus",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "in": "header",
+            "description": "Please enter preferred language. (e.g., english,french)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          },
+          {
+            "name": "Club-Id",
+            "in": "header",
+            "description": "Please enter club id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Device-Information",
+            "in": "header",
+            "description": "Please enter device-information id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HotelCancelStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Entity not found"
+          },
+          "422": {
+            "description": "Unprocessable entity"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Poll hotel cancellation status (TBO GetChangeRequestStatus)",
         "tags": [
           "Cancel"
         ]
@@ -4341,6 +4437,45 @@
           "bookingId",
           "booking_id",
           "requestType"
+        ]
+      },
+      "HotelCancelStatusDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "Cancellation mode",
+            "enum": [
+              "flight",
+              "hotel"
+            ],
+            "example": "hotel"
+          },
+          "booking_id": {
+            "type": "string",
+            "description": "Internal booking UUID",
+            "example": "cf1b7a0f-3fba-45ad-929d-d51bf8c262ce"
+          },
+          "bookingId": {
+            "type": "number",
+            "description": "TBO supplier booking id",
+            "example": 2139857
+          },
+          "changeRequestId": {
+            "type": "number",
+            "description": "TBO ChangeRequestId from POST /cancel response",
+            "example": 404404
+          },
+          "cancellationId": {
+            "type": "string",
+            "description": "Existing cancellations row UUID (optional — speeds up DB update)"
+          }
+        },
+        "required": [
+          "mode",
+          "booking_id",
+          "bookingId",
+          "changeRequestId"
         ]
       },
       "GenericGetCancellationChargesDto": {

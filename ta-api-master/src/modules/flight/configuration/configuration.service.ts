@@ -2,6 +2,7 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ModuleType, ProviderMaster } from 'src/shared/entities/provider-master.entity';
 import { DateUtility } from 'src/shared/utilities/flight/date.utility';
+import { flightBookingDebug } from 'src/shared/utilities/flight/flight-booking-logger.utility';
 import { Repository } from 'typeorm';
 
 @Injectable()
@@ -22,23 +23,10 @@ export class ConfigurationService {
     /** [@Description: Get configuration]
      * @author: Prashant Joshi at 23-09-2025 **/
     async getConfiguration({ supplierCode, mode, module }): Promise<ProviderMaster | null> {
-
-        console.log('================ GET CONFIGURATION ================');
-
-        console.log('Incoming supplierCode =>', supplierCode);
-        console.log('Type of supplierCode =>', typeof supplierCode);
-
-        console.log('Incoming mode =>', mode);
-        console.log('Type of mode =>', typeof mode);
-
-        console.log('Incoming module =>', module);
-        console.log('Type of module =>', typeof module);
-        console.log('mode raw value =>', mode);
-        console.log('isNaN(mode) =>', isNaN(mode));
+        flightBookingDebug('getConfiguration', { supplierCode, mode, module });
         if (supplierCode != '') {
 
             if (mode == '') {
-                console.log('Executing query WITHOUT provider_mode');
                 return await this.providerRepository.findOne({
                     where: {
                         code: supplierCode,
@@ -83,7 +71,7 @@ export class ConfigurationService {
             const currentDate = DateUtility.currentDateOnlyIST();
             await this.providerRepository.update({ code: searchRequest.providerCred?.provider, module_type: module }, { authToken: newAuthToken, tokenUpdatedAt: currentDate });
         } catch (error) {
-            console.log(error);
+            flightBookingDebug('updateAuthToken error', error?.message);
             throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
         }
     }

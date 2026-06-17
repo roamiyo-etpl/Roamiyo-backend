@@ -517,7 +517,7 @@ export class TboCancellationService {
 
             // prod
             // const endpoint = `${providerCred.book_url}/rest/ReleasePNRRequest`;
-            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
+            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData), 'cancel');
 
             await this.writeCancellationSupplierLog({
                 fileName: `${logPrefix}-releasepnr-TBO`,
@@ -538,53 +538,6 @@ export class TboCancellationService {
      * Step 2: Send Change Request
      * Sends cancellation request (full or partial)
      */
-    // private async sendChangeRequest({ cancelReq, providerCred, authToken, headers, logPrefix }) {
-    //     try {
-    //         const requestData: SendChangeRequestDto = {
-    //             EndUserIp: resolveTboEndUserIp(headers as Record<string, unknown>),
-    //             TokenId: authToken,
-    //             BookingId: cancelReq.bookingId,
-    //             RequestType: this.generateRequestType(cancelReq.requestType),
-    //             CancellationType: this.generateCancellationType(cancelReq?.supplierParams?.cancellationType),
-    //             Remarks: ((cancelReq?.supplierParams?.remarks) || 'Cancellation requested via API').trim(),
-    //         };
-
-    //         this.applyPartialCancellationFields(requestData, cancelReq);
-
-    //         // dev
-    //         const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/SendChangeRequest`;
-
-    //         // prod url
-    //         // const endpoint = `${providerCred.book_url}/rest/SendChangeRequest`;
-    //         const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
-
-    //         await this.supplierLogUtility.generateLogFile({
-    //             fileName: `${logPrefix}-sendchangerequest-TBO`,
-    //             logData: { request: requestData, response },
-    //             folderName: 'cancellation',
-    //             logId: null,
-    //             title: 'Send-Change-Request-TBO',
-    //             searchReqId: null,
-    //             bookingReferenceId: cancelReq.bookingId.toString(),
-    //         });
-
-    //         const changeRequestId = response?.Response?.TicketCRInfo?.[0]?.ChangeRequestId;
-    //         const success = response?.Response?.ResponseStatus === 1;
-
-    //         return {
-    //             success,
-    //             changeRequestId,
-    //             response,
-    //         };
-    //     } catch (error) {
-    //         console.error('Send Change Request Error:', error);
-    //         return {
-    //             success: false,
-    //             changeRequestId: null,
-    //             error: error.message,
-    //         };
-    //     }
-    // }
 
     private async sendChangeRequest({
         cancelReq,
@@ -662,7 +615,8 @@ export class TboCancellationService {
             const response = await Http.httpRequestTBO(
                 'POST',
                 endpoint,
-                JSON.stringify(requestData)
+                JSON.stringify(requestData),
+                'cancel',
             );
 
             console.log("[SEND-CHANGE-REQUEST][STEP-4] RAW API RESPONSE:",
@@ -739,57 +693,6 @@ export class TboCancellationService {
      * Step 3: Get Change Request Status
      * Checks the status of the cancellation request
      */
-    // private async getChangeRequestStatus({ changeRequestId, providerCred, authToken, headers, logPrefix }) {
-    //     try {
-    //         const requestData: GetChangeRequestStatusRequestDto = {
-    //             EndUserIp: resolveTboEndUserIp(headers as Record<string, unknown>),
-    //             TokenId: authToken,
-    //             ChangeRequestId: changeRequestId,
-    //         };
-
-    //         // dev
-    //         const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetChangeRequestStatus`;
-
-    //         // prod
-    //         // const endpoint = `${providerCred.book_url}/rest/GetChangeRequestStatus`;
-
-    //         const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
-
-    //         // Some responses are wrapped inside a top-level `Response` object. Normalize it.
-    //         const res = (response && response.Response) ? response.Response : response;
-
-    //         // Log the request/response
-    //         await this.supplierLogUtility.generateLogFile({
-    //             fileName: `${logPrefix}-getchangerequeststatus-TBO`,
-    //             logData: { request: requestData, response: res },
-    //             folderName: 'cancellation',
-    //             logId: null,
-    //             title: 'Get-Change-Request-Status-TBO',
-    //             searchReqId: null,
-    //             bookingReferenceId: changeRequestId?.toString(),
-    //         });
-
-    //         return {
-    //             changeRequestId: res?.ChangeRequestId,
-    //             refundedAmount: res?.RefundedAmount || 0,
-    //             cancellationCharge: res?.CancellationCharge || 0,
-    //             serviceTaxOnRAF: res?.ServiceTaxOnRAF || 0,
-    //             changeRequestStatus: res?.ChangeRequestStatus || 0,
-    //             traceId: res?.TraceId,
-    //             responseStatus: res?.ResponseStatus || 0,
-    //             error: res?.Error,
-    //             creditNoteNo: res?.CreditNoteNo,
-    //             creditNoteCreatedOn: res?.CreditNoteCreatedOn,
-    //         };
-    //     } catch (error) {
-    //         console.error('Get Change Request Status Error:', error);
-    //         return {
-    //             changeRequestStatus: 0,
-    //             responseStatus: 2,
-    //             error: { ErrorCode: -1, ErrorMessage: error.message },
-    //         };
-    //     }
-    // }
 
     private async getChangeRequestStatus({
         changeRequestId,
@@ -843,7 +746,8 @@ export class TboCancellationService {
             const response = await Http.httpRequestTBO(
                 'POST',
                 endpoint,
-                JSON.stringify(requestData)
+                JSON.stringify(requestData),
+                'cancel',
             );
 
             console.log("[GET-CHANGE-STATUS][STEP-3] RAW API RESPONSE:",
@@ -1049,6 +953,7 @@ export class TboCancellationService {
                 'POST',
                 endpoint,
                 JSON.stringify(requestData),
+                'cancel',
             );
 
             console.log(
@@ -1339,7 +1244,7 @@ export class TboCancellationService {
 
             // prod
             // const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
-            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
+            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData), 'cancel');
 
             await this.writeCancellationSupplierLog({
                 fileName: `${logPrefix}-getbookingdetails-TBO`,
