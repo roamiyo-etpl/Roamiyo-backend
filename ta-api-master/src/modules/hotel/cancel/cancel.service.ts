@@ -128,6 +128,9 @@ export class HotelCancelService {
         const providerCancelReq = {
             bookingId: statusReq.bookingId,
             supplierParams: { providerCode: booking.supplier_name },
+            pollMaxAttempts: statusReq.pollMaxAttempts,
+            pollIntervalMs: statusReq.pollIntervalMs,
+            pollTimeoutMs: statusReq.pollTimeoutMs,
         };
 
         const result = await this.providerCancellationService.providerPollCancelStatus({
@@ -269,6 +272,9 @@ export class HotelCancelService {
                 ...(cancelReq.supplierParams || {}),
                 providerCode: supplierName,
             },
+            pollMaxAttempts: cancelReq.pollMaxAttempts,
+            pollIntervalMs: cancelReq.pollIntervalMs,
+            pollTimeoutMs: cancelReq.pollTimeoutMs,
         };
     }
 }

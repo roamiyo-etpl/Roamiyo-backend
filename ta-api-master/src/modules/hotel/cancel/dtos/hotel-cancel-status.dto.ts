@@ -32,4 +32,31 @@ export class HotelCancelStatusDto {
     @IsString()
     @IsOptional()
     cancellationId?: string;
+
+    @ApiProperty({
+        description: 'Max GetChangeRequestStatus polls (from payment service)',
+        example: 5,
+        required: false,
+    })
+    @IsNumber()
+    @IsOptional()
+    pollMaxAttempts?: number;
+
+    @ApiProperty({
+        description: 'Delay between status polls in ms',
+        example: 6000,
+        required: false,
+    })
+    @IsNumber()
+    @IsOptional()
+    pollIntervalMs?: number;
+
+    @ApiProperty({
+        description: 'Wall-clock cap for status polling in ms (optional)',
+        example: 30000,
+        required: false,
+    })
+    @IsNumber()
+    @IsOptional()
+    pollTimeoutMs?: number;
 }
