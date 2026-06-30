@@ -1,5 +1,9 @@
 import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
-import { HotelResult } from '../../search/interfaces/initiate-result-response.interface';
+import {
+    HotelResult,
+    HotelSearchRoomOffer,
+    HotelSupplement,
+} from '../../search/interfaces/initiate-result-response.interface';
 import { TboRepository } from './tbo.repository';
 import { Repository } from 'typeorm';
 import { Http } from 'src/shared/utilities/flight/http.utility';
@@ -276,14 +280,20 @@ export class TboSearchService {
             const rooms = Array.isArray(hotel.Rooms) ? hotel.Rooms : [];
 
             if (rooms.length === 0) {
-                // Return hotel with no availability
-                return this.createHotelResultFromTboData(hotel, baseHotel, null, searchReqId, searchCriteria, currency);
+                return this.createHotelResultFromTboData(hotel, baseHotel, null, [], searchReqId, searchCriteria, currency);
             }
 
-            // Find cheapest room
             const cheapestRoom = rooms.reduce((min, room) => (room.TotalFare < min.TotalFare ? room : min));
 
-            return this.createHotelResultFromTboData(hotel, baseHotel, cheapestRoom, searchReqId, searchCriteria, currency);
+            return this.createHotelResultFromTboData(
+                hotel,
+                baseHotel,
+                cheapestRoom,
+                rooms,
+                searchReqId,
+                searchCriteria,
+                currency,
+            );
         });
           // Wait for all promises to resolve
        return await Promise.all(hotelResultPromises);
@@ -299,7 +309,50 @@ export class TboSearchService {
      * @param searchCriteria - search Criteria for nights room details values
      * @returns HotelResult - Standardized hotel result
      */
-    private async createHotelResultFromTboData(tboHotel: any, baseHotel: any, room: any, searchReqId: string, searchCriteria: any, currency: string): Promise<HotelResult> {
+    private normalizeSupplements(supplements: unknown): HotelSupplement[][] {
+        if (!Array.isArray(supplements)) {
+            return [];
+        }
+
+        return supplements.map((roomSupplements) => {
+            if (!Array.isArray(roomSupplements)) {
+                return [];
+            }
+
+            return roomSupplements.map((item) => ({
+                index: Number(item?.Index ?? item?.index ?? 0),
+                type: String(item?.Type ?? item?.type ?? ''),
+                description: String(item?.Description ?? item?.description ?? ''),
+                price: Number(item?.Price ?? item?.price ?? 0),
+                currency: String(item?.Currency ?? item?.currency ?? ''),
+            }));
+        });
+    }
+
+    private mapTboRoomOffer(room: any, providerCurrency: string, preferredCurrency: string): HotelSearchRoomOffer {
+        const totalFare = Number(room.TotalFare) || 0;
+        const totalTax = Number(room.TotalTax) || 0;
+
+        return {
+            bookingCode: room.BookingCode || '',
+            name: Array.isArray(room.Name) ? room.Name : room.Name ? [room.Name] : [],
+            totalFare: Generic.currencyConversion(totalFare, providerCurrency, preferredCurrency) || 0,
+            totalTax: Generic.currencyConversion(totalTax, providerCurrency, preferredCurrency) || 0,
+            mealType: room.MealType || '',
+            isRefundable: Boolean(room.IsRefundable),
+            supplements: this.normalizeSupplements(room.Supplements),
+        };
+    }
+
+    private async createHotelResultFromTboData(
+        tboHotel: any,
+        baseHotel: any,
+        room: any,
+        allRooms: any[],
+        searchReqId: string,
+        searchCriteria: any,
+        currency: string,
+    ): Promise<HotelResult> {
         // console.log(tboHotel,"tboHotel");
         const totalFare = room ? Number(room.TotalFare) || 0 : 0;
         const totalTax = room ? Number(room.TotalTax) || 0 : 0;
@@ -361,6 +414,8 @@ export class TboSearchService {
             poi: additionalDetails?.interestPoints || [], // Points of interest
             neighborhoods: [], // Neighborhoods
             mealType: room?.MealType || '',
+            supplements: this.normalizeSupplements(room?.Supplements),
+            rooms: allRooms.map((r) => this.mapTboRoomOffer(r, providerCurrency, preferredCurrency)),
             providerID: 'TBO',
             providerCode: 'TBO',
         };

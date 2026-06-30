@@ -4430,6 +4430,21 @@
             "items": {
               "$ref": "#/components/schemas/SectorDto"
             }
+          },
+          "pollMaxAttempts": {
+            "type": "number",
+            "description": "Hotel only: max GetChangeRequestStatus polls before returning pendingCompletion (from payment service)",
+            "example": 5
+          },
+          "pollIntervalMs": {
+            "type": "number",
+            "description": "Hotel only: delay between status polls in ms",
+            "example": 6000
+          },
+          "pollTimeoutMs": {
+            "type": "number",
+            "description": "Hotel only: wall-clock cap for status polling in ms (optional)",
+            "example": 30000
           }
         },
         "required": [
@@ -4469,6 +4484,21 @@
           "cancellationId": {
             "type": "string",
             "description": "Existing cancellations row UUID (optional — speeds up DB update)"
+          },
+          "pollMaxAttempts": {
+            "type": "number",
+            "description": "Max GetChangeRequestStatus polls (from payment service)",
+            "example": 5
+          },
+          "pollIntervalMs": {
+            "type": "number",
+            "description": "Delay between status polls in ms",
+            "example": 6000
+          },
+          "pollTimeoutMs": {
+            "type": "number",
+            "description": "Wall-clock cap for status polling in ms (optional)",
+            "example": 30000
           }
         },
         "required": [

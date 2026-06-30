@@ -42,6 +42,27 @@ export interface Pagination {
     totalFilteredResults: number;
 }
 
+/** TBO supplement line item (e.g. AtProperty mandatory_tax). */
+export interface HotelSupplement {
+    index: number;
+    type: string;
+    description: string;
+    price: number;
+    currency: string;
+}
+
+/** Room-rate option from TBO search with per-room supplements. */
+export interface HotelSearchRoomOffer {
+    bookingCode: string;
+    name: string[];
+    totalFare: number;
+    totalTax: number;
+    mealType: string;
+    isRefundable: boolean;
+    /** One inner array per physical room in the booking (TBO shape, normalized). */
+    supplements: HotelSupplement[][];
+}
+
 export interface HotelResult {
     hotelId: string;
     hotelRefId: string;
@@ -64,6 +85,10 @@ export interface HotelResult {
     poi: string[];
     neighborhoods: string[];
     mealType: string;
+    /** Supplements for the cheapest displayed rate (same room as top-level prices). */
+    supplements: HotelSupplement[][];
+    /** All room-rate options returned by TBO for this hotel. */
+    rooms: HotelSearchRoomOffer[];
     providerID: string;
     providerCode: string;
 }
