@@ -104,6 +104,33 @@ export class GenericCancelDto {
     @Type(() => SectorDto)
     @IsOptional()
     segments?: SectorDto[];
+
+    @ApiProperty({
+        description: 'Hotel only: max GetChangeRequestStatus polls before returning pendingCompletion (from payment service)',
+        example: 5,
+        required: false,
+    })
+    @IsNumber()
+    @IsOptional()
+    pollMaxAttempts?: number;
+
+    @ApiProperty({
+        description: 'Hotel only: delay between status polls in ms',
+        example: 6000,
+        required: false,
+    })
+    @IsNumber()
+    @IsOptional()
+    pollIntervalMs?: number;
+
+    @ApiProperty({
+        description: 'Hotel only: wall-clock cap for status polling in ms (optional)',
+        example: 30000,
+        required: false,
+    })
+    @IsNumber()
+    @IsOptional()
+    pollTimeoutMs?: number;
 }
 
 export class GenericGetCancellationChargesDto {

@@ -24,6 +24,7 @@ import {
 } from "../../../../shared/enums/flight/flight.enum";
 import md5 from "md5";
 import { isArray } from "lodash";
+import { runWithTboInstrumentationAsync } from "src/shared/utilities/flight/tbo-api-instrumentation.utility";
 
 @Injectable()
 export class TboSearchService {
@@ -35,7 +36,14 @@ export class TboSearchService {
   /** [@Description: This method is used to search the flights]
    * @author: Prashant Joshi at 13-10-2025 **/
   async search(searchRequest): Promise<StartRoutingResponse> {
-    // console.log("searchRequest:::::::::", searchRequest);
+    const { searchReqId } = searchRequest;
+    return runWithTboInstrumentationAsync(
+      { searchReqId, phase: 'search' },
+      () => this.searchInternal(searchRequest),
+    );
+  }
+
+  private async searchInternal(searchRequest): Promise<StartRoutingResponse> {
     const { providerCred, searchReqId, searchReq } = searchRequest;
     const authToken =
       await this.tboAuthTokenService.getAuthToken(searchRequest);
@@ -57,6 +65,7 @@ export class TboSearchService {
         "POST",
         endpoint,
         JSON.stringify(requestBody),
+        'search',
       );
       const endTime = Date.now();
       /* Logging the data */

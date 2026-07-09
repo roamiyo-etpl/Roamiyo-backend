@@ -101,6 +101,7 @@ export class TboAuthTokenService {
         "POST",
         endpoint,
         JSON.stringify(data),
+        'auth',
       );
       const logs = {
         request: { ...data, Password: "[REDACTED]" },

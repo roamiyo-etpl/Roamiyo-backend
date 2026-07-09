@@ -517,7 +517,7 @@ export class TboCancellationService {
 
             // prod
             const endpoint = `${providerCred.book_url}/rest/ReleasePNRRequest`;
-            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
+            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData), 'cancel');
 
             await this.writeCancellationSupplierLog({
                 fileName: `${logPrefix}-releasepnr-TBO`,
@@ -538,7 +538,6 @@ export class TboCancellationService {
      * Step 2: Send Change Request
      * Sends cancellation request (full or partial)
      */
-
 
     private async sendChangeRequest({
         cancelReq,
@@ -619,7 +618,8 @@ export class TboCancellationService {
             const response = await Http.httpRequestTBO(
                 'POST',
                 endpoint,
-                JSON.stringify(requestData)
+                JSON.stringify(requestData),
+                'cancel',
             );
 
             console.log("[SEND-CHANGE-REQUEST][STEP-4] RAW API RESPONSE:",
@@ -696,7 +696,6 @@ export class TboCancellationService {
      * Step 3: Get Change Request Status
      * Checks the status of the cancellation request
      */
-    
 
     private async getChangeRequestStatus({
         changeRequestId,
@@ -753,7 +752,8 @@ export class TboCancellationService {
             const response = await Http.httpRequestTBO(
                 'POST',
                 endpoint,
-                JSON.stringify(requestData)
+                JSON.stringify(requestData),
+                'cancel',
             );
 
             console.log("[GET-CHANGE-STATUS][STEP-3] RAW API RESPONSE:",
@@ -959,6 +959,7 @@ export class TboCancellationService {
                 'POST',
                 endpoint,
                 JSON.stringify(requestData),
+                'cancel',
             );
 
             console.log(
@@ -1249,7 +1250,7 @@ export class TboCancellationService {
 
             // prod
             const endpoint = `${providerCred.book_url}/rest/GetBookingDetails`;
-            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData));
+            const response = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestData), 'cancel');
 
             await this.writeCancellationSupplierLog({
                 fileName: `${logPrefix}-getbookingdetails-TBO`,

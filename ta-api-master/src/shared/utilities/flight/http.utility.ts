@@ -1,4 +1,12 @@
 import Axios from 'axios';
+import {
+    classifyTboApiOutcome,
+    extractTboEndpointName,
+    logTboApiCallEnd,
+    logTboApiCallStart,
+    TboCallPhase,
+    tryExtractTraceIdFromPayload,
+} from './tbo-api-instrumentation.utility';
 
 export class Http {
     /** [@Description: For Mystifly API]
@@ -90,7 +98,19 @@ export class Http {
         }
     }
 
-    static async httpRequestTBO(method: string, endpoint: string, data) {
+    /** Flight TBO Air API — logs START/END for every call (FareQuote, FareRule, Book, Ticket, SSR, Search, Auth, etc.). */
+    static async httpRequestTBO(
+        method: string,
+        endpoint: string,
+        data,
+        phase: TboCallPhase = 'other',
+    ) {
+        const apiName = extractTboEndpointName(endpoint);
+        const traceId = tryExtractTraceIdFromPayload(data);
+        const startMs = Date.now();
+
+        logTboApiCallStart({ apiName, phase, traceId, method });
+
         try {
             const result = await Axios({
                 method: method,
@@ -100,17 +120,46 @@ export class Http {
                 },
                 data: data,
             });
+
+            const outcome = classifyTboApiOutcome(result.data);
+            logTboApiCallEnd({
+                apiName,
+                phase,
+                traceId,
+                method,
+                durationMs: Date.now() - startMs,
+                success: outcome.success,
+                responseStatus: outcome.responseStatus,
+                message: outcome.message,
+                httpStatus: result.status,
+            });
+
             return result.data;
-        } catch (error) {
+        } catch (error: any) {
+            const httpStatus = error?.response?.status;
+            const message =
+                error?.response?.data?.Response?.Error?.ErrorMessage ??
+                error?.response?.data?.Error ??
+                error?.message ??
+                'HTTP request failed';
+
+            logTboApiCallEnd({
+                apiName,
+                phase,
+                traceId,
+                method,
+                durationMs: Date.now() - startMs,
+                success: false,
+                message: String(message),
+                httpStatus,
+            });
+
             if (error.response) {
-                // The request was made, but the server responded with an error
                 console.error('Server responded with error status:', error.response.status);
                 console.error('Response data:', error.response.data);
             } else if (error.request) {
-                // The request was made, but no response was received
                 console.error('No response received from the server');
             } else {
-                // Something happened in setting up the request that triggered an Error
                 console.error('Error setting up the request:', error.message);
             }
             return [];
@@ -130,27 +179,20 @@ export class Http {
                     Accept: 'application/json',
                     'Authorization': authHeader
                 },
-                // auth: {
-                //     username: auth.username,
-                //     password: auth.password,
-                // },
                 data: data,
                 timeout: 60000,
             });
             return result.data;
         } catch (error) {
             if (error.response) {
-                // The request was made, but the server responded with an error
                 console.error('TBO Hotel API Error - Status:', error.response.status);
                 console.error('TBO Hotel API Error - Response:', error.response.data);
             } else if (error.request) {
-                // The request was made, but no response was received
                 console.error('TBO Hotel API - No response received');
             } else {
-                // Something happened in setting up the request that triggered an Error
                 console.error('TBO Hotel API Setup Error:', error.message);
             }
-            throw error; // Re-throw for proper error handling
+            throw error;
         }
     }
 
@@ -177,7 +219,6 @@ export class Http {
             if (data !== null && data !== undefined && Object.keys(data).length > 0) {
                 axiosConfig.data = data;
             } else if (data) {
-                // If it's a primitive or other valid truthy payload
                 axiosConfig.data = data;
             }
 

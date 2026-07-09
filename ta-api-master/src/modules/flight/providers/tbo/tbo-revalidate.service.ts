@@ -29,10 +29,13 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { RevalidateResponseEntity } from "src/shared/entities/revalidate-response.entity";
 import { Repository } from "typeorm";
 import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
+import { flightBookingDebug } from "src/shared/utilities/flight/flight-booking-logger.utility";
+import { logTboApiCallSkipped } from "src/shared/utilities/flight/tbo-api-instrumentation.utility";
 
 @Injectable()
 export class TboRevalidateService {
   logDate = Date.now();
+  private static readonly REVALIDATE_CACHE_TTL_MS = 10 * 60 * 1000;
   constructor(
     private readonly tboAuthToken: TboAuthTokenService,
     private readonly s3BucketService: s3BucketService,
@@ -47,12 +50,32 @@ export class TboRevalidateService {
   async revalidate(
     requestData,
   ): Promise<RevalidateResponse | RevalidateResponse[]> {
+    return this.revalidateInternal(requestData);
+  }
+
+  private async revalidateInternal(
+    requestData,
+  ): Promise<RevalidateResponse | RevalidateResponse[]> {
     const { providerCred, revalidateReq } = requestData;
-    console.log("requestData::::::::::", requestData);
+    flightBookingDebug('revalidate request', {
+      searchReqId: revalidateReq?.searchReqId,
+      solutionId: revalidateReq?.solutionId,
+    });
 
     Object.assign(requestData, { tokenReqData: revalidateReq });
-    // For domestic roundTrip pass solutionID with( ||| )
     const roundTripSolutionId = revalidateReq.solutionId;
+
+    const cached = await this.tryRevalidateFromCache(requestData);
+    if (cached) {
+      logTboApiCallSkipped({
+        apiName: 'FareQuote+FareRule',
+        phase: 'revalidate',
+        reason: 'fresh_revalidate_response_cache',
+        searchReqId: revalidateReq.searchReqId,
+      });
+      flightBookingDebug('Revalidate served from DB cache', revalidateReq.searchReqId);
+      return cached;
+    }
 
     try {
       /* get authentication token*/
@@ -95,6 +118,7 @@ export class TboRevalidateService {
         const fareRules = await this.getCancellationFareRules(
           tempRequestData,
           i,
+          authToken,
         );
         if (fareRules.error === true) {
           handleAuthenticationFailure();
@@ -110,6 +134,7 @@ export class TboRevalidateService {
           "POST",
           endpoint,
           JSON.stringify(requestBody),
+          'revalidate',
         );
 
         /* Saving the revalidate result */
@@ -167,167 +192,216 @@ export class TboRevalidateService {
         }
       }
 
-      let result = convertedResultArray[0];
+      const result = this.mergeConvertedResults(
+        convertedResultArray,
+        roundTripSolutionId,
+      );
 
-      console.log("convertedResultArray:::::::", convertedResultArray);
-
-      // ✅ HANDLE ONEWAY (ADD THIS BLOCK)
-
-      if (convertedResultArray.length === 1) {
-        const fareA = convertedResultArray[0]?.route?.fare[0];
-
-        const legs: any[] = [];
-
-        legs.push({
-          type: "outbound",
-          fare: fareA || null,
-        });
-
-        result = {
-          ...convertedResultArray[0],
-          route: {
-            ...convertedResultArray[0].route,
-
-            // keep original fare
-            fare: [fareA],
-
-            // ✅ ADD THESE (MISSING IN ONEWAY)
-            outboundFare: fareA || null,
-            inboundFare: null,
-            legs: legs,
-          },
-        };
-      }
-
-      if (
-        convertedResultArray.length > 1 &&
-        convertedResultArray[0].isValid === true &&
-        convertedResultArray[1].isValid === true
-      ) {
-        const calculateFare = (fareA, fareB) => {
-          console.log("calculateFare", fareA, fareB);
-          return {
-            baseFare: fareA?.baseFare + (fareB?.baseFare || 0),
-            tax: fareA?.tax + (fareB?.tax || 0),
-            publishedFare: fareA?.publishedFare + (fareB?.publishedFare || 0),
-            serviceFee: fareA?.serviceFee + (fareB?.serviceFee || 0),
-            perPersonFare: fareA?.perPersonFare + (fareB?.perPersonFare || 0),
-            perPersonAdultFare:
-              fareA?.perPersonAdultFare + (fareB?.perPersonAdultFare || 0),
-            perPersonInfantFare:
-              fareA?.perPersonInfantFare + (fareB?.perPersonInfantFare || 0),
-            perPersonChildFare:
-              fareA?.perPersonChildFare + (fareB?.perPersonChildFare || 0),
-            adultFare: fareA?.adultFare + (fareB?.adultFare || 0),
-            childFare: fareA?.childFare + (fareB?.childFare || 0),
-            infantFare: fareA?.infantFare + (fareB?.infantFare || 0),
-            otherCharges: fareA?.otherCharges + (fareB?.otherCharges || 0),
-            searchTotalFare:
-              fareA?.searchTotalFare + (fareB?.searchTotalFare || 0),
-            totalFare: fareA?.totalFare + (fareB?.totalFare || 0),
-            fareQuote: [fareA?.fareQuote, fareB?.fareQuote || null],
-            currency: fareA?.currency,
-            currencySymbol: fareA?.currencySymbol,
-          };
-        };
-
-        const fareA = convertedResultArray[0]?.route?.fare[0];
-        const fareB = convertedResultArray[1]?.route?.fare[0];
-        console.log(fareA, fareB);
-
-        const legs: any[] = [];
-
-        legs.push({
-          type: "outbound",
-          fare: fareA || null,
-        });
-
-        if (fareB) {
-          legs.push({
-            type: "inbound",
-            fare: fareB,
-          });
-        }
-
-        result = {
-          ...convertedResultArray[0],
-          prevSolutionID: roundTripSolutionId,
-          route: {
-            ...convertedResultArray[0].route,
-            netValue:
-              convertedResultArray[0].supplierRes?.Response?.Results?.Fare
-                ?.BaseFare +
-              convertedResultArray[1].supplierRes?.Response?.Results?.Fare
-                ?.BaseFare || 0,
-            fare: fareB ? [calculateFare(fareA, fareB)] : [fareA],
-
-            // NEW LOGIC (same as search API - separate fares)
-            outboundFare: fareA || null,
-            inboundFare: fareB || null,
-            legs: legs,
-            solutionId: roundTripSolutionId,
-            isRefundable: [
-              ...convertedResultArray[0].route.isRefundable,
-              ...convertedResultArray[1].route.isRefundable,
-            ],
-            airlineCode: [
-              ...convertedResultArray[0].route.airlineCode,
-              ...convertedResultArray[1].route.airlineCode,
-            ],
-            airlineName: [
-              ...convertedResultArray[0].route.airlineName,
-              ...convertedResultArray[1].route.airlineName,
-            ],
-            flightStops: [
-              ...convertedResultArray[0].route.flightStops,
-              ...convertedResultArray[1].route.flightStops,
-            ],
-            airlineType: [
-              ...convertedResultArray[0].route.airlineType,
-              ...convertedResultArray[1].route.airlineType,
-            ],
-            totalDuration: [
-              ...convertedResultArray[0].route.totalDuration,
-              ...convertedResultArray[1].route.totalDuration,
-            ],
-            totalInterval: [
-              ...convertedResultArray[0].route.totalInterval,
-              ...convertedResultArray[1].route.totalInterval,
-            ],
-            departureInfo: [
-              ...convertedResultArray[0].route.departureInfo,
-              ...convertedResultArray[1].route.departureInfo,
-            ],
-            arrivalInfo: [
-              ...convertedResultArray[0].route.arrivalInfo,
-              ...convertedResultArray[1].route.arrivalInfo,
-            ],
-            flightSegments: [
-              ...convertedResultArray[0].route.flightSegments,
-              ...convertedResultArray[1].route.flightSegments,
-            ],
-            fareRules: [
-              ...(convertedResultArray[0].route?.fareRules ?? []),
-              ...(convertedResultArray[1].route?.fareRules ?? []),
-            ],
-            miniFareRules: [
-              ...(convertedResultArray[0].route?.miniFareRules ?? []),
-              ...(convertedResultArray[1].route?.miniFareRules ?? []),
-            ],
-          },
-        };
-      }
-
-      delete result?.reqPara;
-      delete result?.supplierRes;
       return result;
     } catch (error) {
-      console.log(error);
+      flightBookingDebug('revalidate error', error?.message);
       this.genericRepo.storeLogs(revalidateReq.searchReqId, 1, error, 0);
       throw new InternalServerErrorException(
         `ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER`,
       );
     }
+  }
+
+  private async tryRevalidateFromCache(
+    requestData,
+  ): Promise<RevalidateResponse | null> {
+    const { providerCred, revalidateReq } = requestData;
+    const solutionIds = revalidateReq.solutionId.split(" ||| ");
+    const uniqueSolutionIds = [
+      ...new Set(solutionIds.map((id: string) => id.trim())),
+    ];
+    const cutoff = new Date(
+      Date.now() - TboRevalidateService.REVALIDATE_CACHE_TTL_MS,
+    );
+
+    const cachedRows: RevalidateResponseEntity[] = [];
+    for (const solutionId of uniqueSolutionIds) {
+      const row = await this.revalidateRepo.findOne({
+        where: {
+          solution_id: String(solutionId),
+          provider_code: providerCred.provider,
+        },
+        order: { created_at: 'DESC' },
+      });
+      if (!row || new Date(row.created_at) < cutoff) {
+        return null;
+      }
+      cachedRows.push(row);
+    }
+
+    const convertedResultArray: RevalidateResponse[] = [];
+    for (const row of cachedRows) {
+      let revalidateResult: any;
+      try {
+        revalidateResult = JSON.parse(row.response);
+      } catch {
+        return null;
+      }
+      if (revalidateResult?.Response?.ResponseStatus !== 1) {
+        return null;
+      }
+      const convertedResult = await this.convertingResponse(
+        { ...requestData, authToken: '' },
+        revalidateResult,
+      );
+      if (convertedResult?.error) {
+        return null;
+      }
+      Object.assign(convertedResult, { supplierRes: revalidateResult });
+      convertedResultArray.push(convertedResult);
+    }
+
+    return this.mergeConvertedResults(
+      convertedResultArray,
+      revalidateReq.solutionId,
+    );
+  }
+
+  private mergeConvertedResults(
+    convertedResultArray: Array<RevalidateResponse & { supplierRes?: any }>,
+    roundTripSolutionId: string,
+  ): RevalidateResponse {
+    let result: RevalidateResponse & { supplierRes?: any } =
+      convertedResultArray[0];
+
+    if (convertedResultArray.length === 1) {
+      const fareA = convertedResultArray[0]?.route?.fare?.[0];
+      const legs: any[] = [];
+      legs.push({
+        type: "outbound",
+        fare: fareA || null,
+      });
+
+      result = {
+        ...convertedResultArray[0],
+        route: {
+          ...convertedResultArray[0].route,
+          fare: fareA ? [fareA] : [],
+          outboundFare: fareA || null,
+          inboundFare: null,
+          legs: legs,
+        } as any,
+      };
+    }
+
+    if (
+      convertedResultArray.length > 1 &&
+      convertedResultArray[0].isValid === true &&
+      convertedResultArray[1].isValid === true
+    ) {
+      const calculateFare = (fareA, fareB) => ({
+        baseFare: fareA?.baseFare + (fareB?.baseFare || 0),
+        tax: fareA?.tax + (fareB?.tax || 0),
+        publishedFare: fareA?.publishedFare + (fareB?.publishedFare || 0),
+        serviceFee: fareA?.serviceFee + (fareB?.serviceFee || 0),
+        perPersonFare: fareA?.perPersonFare + (fareB?.perPersonFare || 0),
+        perPersonAdultFare:
+          fareA?.perPersonAdultFare + (fareB?.perPersonAdultFare || 0),
+        perPersonInfantFare:
+          fareA?.perPersonInfantFare + (fareB?.perPersonInfantFare || 0),
+        perPersonChildFare:
+          fareA?.perPersonChildFare + (fareB?.perPersonChildFare || 0),
+        adultFare: fareA?.adultFare + (fareB?.adultFare || 0),
+        childFare: fareA?.childFare + (fareB?.childFare || 0),
+        infantFare: fareA?.infantFare + (fareB?.infantFare || 0),
+        otherCharges: fareA?.otherCharges + (fareB?.otherCharges || 0),
+        searchTotalFare:
+          fareA?.searchTotalFare + (fareB?.searchTotalFare || 0),
+        totalFare: fareA?.totalFare + (fareB?.totalFare || 0),
+        fareQuote: [fareA?.fareQuote, fareB?.fareQuote || null],
+        currency: fareA?.currency,
+        currencySymbol: fareA?.currencySymbol,
+      });
+
+      const fareA = convertedResultArray[0]?.route?.fare[0];
+      const fareB = convertedResultArray[1]?.route?.fare[0];
+      const legs: any[] = [];
+      legs.push({
+        type: "outbound",
+        fare: fareA || null,
+      });
+      if (fareB) {
+        legs.push({
+          type: "inbound",
+          fare: fareB,
+        });
+      }
+
+      result = {
+        ...convertedResultArray[0],
+        prevSolutionID: roundTripSolutionId,
+        route: {
+          ...convertedResultArray[0].route,
+          netValue:
+            convertedResultArray[0].supplierRes?.Response?.Results?.Fare
+              ?.BaseFare +
+              convertedResultArray[1].supplierRes?.Response?.Results?.Fare
+                ?.BaseFare || 0,
+          fare: fareB ? [calculateFare(fareA, fareB)] : fareA ? [fareA] : [],
+          outboundFare: fareA || null,
+          inboundFare: fareB || null,
+          legs: legs,
+          solutionId: roundTripSolutionId,
+          isRefundable: [
+            ...(convertedResultArray[0].route?.isRefundable ?? []),
+            ...(convertedResultArray[1].route?.isRefundable ?? []),
+          ],
+          airlineCode: [
+            ...(convertedResultArray[0].route?.airlineCode ?? []),
+            ...(convertedResultArray[1].route?.airlineCode ?? []),
+          ],
+          airlineName: [
+            ...(convertedResultArray[0].route?.airlineName ?? []),
+            ...(convertedResultArray[1].route?.airlineName ?? []),
+          ],
+          flightStops: [
+            ...(convertedResultArray[0].route?.flightStops ?? []),
+            ...(convertedResultArray[1].route?.flightStops ?? []),
+          ],
+          airlineType: [
+            ...(convertedResultArray[0].route?.airlineType ?? []),
+            ...(convertedResultArray[1].route?.airlineType ?? []),
+          ],
+          totalDuration: [
+            ...(convertedResultArray[0].route?.totalDuration ?? []),
+            ...(convertedResultArray[1].route?.totalDuration ?? []),
+          ],
+          totalInterval: [
+            ...(convertedResultArray[0].route?.totalInterval ?? []),
+            ...(convertedResultArray[1].route?.totalInterval ?? []),
+          ],
+          departureInfo: [
+            ...(convertedResultArray[0].route?.departureInfo ?? []),
+            ...(convertedResultArray[1].route?.departureInfo ?? []),
+          ],
+          arrivalInfo: [
+            ...(convertedResultArray[0].route?.arrivalInfo ?? []),
+            ...(convertedResultArray[1].route?.arrivalInfo ?? []),
+          ],
+          flightSegments: [
+            ...(convertedResultArray[0].route?.flightSegments ?? []),
+            ...(convertedResultArray[1].route?.flightSegments ?? []),
+          ],
+          fareRules: [
+            ...(convertedResultArray[0].route?.fareRules ?? []),
+            ...(convertedResultArray[1].route?.fareRules ?? []),
+          ],
+          miniFareRules: [
+            ...(convertedResultArray[0].route?.miniFareRules ?? []),
+            ...(convertedResultArray[1].route?.miniFareRules ?? []),
+          ],
+        } as any,
+      };
+    }
+
+    delete (result as any)?.reqPara;
+    delete (result as any)?.supplierRes;
+    return result;
   }
 
   /** [@Description: This method is used to create the request]
@@ -550,7 +624,7 @@ export class TboRevalidateService {
 
   /** [@Description: This method is used to get the cancellation fare rules]
    * @author: Prashant Joshi at 13-10-2025 **/
-  async getCancellationFareRules(fareRuleRequest, i) {
+  async getCancellationFareRules(fareRuleRequest, i, cachedAuthToken?: string) {
     const {
       revalidateReq: fareRuleReq,
       providerCred,
@@ -558,8 +632,9 @@ export class TboRevalidateService {
     } = fareRuleRequest;
 
     try {
-      // Get auth token
-      const authToken = await this.tboAuthToken.getAuthToken(fareRuleRequest);
+      const authToken =
+        cachedAuthToken ??
+        (await this.tboAuthToken.getAuthToken(fareRuleRequest));
 
       // Create API request body
       const requestBody = this.getFareRuleRequest(
@@ -579,6 +654,7 @@ export class TboRevalidateService {
         "POST",
         endpoint,
         JSON.stringify(requestBody),
+        'revalidate',
       );
 
       // Create log for API
@@ -603,19 +679,21 @@ export class TboRevalidateService {
       };
       // this.supplierLogs.updateSupplierLogs(fareRuleReq?.searchReqId, logsWithRes, 'TBO', 'fareRules', storedLog?.logId);
       // await this.s3BucketService.generateS3LogFile(fareRuleReq.searchReqId + '-' + i + '-' + this.logDate + '-TBO', logsWithRes, 'fareRules');
-      await this.supplierLogUtility.generateLogFile({
-        fileName:
-          fareRuleReq.searchReqId + "-" + i + "-" + this.logDate + "-TBO",
-        logData: logsWithRes,
-        folderName: "revalidate",
-        logId: null,
-        title: "FareRule-TBO",
-        searchReqId: fareRuleReq.searchReqId,
-        bookingReferenceId: null,
-      });
+      if (process.env.ENABLE_LOCAL_LOGS === "false") {
+        await this.supplierLogUtility.generateLogFile({
+          fileName:
+            fareRuleReq.searchReqId + "-" + i + "-" + this.logDate + "-TBO",
+          logData: logsWithRes,
+          folderName: "revalidate",
+          logId: null,
+          title: "FareRule-TBO",
+          searchReqId: fareRuleReq.searchReqId,
+          bookingReferenceId: null,
+        });
+      }
       return convertResponseData;
     } catch (error) {
-      console.log(error);
+      flightBookingDebug('getCancellationFareRules error', error?.message);
       this.genericRepo.storeLogs(fareRuleReq, 1, error, 0);
       throw new InternalServerErrorException(
         "There is an issue while fetching data from the providers.",
@@ -632,7 +710,6 @@ export class TboRevalidateService {
     preferredCurrency,
     FareType,
   ) {
-    console.log("searchReq", searchReq);
     const fareDetail: Fare = new Fare();
     const adultCount = searchReq.paxes[0].adult;
     const childCount = searchReq.paxes[0].children;

@@ -2,6 +2,7 @@ import { Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
 import { RevalidateService } from './revalidate.service';
 import { RevalidateDto } from './dtos/revalidate.dto';
 import { RevalidateResponse } from './interfaces/revalidate.interface';
+import { runWithTboInstrumentationAsync } from 'src/shared/utilities/flight/tbo-api-instrumentation.utility';
 import {
     SWG_BAD_REQUEST_RESPONSE,
     SWG_INTERNAL_SERVER_ERROR_RESPONSE,
@@ -37,6 +38,9 @@ export class RevalidateController {
     @ApiResponse(SWG_UNPROCESSABLE_RESPONSE)
     @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
     async revalidate(@Body() revalidateDto: RevalidateDto, @Headers() headers: Headers): Promise<RevalidateResponse> {
-        return this.revalidateService.revalidate(revalidateDto, headers);
+        return runWithTboInstrumentationAsync(
+            { searchReqId: revalidateDto?.searchReqId, phase: 'revalidate' },
+            () => this.revalidateService.revalidate(revalidateDto, headers),
+        );
     }
 }

@@ -50,10 +50,44 @@ export function isHotelCancellationInFlight(status: number): boolean {
     return shouldPollHotelChangeRequestStatus(status);
 }
 
-/** Default: 20 polls × 3s ≈ 60s wait inside POST /cancel or POST /cancel/status */
+/** Fallback when caller omits pollMaxAttempts (e.g. direct API use without payment service). */
 export const HOTEL_CANCEL_POLL_MAX_ATTEMPTS = Number(
-    process.env.HOTEL_CANCEL_POLL_MAX_ATTEMPTS ?? 20,
+    process.env.HOTEL_CANCEL_POLL_MAX_ATTEMPTS ?? 5,
 );
+/** Fallback when caller omits pollIntervalMs. */
 export const HOTEL_CANCEL_POLL_DELAY_MS = Number(
     process.env.HOTEL_CANCEL_POLL_DELAY_MS ?? 6000,
 );
+
+export interface HotelCancelPollInput {
+    pollMaxAttempts?: number;
+    pollIntervalMs?: number;
+    pollTimeoutMs?: number;
+}
+
+export interface ResolvedHotelCancelPollOptions {
+    maxAttempts: number;
+    delayMs: number;
+    timeoutMs?: number;
+}
+
+/** Payment service drives poll window via request body; env vars are fallback only. */
+export function resolveHotelCancelPollOptions(
+    input?: HotelCancelPollInput,
+): ResolvedHotelCancelPollOptions {
+    const maxAttempts = Math.max(
+        1,
+        Number(input?.pollMaxAttempts ?? HOTEL_CANCEL_POLL_MAX_ATTEMPTS) || HOTEL_CANCEL_POLL_MAX_ATTEMPTS,
+    );
+    const delayMs = Math.max(
+        0,
+        Number(input?.pollIntervalMs ?? HOTEL_CANCEL_POLL_DELAY_MS) || HOTEL_CANCEL_POLL_DELAY_MS,
+    );
+    const timeoutMsRaw = input?.pollTimeoutMs;
+    const timeoutMs =
+        timeoutMsRaw !== undefined && timeoutMsRaw !== null && Number(timeoutMsRaw) > 0
+            ? Number(timeoutMsRaw)
+            : undefined;
+
+    return { maxAttempts, delayMs, timeoutMs };
+}

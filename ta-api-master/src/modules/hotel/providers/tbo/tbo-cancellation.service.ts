@@ -5,13 +5,14 @@ import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.
 import { CancelResponse } from 'src/modules/cancel/interfaces/cancel.interface';
 import {
     HOTEL_BOOKING_MODE,
-    HOTEL_CANCEL_POLL_DELAY_MS,
-    HOTEL_CANCEL_POLL_MAX_ATTEMPTS,
     HOTEL_CANCEL_REQUEST_TYPE,
     HotelChangeRequestStatus,
+    HotelCancelPollInput,
+    ResolvedHotelCancelPollOptions,
     getHotelChangeRequestStatusLabel,
     isHotelCancellationSuccessful,
     isHotelCancellationTerminal,
+    resolveHotelCancelPollOptions,
     shouldPollHotelChangeRequestStatus,
 } from '../../cancel/dtos/hotel-cancel.dto';
 
@@ -76,15 +77,17 @@ export class TboCancellationService {
         cancelReq: {
             bookingId: number;
             supplierParams?: { remarks?: string };
-        };
+        } & HotelCancelPollInput;
         providerCred: Record<string, unknown>;
         headers: Record<string, unknown>;
         booking?: { booking_reference_id?: string; search_id?: string };
     }): Promise<HotelCancelExtendedResponse> {
         const { cancelReq, providerCred, headers, booking } = cancelRequest;
+        const pollOptions = resolveHotelCancelPollOptions(cancelReq);
 
         console.log('════════════════ TBO HOTEL CANCEL START ════════════════');
         console.log('[TBO-HOTEL-CANCEL] bookingId:', cancelReq.bookingId);
+        console.log('[TBO-HOTEL-CANCEL] Poll config:', JSON.stringify(pollOptions));
 
         const finalResponse: HotelCancelExtendedResponse = {
             success: false,
@@ -179,6 +182,7 @@ export class TboCancellationService {
                 providerCred,
                 auth,
                 initialStatus: sendChangeResult.ChangeRequestStatus,
+                pollOptions,
             });
 
             return this.applyStatusToResponse({
@@ -204,11 +208,13 @@ export class TboCancellationService {
         providerCred: Record<string, unknown>;
         headers: Record<string, unknown>;
         booking?: { search_id?: string };
-    }): Promise<HotelCancelExtendedResponse> {
-        const { changeRequestId, providerCred, headers, booking } = cancelRequest;
+    } & HotelCancelPollInput): Promise<HotelCancelExtendedResponse> {
+        const { changeRequestId, providerCred, headers, booking, ...pollInput } = cancelRequest;
+        const pollOptions = resolveHotelCancelPollOptions(pollInput);
 
         console.log('════════════════ TBO HOTEL POLL STATUS START ════════════════');
         console.log('[TBO-HOTEL-POLL] changeRequestId:', changeRequestId);
+        console.log('[TBO-HOTEL-POLL] Poll config:', JSON.stringify(pollOptions));
 
         const finalResponse: HotelCancelExtendedResponse = {
             success: false,
@@ -239,6 +245,7 @@ export class TboCancellationService {
                 endUserIp,
                 providerCred,
                 auth,
+                pollOptions,
             });
 
             return this.applyStatusToResponse({
@@ -314,8 +321,7 @@ export class TboCancellationService {
         providerCred: Record<string, unknown>;
         auth: { username: string; password: string };
         initialStatus?: number;
-        maxAttempts?: number;
-        delayMs?: number;
+        pollOptions?: ResolvedHotelCancelPollOptions;
     }): Promise<StatusPollResult> {
         const {
             changeRequestId,
@@ -323,9 +329,10 @@ export class TboCancellationService {
             endUserIp,
             providerCred,
             auth,
-            maxAttempts = HOTEL_CANCEL_POLL_MAX_ATTEMPTS,
-            delayMs = HOTEL_CANCEL_POLL_DELAY_MS,
+            pollOptions: resolvedPoll = resolveHotelCancelPollOptions(),
         } = params;
+        const { maxAttempts, delayMs, timeoutMs } = resolvedPoll;
+        const pollStartedAt = Date.now();
 
         let lastResult: StatusPollResult = {
             changeRequestId,
@@ -394,6 +401,14 @@ export class TboCancellationService {
             }
 
             if (!shouldPollHotelChangeRequestStatus(changeRequestStatus)) {
+                return lastResult;
+            }
+
+            const elapsedMs = Date.now() - pollStartedAt;
+            if (timeoutMs !== undefined && elapsedMs >= timeoutMs) {
+                console.log(
+                    `[TBO-HOTEL-CANCEL][POLL-${attempt}] Stopping — pollTimeoutMs (${timeoutMs}ms) reached`,
+                );
                 return lastResult;
             }
 

@@ -25,6 +25,15 @@ import {
   isIndigoFareQuote,
   resolveIsAllowBookingWithoutSeat,
 } from "src/shared/utilities/flight/tbo-indigo-seat.utility";
+import { hasAnySsrSelection } from "src/shared/utilities/flight/ssr-selection.utility";
+import { SsrCacheService } from "../../ssr/ssr-cache.service";
+import { flightBookingDebug } from "src/shared/utilities/flight/flight-booking-logger.utility";
+import {
+  getTboCallSummary,
+  logTboApiCallSkipped,
+  runWithTboInstrumentationAsync,
+} from "src/shared/utilities/flight/tbo-api-instrumentation.utility";
+import { Logger } from "@nestjs/common";
 
 interface SupplierLogEntry {
   index: number;
@@ -47,12 +56,16 @@ type SsrPassengerSelections = {
 @Injectable()
 export class TboBookService {
   logDate = Date.now();
+  private readonly logger = new Logger(TboBookService.name);
+  private static readonly TICKETING_MAX_RETRIES = 2;
+
   constructor(
     private readonly tboAuthTokenService: TboAuthTokenService,
     private genericRepo: GenericRepo,
     @InjectRepository(RevalidateResponseEntity)
     private revalidateRepo: Repository<RevalidateResponseEntity>,
     private readonly supplierLogUtility: SupplierLogUtility,
+    private readonly ssrCacheService: SsrCacheService,
   ) { }
 
   private resolveEndUserIp(bookRequest: any): string {
@@ -654,10 +667,18 @@ export class TboBookService {
    * @author: Prashant Joshi at 13-10-2025 **/
   async book(bookRequest): Promise<BookResponse | void> {
     const { bookReq }: { bookReq: BookDto } = bookRequest;
-    console.log("===== TBO BOOK START =====");
-    console.log("SSR AT TBO ENTRY:", JSON.stringify(bookReq.ssr));
-    console.log("TripType:", bookReq.airTripType);
-    console.log("SolutionId:", bookReq.solutionId);
+    return runWithTboInstrumentationAsync(
+      { searchReqId: bookReq?.searchReqId, phase: 'confirm' },
+      () => this.bookInternal(bookRequest),
+    );
+  }
+
+  private async bookInternal(bookRequest): Promise<BookResponse | void> {
+    const { bookReq }: { bookReq: BookDto } = bookRequest;
+    flightBookingDebug('TBO book start', {
+      searchReqId: bookReq.searchReqId,
+      tripType: bookReq.airTripType,
+    });
     const bookResponse = new BookResponse();
 
     Object.assign(bookRequest, {
@@ -703,7 +724,13 @@ export class TboBookService {
       }
     };
     const finalizeAndReturn = async (response: BookResponse) => {
-      await flushLogs(response);
+      void flushLogs(response).catch((err) =>
+        this.logger.error('Supplier log flush failed', err?.message ?? err),
+      );
+      const summary = getTboCallSummary();
+      if (summary) {
+        flightBookingDebug('TBO book API call summary', summary);
+      }
       return response;
     };
 
@@ -733,9 +760,9 @@ export class TboBookService {
         return bookResponse;
       };
 
-      /* get authentication token*/
       const authToken =
         await this.tboAuthTokenService.getAuthToken(bookRequest);
+      bookRequest.authToken = authToken;
 
       /* In case there is an issue in authentication from the provider */
       if (authToken === "" || bookRequest?.redisData?.data?.length === 0) {
@@ -744,23 +771,23 @@ export class TboBookService {
         );
         return finalizeAndReturn(failureResponse);
       }
-      console.log("TBO AUTH TOKEN RECEIVED:", !!authToken);
+      flightBookingDebug('TBO auth token resolved', { ok: !!authToken });
 
       let result;
 
-      console.log("Checking trip type...");
+      flightBookingDebug('Checking trip type', bookReq.airTripType);
       if (
         bookReq.airTripType.toLowerCase() === TripType.ROUNDTRIP &&
         bookReq.solutionId?.includes("|||")
       ) {
-        console.log("ROUND TRIP");
+        flightBookingDebug('Round trip booking');
         result = await this.createMultipleBook({
           bookRequest,
           handleAuthenticationFailure,
           logCollector: addLogEntry,
         });
       } else {
-        console.log("ONE WAY");
+        flightBookingDebug('One-way booking');
         result = await this.createSingleBook({
           bookRequest,
           index: 0,
@@ -860,7 +887,7 @@ export class TboBookService {
 
       return finalizeAndReturn(bookResponse);
     } catch (error) {
-      console.log("BOOKING ERROR", error);
+      flightBookingDebug('BOOKING ERROR', error?.message);
       /* error logging */
       const errorLog = {};
       Object.assign(errorLog, { error: error.stack });
@@ -905,14 +932,14 @@ export class TboBookService {
     const bookResponse = new BookResponse();
     const order = new Order();
 
-    console.log("===== CREATE SINGLE BOOK =====");
-    console.log("SolutionId:", bookReq.solutionId);
+    flightBookingDebug('createSingleBook leg start');
+    flightBookingDebug('createSingleBook', {
+      solutionId: bookReq.solutionId,
+      provider: providerCred.provider,
+    });
 
     // Get solutionId from the correct location
     const solutionId = bookReq.solutionId;
-
-    console.log("Looking for revalidate with solution_id:", solutionId);
-    console.log("Provider:", providerCred.provider);
 
     const revalidateResponse = await this.revalidateRepo.findOne({
       where: {
@@ -933,25 +960,71 @@ export class TboBookService {
       );
     }
 
-    console.log("Revalidate response found:", !!revalidateResponse);
+    flightBookingDebug('Revalidate response loaded', { found: !!revalidateResponse });
     const res = JSON.parse(revalidateResponse.response);
 
-    const authToken = await this.tboAuthTokenService.getAuthToken(bookRequest);
-    const ssrPayload = {
-      EndUserIp: this.resolveEndUserIp(bookRequest),
-      TokenId: authToken,
-      TraceId: res.Response.TraceId,
-      ResultIndex: res.Response.Results.ResultIndex,
-    };
+    const authToken =
+      bookRequest.authToken ??
+      (await this.tboAuthTokenService.getAuthToken(bookRequest));
+    bookRequest.authToken = authToken;
 
-    const ssrResponse = await Http.httpRequestTBO(
-      "POST",
-      `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
-      // `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
-      JSON.stringify(ssrPayload),
+    const traceId = res.Response.TraceId;
+    const resultIndex = res.Response.Results.ResultIndex;
+    const needsSsrCatalog = hasAnySsrSelection(
+      bookReq.ssr,
+      (bookReq as BookDto & { Passengers?: SsrPassengerSelections[] }).Passengers,
     );
 
-    console.log("🔥 SSR RESPONSE:", JSON.stringify(ssrResponse));
+    let ssrResponse: any = { Response: { ResponseStatus: 0 } };
+
+    if (needsSsrCatalog) {
+      const cachedSsr = await this.ssrCacheService.getFreshSsrResponse({
+        traceId,
+        resultIndex,
+        providerCode: providerCred.provider,
+      });
+
+      if (cachedSsr) {
+        logTboApiCallSkipped({
+          apiName: 'SSR',
+          phase: 'confirm',
+          reason: 'ssr_response_cache_hit',
+          searchReqId: bookReq.searchReqId,
+          traceId,
+        });
+        flightBookingDebug('SSR served from cache', { traceId, resultIndex });
+        ssrResponse = cachedSsr;
+      } else {
+        const ssrPayload = {
+          EndUserIp: this.resolveEndUserIp(bookRequest),
+          TokenId: authToken,
+          TraceId: traceId,
+          ResultIndex: resultIndex,
+        };
+        ssrResponse = await Http.httpRequestTBO(
+          "POST",
+          `https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR`,
+          // `http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR`,
+          JSON.stringify(ssrPayload),
+          'confirm',
+        );
+        await this.ssrCacheService.saveSsrResponse({
+          traceId,
+          resultIndex,
+          response: ssrResponse,
+          providerCode: providerCred.provider,
+        });
+      }
+    } else {
+      logTboApiCallSkipped({
+        apiName: 'SSR',
+        phase: 'confirm',
+        reason: 'no_ancillary_selections',
+        searchReqId: bookReq.searchReqId,
+        traceId,
+      });
+      flightBookingDebug('Skipping TBO SSR API — no ancillary selections');
+    }
 
     const fareFlightKeys = this.extractAllowedFlightKeysFromFareQuote(res);
     const routeSelectionKeys = this.extractAllowedFlightKeysFromRouteSelection(
@@ -983,7 +1056,9 @@ export class TboBookService {
     bookReq.ssr = this.dedupeSsrNumericRecord(bookReq.ssr);
     bookReq.ssr = this.normalizeSsrMealDescriptions(bookReq.ssr);
 
-    console.log("🔥 FINAL MAPPED SSR:", JSON.stringify(bookReq.ssr));
+    flightBookingDebug('Final mapped SSR passenger count', {
+      keys: Object.keys(bookReq.ssr ?? {}).length,
+    });
 
     const isBookableIfSeatNotAvailable =
       getFareQuoteIsBookableIfSeatNotAvailable(res);
@@ -992,7 +1067,7 @@ export class TboBookService {
       isBookableIfSeatNotAvailable,
     });
     if (typeof isAllowBookingWithoutSeat === "boolean") {
-      console.log("IndiGo seat fallback (Book/Ticket):", {
+      flightBookingDebug('IndiGo seat fallback', {
         isBookableIfSeatNotAvailable,
         isAllowBookingWithoutSeat,
       });
@@ -1036,11 +1111,7 @@ export class TboBookService {
       // dev
       // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Book`;
 
-      console.log(
-        "SSR BEFORE BOOK API:",
-        JSON.stringify(bookRequest.bookReq?.ssr),
-      );
-      console.log("Calling TBO BOOK API...");
+      flightBookingDebug('Calling TBO BOOK API');
 
       // prod url
       const endpoint = `${providerCred.book_url}/rest/Book`;
@@ -1050,6 +1121,7 @@ export class TboBookService {
           "POST",
           endpoint,
           JSON.stringify(requestBody),
+          'confirm',
         );
       } catch (error) {
         logCollector?.({
@@ -1065,9 +1137,9 @@ export class TboBookService {
         });
         throw error;
       }
-      console.log("TBO BOOK STATUS:", bookResult?.Response?.ResponseStatus);
-      console.log("requestBody BOOK \n", JSON.stringify(requestBody), "\n");
-      console.log("BOOKING RESULT \n", JSON.stringify(bookResult), "\n");
+      flightBookingDebug('TBO BOOK status', {
+        status: bookResult?.Response?.ResponseStatus,
+      });
       logCollector?.({
         index,
         title: "Book-TBO",
@@ -1122,6 +1194,7 @@ export class TboBookService {
       index,
       supplierResult = null,
       logCollector,
+      retryCount = 0,
     }: {
       bookRequest: any;
       pnr: string;
@@ -1130,9 +1203,10 @@ export class TboBookService {
       index: number;
       supplierResult?: any;
       logCollector?: SupplierLogCollector;
+      retryCount?: number;
     } = reqParams;
     const { providerCred } = bookRequest;
-    console.log("===== TICKETING START =====");
+    flightBookingDebug('Ticketing start', { index, retryCount });
     const startTime = Date.now();
     /* Ticketing API for the LCC book */
     const requestBodyTicketing = await this.createBookRequest({
@@ -1147,7 +1221,7 @@ export class TboBookService {
     // dev
     // const endpointTicketing = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Ticket`;
 
-    console.log("Calling TBO TICKETING API...");
+    flightBookingDebug('Calling TBO TICKETING API');
 
     // prod url
     const endpointTicketing = `${providerCred.book_url}/rest/Ticket`;
@@ -1157,6 +1231,7 @@ export class TboBookService {
         "POST",
         endpointTicketing,
         JSON.stringify(requestBodyTicketing),
+        'confirm',
       );
     } catch (error) {
       logCollector?.({
@@ -1173,28 +1248,12 @@ export class TboBookService {
       throw error;
     }
 
-    console.log("TICKETING STATUS:", ticketingResult?.Response?.ResponseStatus);
-    console.log("PNR:", ticketingResult?.Response?.Response?.PNR);
-
-    const endTime = Date.now();
-    const responseTimeMs = endTime - startTime;
-
-    console.log(
-      "SSR IN FINAL TICKET REQUEST:",
-      JSON.stringify(bookRequest.bookReq?.ssr),
-    );
-
-    console.log(
-      "requestBodyTicketing \n",
-      JSON.stringify(requestBodyTicketing),
-      "\n",
-    );
-
-    console.log(
-      "FINAL TBO REQUEST:",
-      JSON.stringify(requestBodyTicketing, null, 2),
-    );
-    console.log("TICKITING RESULT \n", JSON.stringify(ticketingResult), "\n");
+    const responseTimeMs = Date.now() - startTime;
+    flightBookingDebug('Ticketing result', {
+      status: ticketingResult?.Response?.ResponseStatus,
+      pnr: ticketingResult?.Response?.Response?.PNR,
+      responseTimeMs,
+    });
 
     logCollector?.({
       index,
@@ -1206,8 +1265,9 @@ export class TboBookService {
     });
     //if price and time updated then cancel booking
     if (
-      ticketingResult?.Response?.Response?.IsPriceChanged ||
-      ticketingResult?.Response?.Response?.IsTimeChanged
+      (ticketingResult?.Response?.Response?.IsPriceChanged ||
+        ticketingResult?.Response?.Response?.IsTimeChanged) &&
+      retryCount < TboBookService.TICKETING_MAX_RETRIES
     ) {
       return await this.ticketingCall({
         bookRequest,
@@ -1217,6 +1277,7 @@ export class TboBookService {
         index,
         supplierResult: ticketingResult,
         logCollector,
+        retryCount: retryCount + 1,
       });
     }
     return [{ ticketingResult, requestBodyTicketing }] as any;
@@ -1306,25 +1367,6 @@ export class TboBookService {
     // ===== SSR START =====
     bookReq.ssr = this.normalizeSsrMealDescriptions(bookReq.ssr || {});
     const ssr = bookReq.ssr;
-    console.log("SSR inside createBookRequest:", JSON.stringify(ssr));
-
-    // calculate SSR total (optional debug)
-    const ssrTotal = Object.values(ssr).reduce((sum: number, pax: any) => {
-      if (!pax) return sum;
-
-      const baggageTotal =
-        pax.Baggage?.reduce((s, b) => s + (b?.Price || 0), 0) || 0;
-
-      const mealTotal =
-        pax.MealDynamic?.reduce((s, m) => s + (m?.Price || 0), 0) || 0;
-
-      const seatTotal =
-        pax.SeatDynamic?.reduce((s, s1) => s + (s1?.Price || 0), 0) || 0;
-
-      return sum + baggageTotal + mealTotal + seatTotal;
-    }, 0);
-
-    console.log("SSR Total:", ssrTotal);
 
     /* Create passenger array */
     // const passengerArray = passengers.map((element, index) => {
@@ -1332,10 +1374,6 @@ export class TboBookService {
       // const passengerSSR = ssr[index] || {};
       const passengerSSR =
         ssr[passengerIndex] ?? ssr[String(passengerIndex)] ?? {};
-      console.log(
-        `Passenger ${passengerIndex} SSR:`,
-        JSON.stringify(passengerSSR),
-      );
       const pexT =
         element?.passengerType === "ADT"
           ? 1
@@ -1346,13 +1384,6 @@ export class TboBookService {
       // get pex fare from DB fare breakdown
       const fare = fareBreakDown?.find((f) => f?.PassengerType === pexT);
       const paxCount = fare?.PassengerCount || 1;
-      console.log("👤 Passenger Fare Breakdown:", {
-        passengerName: element?.passengerDetail?.firstName,
-        passengerType: element?.passengerType,
-        baseFare: fare?.BaseFare,
-        passengerCount: fare?.PassengerCount,
-        dividedFare: (fare?.BaseFare ?? 0) / paxCount,
-      });
 
       const addTxnPub =
         fare?.AdditionalTxnFeePub ?? fare?.AdditionalTxnFeePubL ?? 0;
@@ -1434,12 +1465,10 @@ export class TboBookService {
         }),
       };
     });
-    console.log(
-      "🚀 FINAL PASSENGER PAYLOAD:",
-      JSON.stringify(passengerArray, null, 2),
-    );
-
-    const authToken = await this.tboAuthTokenService.getAuthToken(bookRequest);
+    const authToken =
+      bookRequest.authToken ??
+      (await this.tboAuthTokenService.getAuthToken(bookRequest));
+    bookRequest.authToken = authToken;
     let obj: any = {};
 
     if (pnr) {
@@ -1458,7 +1487,7 @@ export class TboBookService {
         EndUserIp: headers["ip-address"],
         Passengers: passengerArray,
       };
-      console.log("Ticketing API Request - ResultIndex:", bookReq?.solutionId);
+      flightBookingDebug('Ticketing request ResultIndex', bookReq?.solutionId);
     }
 
     if (supplierResult?.Response?.Response?.IsPriceChanged) {

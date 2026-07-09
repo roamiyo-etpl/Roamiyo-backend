@@ -62,7 +62,7 @@ export class TboOrderDetailService {
                         LastName: bookReq?.passengers[0]?.passengerDetail?.lastName || bookRes?.lastName,
                     };
                     console.log('requestBody', requestBody);
-                    const requestResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody));
+                    const requestResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody), 'orderDetail');
                     supplierOrderDetailResponse.push(requestResult);
                     console.log('requestResult', requestResult);
                     /* Logging the data */

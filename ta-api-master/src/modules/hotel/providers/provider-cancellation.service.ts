@@ -3,6 +3,13 @@ import { CancelResponse } from 'src/modules/cancel/interfaces/cancel.interface';
 import { ConfigurationService } from '../configuration/configuration.service';
 import { TboCancellationService } from './tbo/tbo-cancellation.service';
 import { supplierReferenceIncludes } from 'src/shared/utilities/flight/supplier-reference.utility';
+import { HotelCancelPollInput } from '../cancel/dtos/hotel-cancel.dto';
+
+type HotelProviderCancelReq = {
+    bookingId: number;
+    requestType?: string;
+    supplierParams?: { remarks?: string; providerCode?: string };
+} & HotelCancelPollInput;
 
 @Injectable()
 export class ProviderCancellationService {
@@ -12,11 +19,7 @@ export class ProviderCancellationService {
     ) {}
 
     async providerCancel(reqParams: {
-        cancelReq: {
-            bookingId: number;
-            requestType?: string;
-            supplierParams?: { remarks?: string; providerCode?: string };
-        };
+        cancelReq: HotelProviderCancelReq;
         headers: Record<string, unknown>;
         booking: {
             booking_id: string;
@@ -61,10 +64,7 @@ export class ProviderCancellationService {
     }
 
     async providerPollCancelStatus(reqParams: {
-        cancelReq: {
-            bookingId: number;
-            supplierParams?: { remarks?: string; providerCode?: string };
-        };
+        cancelReq: HotelProviderCancelReq;
         headers: Record<string, unknown>;
         booking: {
             booking_id: string;
@@ -90,6 +90,9 @@ export class ProviderCancellationService {
                 providerCred,
                 headers,
                 booking,
+                pollMaxAttempts: cancelReq.pollMaxAttempts,
+                pollIntervalMs: cancelReq.pollIntervalMs,
+                pollTimeoutMs: cancelReq.pollTimeoutMs,
             });
             console.log('[HOTEL-PROVIDER-POLL] TBO response:', JSON.stringify(result, null, 2));
         }
