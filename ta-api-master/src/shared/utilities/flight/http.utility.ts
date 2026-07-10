@@ -7,6 +7,7 @@ import {
     TboCallPhase,
     tryExtractTraceIdFromPayload,
 } from './tbo-api-instrumentation.utility';
+import { logHotelTboRequest } from '../hotel/hotel-api-log.utility';
 
 export class Http {
     /** [@Description: For Mystifly API]
@@ -168,7 +169,16 @@ export class Http {
 
     /** [@Description: For TBO Hotel API with authentication]
      * @author: Prashant - TBO Hotel Integration **/
-    static async httpRequestTBOHotel(method: string, endpoint: string, data, auth: { username: string; password: string }) {
+    static async httpRequestTBOHotel(
+        method: string,
+        endpoint: string,
+        data,
+        auth: { username: string; password: string },
+        options?: { flow?: string },
+    ) {
+        if (options?.flow) {
+            logHotelTboRequest({ method, endpoint, flow: options.flow });
+        }
         try {
             const authHeader = 'Basic ' + Buffer.from(`${auth.username}:${auth.password}`).toString('base64');
             const result = await Axios({

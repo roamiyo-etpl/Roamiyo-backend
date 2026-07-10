@@ -37,7 +37,6 @@ export class TboSearchService {
      */
     async search(searchRequest: any, providerCredentials: any): Promise<HotelResult[]> {
         const searchReqId = searchRequest?.searchReqId || uuid();
-        console.log('[Hotel Search] providerCredentials:', providerCredentials);
         try {
             // Extract search parameters
             const { searchCriteria, currency, searchMetadata, activeProviders } = searchRequest;
@@ -46,7 +45,6 @@ export class TboSearchService {
 
             // Get hotel data from database based on search type
             let hotelData = await this.getHotelDataByLocation(location);
-            console.log('hotelData count', hotelData?.length);
 
             if (!hotelData || hotelData.length === 0) {
                 return [];
@@ -74,9 +72,6 @@ export class TboSearchService {
            
             const endpoint = `${providerCredentials.hotel_url}/Search`;
 
-            // console.log('auth in tbo-search.service', auth);
-            console.log('endpoint in tbo-search.service', endpoint);
-            // Create search promises for each chunk
             const searchPromises = hotelChunks.map((chunk, index) => {
                 const chunkRequest = this.createTboSearchRequest({
                     checkIn,
@@ -86,7 +81,7 @@ export class TboSearchService {
                     hotelCodes: chunk,
                 });
 
-                return this.executeSearchWithRetry(chunkRequest, endpoint, auth, index);
+                return this.executeSearchWithRetry(chunkRequest, endpoint, auth, index, 'search');
             });
 
             // Execute all searches in parallel
@@ -183,11 +178,10 @@ export class TboSearchService {
      * @param maxRetries - Maximum retry attempts
      * @returns Promise<any> - API response
      */
-    private async executeSearchWithRetry(request: any, endpoint: string, auth: any, chunkIndex: number, maxRetries: number = 2): Promise<any> {
+    private async executeSearchWithRetry(request: any, endpoint: string, auth: any, chunkIndex: number, flow: string, maxRetries: number = 2): Promise<any> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                // Use existing HTTP utility with authentication
-                const response = await this.makeAuthenticatedRequest('POST', request, endpoint, auth);
+                const response = await this.makeAuthenticatedRequest('POST', request, endpoint, auth, flow);
                 console.log(`TBO Chunk ${chunkIndex} (attempt ${attempt}): ${response?.HotelResult?.length || 0} hotels`);
                 return response;
             } catch (error) {
@@ -209,13 +203,9 @@ export class TboSearchService {
      * @param auth - Authentication credentials
      * @returns Promise<any> - API response
      */
-    private async makeAuthenticatedRequest(method: string, data: any, endpoint: string, auth: { username: string; password: string }): Promise<any> {
+    private async makeAuthenticatedRequest(method: string, data: any, endpoint: string, auth: { username: string; password: string }, flow: string): Promise<any> {
         try {
-            // console.log(`TBO Hotel API Request: ${method} ${endpoint}`);
-            // console.log('TBO Request Data:', JSON.stringify(data, null, 2));
-
-            // Use the new TBO Hotel HTTP utility method
-            const response = await Http.httpRequestTBOHotel(method, endpoint, data, auth);
+            const response = await Http.httpRequestTBOHotel(method, endpoint, data, auth, { flow });
 
             // console.log('TBO Hotel API Response received successfully');
             return response;

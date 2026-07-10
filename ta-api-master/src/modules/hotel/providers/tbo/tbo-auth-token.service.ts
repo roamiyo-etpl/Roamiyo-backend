@@ -3,6 +3,7 @@ import { s3BucketService } from 'src/shared/utilities/flight/s3bucket.utility';
 import { Http } from 'src/shared/utilities/flight/http.utility';
 import { SupplierLogUtility } from 'src/shared/utilities/flight/supplier-log.utility';
 import { ConfigurationService } from '../../configuration/configuration.service';
+import { logHotelTboRequest } from 'src/shared/utilities/hotel/hotel-api-log.utility';
 
 @Injectable()
 export class TboAuthTokenService {
@@ -61,7 +62,7 @@ export class TboAuthTokenService {
 
             // prod endpoint
             const endpoint = `${providerCred.auth_url}/rest/Authenticate`;
-            console.log("endpoint:::::::::", endpoint);
+            logHotelTboRequest({ method: 'POST', endpoint, flow: 'auth' });
 
             const sessionData = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(data));
             const logs = {
