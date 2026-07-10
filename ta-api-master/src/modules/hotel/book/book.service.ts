@@ -13,6 +13,7 @@ import { HotelPrice } from '../search/interfaces/initiate-result-response.interf
 import { SupplierCredService } from 'src/modules/generic/supplier-credientials/supplier-cred.service';
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { BookingDetailResponse } from './interfaces/booking-detail-response.interface';
+import { PaymentStatus } from 'src/shared/entities/booking-logs.entity';
 
 @Injectable()
 export class HotelBookService {
@@ -116,17 +117,17 @@ export class HotelBookService {
         const { bookingRefId, searchReqId, paymentLogId } = bookReq;
         this.logger.log(`[bookConfirmation] start | bookingRefId=${bookingRefId} searchReqId=${searchReqId} paymentLogId=${paymentLogId}`);
 
+        let initiateBookingLog: Awaited<ReturnType<BookRepository['getBookingLogByBookingLogId']>> | null = null;
+
         try {
 
             /* Get booking from database */
             const booking = await this.bookRepository.getBookingByBookingId({ bookingRefId: bookingRefId });
 
-            /* Get booking log from database */
-            const bookingLog = await this.bookRepository.getBookingLogByBookingLogId({ bookingRefId: bookingRefId });
+            /* Get initiate booking log (room quote row) */
+            initiateBookingLog = await this.bookRepository.getBookingLogByBookingLogId({ bookingRefId: bookingRefId });
 
-            /* Verify booking log */
-            await this.bookRepository.verifyBookingLog({ bookingRefId: bookingRefId });
-            const originalBookRequestResponse = bookingLog.data;
+            const originalBookRequestResponse = initiateBookingLog.data;
             if (!originalBookRequestResponse) {
                 throw new Error('Original booking request not found in booking log');
             }
@@ -143,11 +144,33 @@ export class HotelBookService {
             const supplierDetailsResponse = await this.providerBookService.bookConfirmation(originalBookRequestResponse, headers);
             const { success, errorCode, message, mode: supplierMode, ...supplierDetails } = supplierDetailsResponse;
             const bookingMode = supplierMode || responseMode;
-            if (supplierDetailsResponse.success && supplierDetailsResponse.errorCode === 0) {
+
+            const confirmationSucceeded =
+                supplierDetailsResponse.success && supplierDetailsResponse.errorCode === 0;
+
+            await this.persistConfirmationBookingLog({
+                initiateBookingLog,
+                bookReq,
+                bookingMode,
+                supplierDetails,
+                supplierDetailsResponse: {
+                    success: confirmationSucceeded,
+                    errorCode,
+                    message,
+                    bookingStatus: confirmationSucceeded
+                        ? supplierDetails.supplierResponse?.HotelBookingStatus
+                        : 'failed',
+                    supplierBookingId: confirmationSucceeded
+                        ? String(supplierDetails.supplierResponse?.BookingId ?? '')
+                        : '',
+                },
+            });
+
+            if (confirmationSucceeded) {
 
                 const apiResponse = {
                     booking: {
-                        request: bookingLog.data.originalBookRequest,
+                        request: initiateBookingLog.data.originalBookRequest,
                         response: {
                             success: true,
                             message: 'Book confirmation successful',
@@ -205,6 +228,29 @@ export class HotelBookService {
             this.logger.error(
                 `[bookConfirmation] error | bookingRefId=${bookingRefId} searchReqId=${searchReqId} | ${error?.message || error}`,
             );
+
+            if (initiateBookingLog) {
+                try {
+                    await this.persistConfirmationBookingLog({
+                        initiateBookingLog,
+                        bookReq,
+                        bookingMode: '',
+                        supplierDetails: {},
+                        supplierDetailsResponse: {
+                            success: false,
+                            errorCode: null,
+                            message: error?.message || 'Booking confirmation failed',
+                            bookingStatus: 'failed',
+                            supplierBookingId: '',
+                        },
+                    });
+                } catch (logError) {
+                    this.logger.error(
+                        `[bookConfirmation] failed to persist confirmation booking log | bookingRefId=${bookingRefId} | ${logError?.message || logError}`,
+                    );
+                }
+            }
+
             throw new BadRequestException({
                 success: false,
                 message: 'Booking confirmation failed',
@@ -217,6 +263,52 @@ export class HotelBookService {
 
         }
 
+    }
+
+    /** Persists a dedicated booking_log row for hotel/book/confirmation (separate from room quote log). */
+    private async persistConfirmationBookingLog(params: {
+        initiateBookingLog: Awaited<ReturnType<BookRepository['getBookingLogByBookingLogId']>>;
+        bookReq: HotelBookConfirmationDto;
+        bookingMode: string;
+        supplierDetails: Record<string, any>;
+        supplierDetailsResponse: {
+            success: boolean;
+            errorCode: number | null;
+            message: string;
+            bookingStatus: string;
+            supplierBookingId: string;
+        };
+    }): Promise<void> {
+        const { initiateBookingLog, bookReq, bookingMode, supplierDetails, supplierDetailsResponse } = params;
+        const { bookingRefId, searchReqId, paymentLogId } = bookReq;
+
+        await this.bookRepository.storeConfirmationBookingLog({
+            bookingRefId,
+            userId: initiateBookingLog.user_id,
+            logId: initiateBookingLog.log_id,
+            transactionId: paymentLogId,
+            isVerified: supplierDetailsResponse.success,
+            paymentStatus: supplierDetailsResponse.success
+                ? PaymentStatus.CAPTURED
+                : PaymentStatus.FAILED,
+            data: {
+                api: 'hotel/book/confirmation',
+                request: bookReq,
+                response: {
+                    success: supplierDetailsResponse.success,
+                    errorCode: supplierDetailsResponse.errorCode,
+                    message: supplierDetailsResponse.message,
+                    bookingStatus: supplierDetailsResponse.bookingStatus,
+                    bookingRefId,
+                    searchReqId,
+                    mode: bookingMode,
+                    supplierBookingId: supplierDetailsResponse.supplierBookingId,
+                },
+                supplierRequest: supplierDetails.supplierRequest ?? null,
+                supplierResponse: supplierDetails.supplierResponse ?? null,
+                supplierOrderDetails: supplierDetails.supplierOrderDetails ?? null,
+            },
+        });
     }
 
 

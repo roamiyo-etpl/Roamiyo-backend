@@ -72,7 +72,7 @@ export class TboRoomService {
             // console.log('TBO Room API Request:', tboRequest);
 
             // Execute room search
-            const response = await this.executeRoomSearchWithRetry(tboRequest, endpoint, auth);
+            const response = await this.executeRoomSearchWithRetry(tboRequest, endpoint, auth, 'room-list');
 
             // console.log(response, 'data');
             // Convert TBO response to our standard format
@@ -118,7 +118,7 @@ export class TboRoomService {
             // console.log('TBO Room Quote API Request:', tboRequest, auth);
 
             // Execute quote request
-            const response = await this.executeQuoteWithRetry(tboRequest, endpoint, auth);
+            const response = await this.executeQuoteWithRetry(tboRequest, endpoint, auth, 'room-quote');
 
             // console.log(response);
             // Convert TBO response to our standard format
@@ -171,10 +171,10 @@ export class TboRoomService {
      * @param maxRetries - Maximum retry attempts
      * @returns Promise<any> - API response
      */
-    private async executeRoomSearchWithRetry(request: any, endpoint: string, auth: any, maxRetries: number = 2): Promise<any> {
+    private async executeRoomSearchWithRetry(request: any, endpoint: string, auth: any, flow: string, maxRetries: number = 2): Promise<any> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                const response = await Http.httpRequestTBOHotel('POST', endpoint, request, auth);
+                const response = await Http.httpRequestTBOHotel('POST', endpoint, request, auth, { flow });
                 console.log(`TBO Room Search (attempt ${attempt}): ${response?.HotelResult?.length || 0} hotels`);
                 return response;
             } catch (error) {
@@ -196,10 +196,10 @@ export class TboRoomService {
      * @param maxRetries - Maximum retry attempts
      * @returns Promise<any> - API response
      */
-    private async executeQuoteWithRetry(request: any, endpoint: string, auth: any, maxRetries: number = 2): Promise<any> {
+    private async executeQuoteWithRetry(request: any, endpoint: string, auth: any, flow: string, maxRetries: number = 2): Promise<any> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                const response = await Http.httpRequestTBOHotel('POST', endpoint, request, auth);
+                const response = await Http.httpRequestTBOHotel('POST', endpoint, request, auth, { flow });
                 console.log(`TBO Room Quote (attempt ${attempt}): Success`);
                 return response;
             } catch (error) {

@@ -44,7 +44,7 @@ export class TboOrderDetailService {
             }
             const endPointGetBooking = `${providerCredentials.service_url}/Getbookingdetail`;
 
-            const getBookingDetails = await this.executeQuoteWithRetry(tboOrderRequest, endPointGetBooking, auth);
+            const getBookingDetails = await this.executeQuoteWithRetry(tboOrderRequest, endPointGetBooking, auth, 'order-detail');
 
             // console.log(getBookingDetails,"getBookingDetails");
 
@@ -72,10 +72,10 @@ export class TboOrderDetailService {
             * @param maxRetries - Maximum retry attempts
             * @returns Promise<any> - API response
    */
-    private async executeQuoteWithRetry(request: any, endpoint: string, auth: any, maxRetries: number = 1): Promise<any> {
+    private async executeQuoteWithRetry(request: any, endpoint: string, auth: any, flow: string, maxRetries: number = 1): Promise<any> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                const response = await Http.httpRequestTBOHotel('POST', endpoint, request, auth);
+                const response = await Http.httpRequestTBOHotel('POST', endpoint, request, auth, { flow });
                 console.log(`TBO Room Book (attempt ${attempt}): Success`);
                 return response;
             } catch (error) {

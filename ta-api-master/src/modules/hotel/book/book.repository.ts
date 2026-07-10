@@ -139,20 +139,53 @@ export class BookRepository extends Repository<Booking> {
         return this.dataSource.getRepository(BookingLog).save(bookingLog);
     }
 
-    /** [@Description: This method is used to get the booking log by booking log id]
+    /** [@Description: Returns the initiate booking log (room quote row), not confirmation rows]
      * @author: Qamar Ali at 13-10-2025 **/
     async getBookingLogByBookingLogId(reqParams): Promise<BookingLog> {
         const { bookingRefId } = reqParams;
-        // Validate bookingLogId
         if (!bookingRefId) {
             throw new Error('Booking log ID is required');
         }
 
-        const bookingLog = await this.dataSource.getRepository(BookingLog).findOne({ where: { booking_reference_id: bookingRefId, is_verified: false } });
-        if (!bookingLog) {
+        const bookingLogs = await this.dataSource.getRepository(BookingLog).find({
+            where: { booking_reference_id: bookingRefId },
+            order: { created_at: 'ASC' },
+        });
+
+        const initiateLog =
+            bookingLogs.find((log) => log.data?.roomQuoteResponse != null) ?? bookingLogs[0];
+
+        if (!initiateLog) {
             throw new Error(`Booking log not found with ID: ${bookingRefId}`);
         }
-        return bookingLog;
+        return initiateLog;
+    }
+
+    /** [@Description: Stores a separate booking_log row for hotel/book/confirmation audit]
+     * Reuses log_id, booking_reference_id, and user_id from the initiate row. **/
+    async storeConfirmationBookingLog(reqParams): Promise<BookingLog> {
+        const {
+            bookingRefId,
+            userId,
+            logId,
+            data,
+            paymentStatus,
+            isVerified,
+            transactionId,
+        } = reqParams;
+
+        const bookingLog = new BookingLog();
+        bookingLog.log_id = logId;
+        bookingLog.booking_reference_id = bookingRefId;
+        bookingLog.user_id = userId;
+        bookingLog.data = data;
+        bookingLog.is_verified = isVerified;
+        bookingLog.payment_status = paymentStatus;
+        bookingLog.transaction_id = transactionId ?? null;
+        bookingLog.created_at = new Date();
+        bookingLog.updated_at = new Date();
+
+        return this.dataSource.getRepository(BookingLog).save(bookingLog);
     }
 
     /** [@Description: This method is used to get the booking log by booking log id]

@@ -134,6 +134,7 @@ export class TboCancellationService {
                 sendChangeRequestBody,
                 sendChangeEndpoint,
                 auth,
+                'cancel-send-change',
             )) as TboHotelSendChangeResponse;
 
             console.log('[TBO-HOTEL-CANCEL][STEP-2] AFTER SendChangeRequest');
@@ -363,6 +364,7 @@ export class TboCancellationService {
                 statusBody,
                 statusEndpoint,
                 auth,
+                'cancel-change-status',
             )) as TboHotelGetChangeStatusResponse;
 
             console.log(`[TBO-HOTEL-CANCEL][POLL-${attempt}] AFTER GetChangeRequestStatus`);
@@ -425,11 +427,12 @@ export class TboCancellationService {
         request: Record<string, unknown>,
         endpoint: string,
         auth: { username: string; password: string },
+        flow: string,
         maxRetries = 2,
     ): Promise<unknown> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                const response = await Http.httpRequestTBOHotel('POST', endpoint, request, auth);
+                const response = await Http.httpRequestTBOHotel('POST', endpoint, request, auth, { flow });
                 console.log(`[TBO-HOTEL-CANCEL] HTTP success (attempt ${attempt}):`, endpoint);
                 return response;
             } catch (error) {
