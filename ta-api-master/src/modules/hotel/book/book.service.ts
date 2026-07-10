@@ -229,6 +229,11 @@ export class HotelBookService {
                 `[bookConfirmation] error | bookingRefId=${bookingRefId} searchReqId=${searchReqId} | ${error?.message || error}`,
             );
 
+            const failureMessage =
+                error?.response?.message ||
+                error?.message ||
+                'Booking confirmation failed';
+
             if (initiateBookingLog) {
                 try {
                     await this.persistConfirmationBookingLog({
@@ -239,7 +244,7 @@ export class HotelBookService {
                         supplierDetailsResponse: {
                             success: false,
                             errorCode: null,
-                            message: error?.message || 'Booking confirmation failed',
+                            message: failureMessage,
                             bookingStatus: 'failed',
                             supplierBookingId: '',
                         },
@@ -253,7 +258,7 @@ export class HotelBookService {
 
             throw new BadRequestException({
                 success: false,
-                message: 'Booking confirmation failed',
+                message: failureMessage,
                 bookingStatus: 'failed',
                 bookingRefId: bookingRefId,
                 searchReqId: searchReqId,
