@@ -204,6 +204,33 @@ Default window ≈ **60 seconds**. Increase env vars if TBO is slow; payment sho
 
 If a prior cancel is still `Pending` or `InProgress`, a new `POST /cancel` **does not** call `SendChangeRequest` again. It resumes polling the existing `changeRequestId` and updates the same `cancellations` row.
 
+### Duplicate `POST /cancel` when already Processed / cancelled
+
+Returns **HTTP 200** (idempotent success) with `cancelCompleted: true`, `alreadyCancelled: true`, and the saved `changeRequestId` / credit-note fields. Does **not** call TBO again and does **not** return 400.
+
+Example:
+
+```json
+{
+  "success": true,
+  "message": "Booking is already cancelled",
+  "mode": "TBO-Production",
+  "cancellationStatus": true,
+  "cancelSubmitted": true,
+  "cancelCompleted": true,
+  "pendingCompletion": false,
+  "alreadyCancelled": true,
+  "hotelChangeRequestStatus": 3,
+  "status": "Processed",
+  "changeRequestId": 15706070,
+  "cancellationId": "df9d3d7e-bd28-49fb-bf1b-02e0c4f00185",
+  "refundedAmount": 1417,
+  "cancellationCharge": 0,
+  "creditNoteNo": "MZ/2627/105442",
+  "creditNoteCreatedOn": "2026-07-13T13:53:49.000Z"
+}
+```
+
 ---
 
 ## TBO hotel ChangeRequestStatus
@@ -393,7 +420,7 @@ curl -X POST 'https://<travel-tek-host>/cancel' \
 
 | HTTP | Cause |
 |------|-------|
-| 400 | Missing fields, booking not found, already cancelled, invalid status, hotel on `/cancellation-charges` |
+| 400 | Missing fields, booking not found, invalid status, hotel on `/cancellation-charges` |
 | 404 | Provider config not found |
 | 500 | TBO auth or network failure |
 

@@ -4,7 +4,12 @@ import { GenericCancelDto } from 'src/modules/cancel/dto/cancel.dto';
 import { CancelResponse } from 'src/modules/cancel/interfaces/cancel.interface';
 import { HotelCancelRepository } from './cancel.repository';
 import { BookingStatus } from 'src/shared/entities/bookings.entity';
+import { Cancellation } from 'src/shared/entities/cancellations.entity';
 import { HotelCancelStatusDto } from './dtos/hotel-cancel-status.dto';
+import {
+    HotelChangeRequestStatus,
+    getHotelChangeRequestStatusLabel,
+} from './dtos/hotel-cancel.dto';
 
 @Injectable()
 export class HotelCancelService {
@@ -34,15 +39,25 @@ export class HotelCancelService {
                 booking_status: booking.booking_status,
             }, null, 2));
 
-            this.validateBookingCancellable(booking.booking_status);
+            const successfulCancellation =
+                await this.cancelRepository.findSuccessfulHotelCancellation(cancelReq.booking_id);
+            const alreadyCancelled =
+                booking.booking_status === BookingStatus.CANCELLED || successfulCancellation != null;
 
-            const isDuplicate = await this.cancelRepository.hasExistingSuccessfulHotelCancellation(
-                cancelReq.booking_id,
-            );
-            if (isDuplicate) {
-                console.log('[CANCEL-HOTEL] Duplicate cancellation blocked');
-                throw new BadRequestException('Booking is already cancelled');
+            if (alreadyCancelled) {
+                const idempotent = this.buildAlreadyCancelledResponse({
+                    bookingSupplierName: booking.supplier_name,
+                    cancellation: successfulCancellation,
+                });
+                console.log(
+                    '[CANCEL-HOTEL] Booking already cancelled — returning idempotent Processed response:',
+                    JSON.stringify(idempotent, null, 2),
+                );
+                console.log('════════════════ CANCEL HOTEL END ════════════════');
+                return idempotent;
             }
+
+            this.validateBookingCancellable(booking.booking_status);
 
             const providerCancelReq = this.toProviderCancelReq(cancelReq, booking.supplier_name);
             const inFlight = await this.cancelRepository.findInFlightHotelCancellation(
@@ -159,6 +174,8 @@ export class HotelCancelService {
                         cancellationCharge: result.cancellationCharge,
                         refundedAmount: result.refundedAmount,
                         remarks: result.remarks,
+                        creditNoteNo: result.creditNoteNo,
+                        creditNoteCreatedOn: result.creditNoteCreatedOn,
                         getChangeRequestStatusResponse: extended.getChangeRequestStatusResponse,
                     },
                     cancellationStatus: result.cancellationStatus === true,
@@ -202,6 +219,8 @@ export class HotelCancelService {
                 cancellationCharge: result.cancellationCharge,
                 refundedAmount: result.refundedAmount,
                 remarks: cancelReq.supplierParams?.remarks ?? result.remarks,
+                creditNoteNo: result.creditNoteNo,
+                creditNoteCreatedOn: result.creditNoteCreatedOn,
                 sendChangeRequestResponse: extended.sendChangeRequestResponse,
                 getChangeRequestStatusResponse: extended.getChangeRequestStatusResponse,
             },
@@ -229,6 +248,71 @@ export class HotelCancelService {
         } catch (dbError) {
             console.error('[CANCEL-HOTEL] DB save failed:', dbError);
         }
+    }
+
+    /**
+     * Idempotent success when cancel was already Processed — HTTP 200, no new TBO cancel.
+     */
+    private buildAlreadyCancelledResponse(params: {
+        bookingSupplierName?: string;
+        cancellation: Cancellation | null;
+    }): CancelResponse & {
+        sendChangeRequestResponse?: unknown;
+        getChangeRequestStatusResponse?: unknown;
+        alreadyCancelled?: boolean;
+    } {
+        const { cancellation, bookingSupplierName } = params;
+        const additional = cancellation?.additional_data ?? {};
+        const hotelStatus =
+            Number(
+                additional.hotelChangeRequestStatus ?? HotelChangeRequestStatus.Processed,
+            ) || HotelChangeRequestStatus.Processed;
+
+        const creditNoteNo =
+            cancellation?.credit_note_no ||
+            additional.creditNoteNo ||
+            additional.sendChangeRequestResponse?.CreditNoteNo ||
+            additional.getChangeRequestStatusResponse?.CreditNoteNo ||
+            undefined;
+
+        const creditNoteCreatedOn =
+            (cancellation?.credit_note_created_on
+                ? new Date(cancellation.credit_note_created_on).toISOString()
+                : undefined) ||
+            additional.creditNoteCreatedOn ||
+            additional.sendChangeRequestResponse?.CreditNoteCreatedOn ||
+            additional.getChangeRequestStatusResponse?.CreditNoteCreatedOn ||
+            undefined;
+
+        const mode = bookingSupplierName
+            ? `${String(bookingSupplierName).toUpperCase()}-Production`
+            : 'TBO';
+
+        return {
+            success: true,
+            message: 'Booking is already cancelled',
+            mode,
+            cancellationStatus: true,
+            cancelSubmitted: true,
+            cancelCompleted: true,
+            pendingCompletion: false,
+            alreadyCancelled: true,
+            hotelChangeRequestStatus: hotelStatus,
+            status: getHotelChangeRequestStatusLabel(hotelStatus),
+            changeRequestId: cancellation?.change_request_id
+                ? Number(cancellation.change_request_id)
+                : undefined,
+            traceId: cancellation?.trace_id ?? undefined,
+            cancellationCharge: cancellation?.cancellation_charge ?? 0,
+            refundedAmount: cancellation?.refunded_amount ?? 0,
+            creditNoteNo,
+            creditNoteCreatedOn,
+            remarks: cancellation?.remarks ?? undefined,
+            cancellationId: cancellation?.cancellation_id,
+            sendChangeRequestResponse: additional.sendChangeRequestResponse ?? undefined,
+            getChangeRequestStatusResponse:
+                additional.getChangeRequestStatusResponse ?? undefined,
+        };
     }
 
     private validateCancelRequest(cancelReq: GenericCancelDto): void {

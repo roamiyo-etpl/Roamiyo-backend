@@ -23,15 +23,31 @@ interface TboHotelError {
     ErrorMessage?: string;
 }
 
-interface TboHotelSendChangeRequestResult {
+interface TboHotelCancellationChargeBreakUp {
+    CancellationFees?: number;
+    CancellationServiceCharge?: number;
+}
+
+interface TboHotelCreditNoteFields {
+    CreditNoteNo?: string;
+    CreditNoteCreatedOn?: string;
+    CreditNoteGSTIN?: string;
+    TotalPrice?: number;
+    CancellationChargeBreakUp?: TboHotelCancellationChargeBreakUp | null;
+}
+
+interface TboHotelSendChangeRequestResult extends TboHotelCreditNoteFields {
     TraceId?: string;
     ChangeRequestId?: number;
     ChangeRequestStatus?: number;
+    CancellationCharge?: number;
+    RefundedAmount?: number;
+    RefundAmount?: number;
     ResponseStatus?: number;
     Error?: TboHotelError;
 }
 
-interface TboHotelGetChangeRequestStatusResult {
+interface TboHotelGetChangeRequestStatusResult extends TboHotelCreditNoteFields {
     TraceId?: string;
     ChangeRequestId?: number;
     ChangeRequestStatus?: number;
@@ -63,6 +79,10 @@ interface StatusPollResult {
     refundedAmount: number;
     responseStatus: number;
     traceId?: string;
+    creditNoteNo?: string;
+    creditNoteCreatedOn?: string;
+    creditNoteGstin?: string;
+    totalPrice?: number;
     error?: TboHotelError;
     raw: unknown;
 }
@@ -169,6 +189,16 @@ export class TboCancellationService {
 
             finalResponse.changeRequestId = changeRequestId;
 
+            const sendCreditFields = this.extractCreditNoteFields(sendChangeResult);
+            finalResponse.creditNoteNo = sendCreditFields.creditNoteNo;
+            finalResponse.creditNoteCreatedOn = sendCreditFields.creditNoteCreatedOn;
+            if (sendChangeResult.RefundedAmount != null || sendChangeResult.RefundAmount != null) {
+                finalResponse.refundedAmount = Number(
+                    sendChangeResult.RefundedAmount ?? sendChangeResult.RefundAmount ?? 0,
+                );
+            }
+            finalResponse.cancellationCharge = this.extractCancellationCharge(sendChangeResult);
+
             console.log('[TBO-HOTEL-CANCEL][STEP-3] ChangeRequestId:', changeRequestId);
             console.log(
                 '[TBO-HOTEL-CANCEL][STEP-3] Initial ChangeRequestStatus:',
@@ -185,6 +215,23 @@ export class TboCancellationService {
                 initialStatus: sendChangeResult.ChangeRequestStatus,
                 pollOptions,
             });
+
+            // Prefer poll values; fall back to SendChangeRequest credit/amount fields.
+            if (!statusResult.creditNoteNo && sendCreditFields.creditNoteNo) {
+                statusResult.creditNoteNo = sendCreditFields.creditNoteNo;
+            }
+            if (!statusResult.creditNoteCreatedOn && sendCreditFields.creditNoteCreatedOn) {
+                statusResult.creditNoteCreatedOn = sendCreditFields.creditNoteCreatedOn;
+            }
+            if (!statusResult.creditNoteGstin && sendCreditFields.creditNoteGstin) {
+                statusResult.creditNoteGstin = sendCreditFields.creditNoteGstin;
+            }
+            if (!statusResult.refundedAmount && finalResponse.refundedAmount) {
+                statusResult.refundedAmount = Number(finalResponse.refundedAmount);
+            }
+            if (!statusResult.cancellationCharge && finalResponse.cancellationCharge) {
+                statusResult.cancellationCharge = Number(finalResponse.cancellationCharge);
+            }
 
             return this.applyStatusToResponse({
                 finalResponse,
@@ -280,6 +327,9 @@ export class TboCancellationService {
         finalResponse.traceId = statusResult.traceId ?? finalResponse.traceId;
         finalResponse.status = getHotelChangeRequestStatusLabel(statusResult.changeRequestStatus);
         finalResponse.changeRequestId = changeRequestId;
+        finalResponse.creditNoteNo = statusResult.creditNoteNo ?? finalResponse.creditNoteNo;
+        finalResponse.creditNoteCreatedOn =
+            statusResult.creditNoteCreatedOn ?? finalResponse.creditNoteCreatedOn;
 
         if (remarks) {
             finalResponse.remarks = remarks;
@@ -379,15 +429,21 @@ export class TboCancellationService {
                 statusResult.ChangeRequestStatus ?? HotelChangeRequestStatus.NotSet,
             );
 
+            const creditFields = this.extractCreditNoteFields(statusResult);
+
             lastResult = {
                 changeRequestId: statusResult.ChangeRequestId ?? changeRequestId,
                 changeRequestStatus,
-                cancellationCharge: Number(statusResult.CancellationCharge ?? 0),
+                cancellationCharge: this.extractCancellationCharge(statusResult),
                 refundedAmount: Number(
                     statusResult.RefundedAmount ?? statusResult.RefundAmount ?? 0,
                 ),
                 responseStatus: Number(statusResult.ResponseStatus ?? 0),
                 traceId: statusResult.TraceId,
+                creditNoteNo: creditFields.creditNoteNo,
+                creditNoteCreatedOn: creditFields.creditNoteCreatedOn,
+                creditNoteGstin: creditFields.creditNoteGstin,
+                totalPrice: creditFields.totalPrice,
                 error: statusResult.Error,
                 raw: statusResult,
             };
@@ -421,6 +477,45 @@ export class TboCancellationService {
         }
 
         return lastResult;
+    }
+
+    private extractCancellationCharge(
+        result?: TboHotelCreditNoteFields & { CancellationCharge?: number },
+    ): number {
+        if (result?.CancellationCharge != null && !Number.isNaN(Number(result.CancellationCharge))) {
+            return Number(result.CancellationCharge);
+        }
+
+        const breakUp = result?.CancellationChargeBreakUp;
+        if (breakUp) {
+            return (
+                Number(breakUp.CancellationFees ?? 0) +
+                Number(breakUp.CancellationServiceCharge ?? 0)
+            );
+        }
+
+        return 0;
+    }
+
+    private extractCreditNoteFields(result?: TboHotelCreditNoteFields): {
+        creditNoteNo?: string;
+        creditNoteCreatedOn?: string;
+        creditNoteGstin?: string;
+        totalPrice?: number;
+    } {
+        if (!result) {
+            return {};
+        }
+
+        return {
+            creditNoteNo: result.CreditNoteNo || undefined,
+            creditNoteCreatedOn: result.CreditNoteCreatedOn || undefined,
+            creditNoteGstin: result.CreditNoteGSTIN || undefined,
+            totalPrice:
+                result.TotalPrice != null && !Number.isNaN(Number(result.TotalPrice))
+                    ? Number(result.TotalPrice)
+                    : undefined,
+        };
     }
 
     private async executeWithRetry(
