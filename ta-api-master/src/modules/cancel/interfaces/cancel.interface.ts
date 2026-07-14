@@ -21,6 +21,8 @@ export class CancelResponse {
     cancelCompleted?: boolean;
     /** Hotel: true when status is Pending or InProgress — poll POST /cancel/status */
     pendingCompletion?: boolean;
+    /** Hotel: true when POST /cancel is idempotent — booking was already cancelled */
+    alreadyCancelled?: boolean;
     /** Hotel: raw TBO ChangeRequestStatus 0–4 */
     hotelChangeRequestStatus?: number;
     error?: {

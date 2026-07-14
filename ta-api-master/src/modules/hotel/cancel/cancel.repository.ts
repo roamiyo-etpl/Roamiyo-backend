@@ -50,23 +50,30 @@ export class HotelCancelRepository extends Repository<Booking> {
      * or a prior hotel cancel reached Processed (3).
      */
     async hasExistingSuccessfulHotelCancellation(booking_id: string): Promise<boolean> {
-        const booking = await this.findOne({ where: { booking_id } });
-        if (booking?.booking_status === BookingStatus.CANCELLED) {
-            return true;
-        }
+        return (await this.findSuccessfulHotelCancellation(booking_id)) != null
+            || (await this.findOne({ where: { booking_id } }))?.booking_status ===
+                BookingStatus.CANCELLED;
+    }
 
+    /**
+     * Latest successful hotel cancellation row (Processed / cancellationStatus true).
+     */
+    async findSuccessfulHotelCancellation(booking_id: string): Promise<Cancellation | null> {
         const cancellations = await this.dataSource.getRepository(Cancellation).find({
             where: { booking_id },
             order: { created_at: 'DESC' },
         });
 
-        return cancellations.some((row) => {
-            const hotelStatus = row.additional_data?.hotelChangeRequestStatus;
-            return (
-                hotelStatus === HotelChangeRequestStatus.Processed ||
-                row.additional_data?.cancellationStatus === true
-            );
-        });
+        return (
+            cancellations.find((row) => {
+                const hotelStatus = row.additional_data?.hotelChangeRequestStatus;
+                return (
+                    hotelStatus === HotelChangeRequestStatus.Processed ||
+                    row.additional_data?.cancellationStatus === true ||
+                    row.status === CancellationStatusEnum.Completed
+                );
+            }) ?? null
+        );
     }
 
     async findInFlightHotelCancellation(booking_id: string): Promise<Cancellation | null> {
