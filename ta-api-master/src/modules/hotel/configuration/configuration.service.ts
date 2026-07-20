@@ -1,8 +1,9 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ModuleType, ProviderMaster } from 'src/shared/entities/provider-master.entity';
 import { DateUtility } from 'src/shared/utilities/flight/date.utility';
 import { Repository } from 'typeorm';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class ConfigurationService {
@@ -58,7 +59,7 @@ export class ConfigurationService {
             });
             return checkToken?.authToken;
         } catch (error) {
-            throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
+            throwHotelApiError(error, 'Failed to read hotel provider auth token');
         }
     }
 
@@ -68,7 +69,7 @@ export class ConfigurationService {
             await this.providerRepository.update({ code: searchRequest.providerCred?.provider, module_type: module }, { authToken: newAuthToken, tokenUpdatedAt: currentDate });
         } catch (error) {
             console.log(error);
-            throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
+            throwHotelApiError(error, 'Failed to update hotel provider auth token');
         }
     }
 
@@ -79,11 +80,11 @@ export class ConfigurationService {
                 where: { code: 'TBO' },
             });
             if (!tboId) {
-                throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
+                throwHotelApiError(new Error('TBO hotel provider configuration not found'), 'TBO hotel provider configuration not found');
             }
             return tboId?.providerId;
         } catch (error) {
-            throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
+            throwHotelApiError(error, 'Failed to fetch hotel provider configuration');
         }
     }
 }

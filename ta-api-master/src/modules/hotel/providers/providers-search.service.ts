@@ -1,8 +1,9 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { HotelResult } from '../search/interfaces/initiate-result-response.interface';
 
 import { HotelbedsSearchService } from './hotelbeds/hotelbeds-search.service';
 import { TboSearchService } from './tbo/tbo-search.service';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class ProvidersSearchService {
@@ -47,7 +48,6 @@ export class ProvidersSearchService {
 
             /* For TBO */
             if (activeProvidersName.indexOf('TBO') !== -1) {
-                // console.log('TBO found');
                 /* Filtering configuration with TBO only */
                 const tboCred = activeProviders.filter((item) => {
                     return item.providerCredentials.provider == 'TBO';
@@ -65,14 +65,14 @@ export class ProvidersSearchService {
                 result = await Promise.race(searchResults);
             } catch (error) {
                 console.log('supplier search error', error);
-                throw new InternalServerErrorException('ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER');
+                throwHotelApiError(error, 'Failed to fetch hotel search results from provider');
             }
             const results: HotelResult[] = result;
 
             return results;
         } catch (error) {
             console.log('supplier search error', error);
-            throw new InternalServerErrorException('ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER');
+            throwHotelApiError(error, 'Failed to fetch hotel search results from provider');
         }
     }
 }

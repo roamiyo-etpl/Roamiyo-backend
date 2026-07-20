@@ -1,9 +1,10 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { s3BucketService } from 'src/shared/utilities/flight/s3bucket.utility';
 import { Http } from 'src/shared/utilities/flight/http.utility';
 import { SupplierLogUtility } from 'src/shared/utilities/flight/supplier-log.utility';
 import { ConfigurationService } from '../../configuration/configuration.service';
 import { logHotelTboRequest } from 'src/shared/utilities/hotel/hotel-api-log.utility';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class TboAuthTokenService {
@@ -41,7 +42,7 @@ export class TboAuthTokenService {
             return authToken;
         } catch (error) {
             console.log(error);
-            throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
+            throwHotelApiError(error, 'Failed to fetch hotel provider auth token');
         }
     }
 
@@ -85,11 +86,15 @@ export class TboAuthTokenService {
             if (sessionData.Status == 1 && sessionData.TokenId != '') {
                 return sessionData.TokenId;
             } else {
-                throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
+                const supplierMessage =
+                    sessionData?.Error?.ErrorMessage ||
+                    sessionData?.ErrorMessage ||
+                    'Hotel provider authentication failed';
+                throwHotelApiError(new Error(supplierMessage), supplierMessage);
             }
         } catch (error) {
             console.log(error);
-            throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
+            throwHotelApiError(error, 'Failed to authenticate with hotel provider');
         }
     }
 }

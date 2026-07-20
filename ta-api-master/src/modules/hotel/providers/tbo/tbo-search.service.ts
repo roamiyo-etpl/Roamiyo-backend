@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import {
     HotelResult,
     HotelSearchRoomOffer,
@@ -12,6 +12,7 @@ import { TboHotelAdditionalDetailsEntity } from 'src/modules/dump/hotel/entities
 import { InjectRepository } from '@nestjs/typeorm';
 import { TboHotelImagesEntity } from 'src/modules/dump/hotel/entities/tbo-hotel-images.entity';
 import { Generic } from 'src/shared/utilities/flight/generic.utility';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 /**
  * TBO Hotel Search Service
@@ -105,7 +106,7 @@ export class TboSearchService {
             return allResults.sort((a, b) => a.prices.selling - b.prices.selling);
         } catch (error) {
             console.error('TBO Search Service Error:', error);
-            throw new InternalServerErrorException('ERR_TBO_SEARCH_FAILED');
+            throwHotelApiError(error, 'TBO hotel search failed');
         }
     }
 

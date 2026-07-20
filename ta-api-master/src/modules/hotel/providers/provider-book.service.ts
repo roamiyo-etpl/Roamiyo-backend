@@ -1,6 +1,7 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { HotelBookConfirmationResponse } from '../book/interfaces/book-confirmation-response.interface';
 import { TboBookService } from './tbo/tbo-book.service';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class ProviderBookService {
@@ -75,7 +76,7 @@ export class ProviderBookService {
 
         } catch (error) {
             console.log('supplier room book error', error);
-            throw new InternalServerErrorException('ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER');
+            throwHotelApiError(error, 'Failed to confirm hotel booking with provider');
         }
     }
 

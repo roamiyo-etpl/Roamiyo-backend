@@ -10,6 +10,7 @@ import {
     HotelChangeRequestStatus,
     getHotelChangeRequestStatusLabel,
 } from './dtos/hotel-cancel.dto';
+import { extractHotelErrorMessage } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class HotelCancelService {
@@ -102,8 +103,8 @@ export class HotelCancelService {
         } catch (error) {
             console.error('[CANCEL-HOTEL] ERROR:', error);
             throw new BadRequestException({
-                message: error.message || 'Hotel cancellation failed',
-                error: error.message,
+                success: false,
+                message: extractHotelErrorMessage(error, 'Hotel cancellation failed'),
             });
         }
     }

@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Headers, HttpException, InternalServerErrorException } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Headers } from '@nestjs/common';
 import { HotelSearchInitiateDto } from './dtos/hotel-search-initiate.dto';
 import { HotelSearchCheckResultsDto } from './dtos/hotel-search-check-results.dto';
 import { HotelSearchFiltrationDto } from './dtos/hotel-search-filtration.dto';
@@ -21,6 +21,7 @@ import {
     SWG_SUCCESS_RESPONSE,
     SWG_UNPROCESSABLE_RESPONSE,
 } from 'src/shared/constants/standard-api-responses.constant';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @ApiTags('Hotel')
 @ApiHeaders([SWG_HEADER_CURRENCY_PREFERENCE, SWG_HEADER_IP_MANDATE, SWG_HEADER_API_VERSION_MANDATE])
@@ -40,10 +41,7 @@ export class SearchController {
         try {
             return await this.searchService.searchInitiate(hotelSearchInitiateDto, headers);
         } catch (error: unknown) {
-            if (error instanceof HttpException) {
-                throw error;
-            }
-            throw new InternalServerErrorException('Internal server error');
+            throwHotelApiError(error, 'Hotel search initiation failed');
         }
     }
 
@@ -59,10 +57,7 @@ export class SearchController {
         try {
             return await this.searchService.searchCheckResults(hotelSearchCheckResultsDto, headers);
         } catch (error: unknown) {
-            if (error instanceof HttpException) {
-                throw error;
-            }
-            throw new InternalServerErrorException('Internal server error');
+            throwHotelApiError(error, 'Hotel search check results failed');
         }
     }
 
@@ -77,10 +72,7 @@ export class SearchController {
         try {
             return await this.searchService.searchFiltration(hotelSearchFiltrationDto, headers);
         } catch (error: unknown) {
-            if (error instanceof HttpException) {
-                throw error;
-            }
-            throw new InternalServerErrorException('Internal server error');
+            throwHotelApiError(error, 'Hotel search filtration failed');
         }
     }
 }

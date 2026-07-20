@@ -1,7 +1,8 @@
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { TboAuthTokenService } from "./tbo-auth-token.service";
 import { Http } from "src/shared/utilities/flight/http.utility";
 import { HotelProviderUtility } from "src/shared/utilities/hotel/hotel-provider.utility";
+import { throwHotelApiError } from "src/shared/utilities/hotel/hotel-error.utility";
 
 @Injectable()
 export class TboOrderDetailService {
@@ -58,8 +59,7 @@ export class TboOrderDetailService {
 
         } catch (error) {
             console.error('TBO Book Detail Service Error:', error);
-            throw new InternalServerErrorException('ERR_TBO_Book_Details_FAILED');
-
+            throwHotelApiError(error, 'TBO hotel booking details failed');
         }
 
     }

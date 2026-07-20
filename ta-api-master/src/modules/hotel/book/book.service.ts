@@ -14,6 +14,7 @@ import { SupplierCredService } from 'src/modules/generic/supplier-credientials/s
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { BookingDetailResponse } from './interfaces/booking-detail-response.interface';
 import { PaymentStatus } from 'src/shared/entities/booking-logs.entity';
+import { extractHotelErrorMessage, throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class HotelBookService {
@@ -108,7 +109,7 @@ export class HotelBookService {
         
             console.error("error.stack:", error?.stack);
         
-            throw error;
+            throwHotelApiError(error, 'Hotel book initiate failed');
         }
     }
 
@@ -224,15 +225,13 @@ export class HotelBookService {
 
             }
 
-        } catch (error) {
+        } catch (error: any) {
             this.logger.error(
                 `[bookConfirmation] error | bookingRefId=${bookingRefId} searchReqId=${searchReqId} | ${error?.message || error}`,
             );
 
             const failureMessage =
-                error?.response?.message ||
-                error?.message ||
-                'Booking confirmation failed';
+                extractHotelErrorMessage(error, 'Booking confirmation failed');
 
             if (initiateBookingLog) {
                 try {
@@ -249,7 +248,7 @@ export class HotelBookService {
                             supplierBookingId: '',
                         },
                     });
-                } catch (logError) {
+                } catch (logError: any) {
                     this.logger.error(
                         `[bookConfirmation] failed to persist confirmation booking log | bookingRefId=${bookingRefId} | ${logError?.message || logError}`,
                     );
@@ -339,9 +338,9 @@ export class HotelBookService {
                 mode: bookingData.api_response?.booking?.response?.mode || fallbackMode,
             };
 
-        } catch (error) {
+        } catch (error: any) {
             this.logger.error(`[getBookingDetails] error | bookingRefId=${bookingRefId} | ${error?.message || error}`);
-            throw error;
+            throwHotelApiError(error, 'Hotel booking details failed');
         }
 
     }
