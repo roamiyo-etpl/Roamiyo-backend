@@ -1,8 +1,9 @@
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { HotelBookConfirmationResponse } from "../../book/interfaces/book-confirmation-response.interface";
 import { Http } from "src/shared/utilities/flight/http.utility";
 import { HotelProviderUtility } from "src/shared/utilities/hotel/hotel-provider.utility";
 import { TboAuthTokenService } from "./tbo-auth-token.service";
+import { throwHotelApiError } from "src/shared/utilities/hotel/hotel-error.utility";
 
 @Injectable()
 export class TboBookService {
@@ -115,7 +116,7 @@ export class TboBookService {
             }
         } catch (error) {
             console.error('TBO Room Book Service Error:', error);
-            throw new InternalServerErrorException('ERR_TBO_ROOM_Book_FAILED');
+            throwHotelApiError(error, 'TBO hotel booking failed');
         }
     }
 

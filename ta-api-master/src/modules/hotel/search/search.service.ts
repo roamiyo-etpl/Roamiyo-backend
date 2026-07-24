@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, HttpException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { HotelSearchInitiateDto } from './dtos/hotel-search-initiate.dto';
 import { HotelSearchCheckResultsDto } from './dtos/hotel-search-check-results.dto';
 import { HotelSearchFiltrationDto } from './dtos/hotel-search-filtration.dto';
@@ -9,6 +9,7 @@ import { DateUtility } from 'src/shared/utilities/flight/date.utility';
 import { SupplierCredService } from 'src/modules/generic/supplier-credientials/supplier-cred.service';
 import { CachingUtility } from 'src/shared/utilities/common/caching.utility';
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -31,7 +32,10 @@ export class SearchService {
             }
 
             if (!roomsArray.some((room) => room.adults >= 1)) {
-                throw new BadRequestException('ERR_ADULT_SHOULD_BE_ONE');
+                throw new BadRequestException({
+                    success: false,
+                    message: 'At least one adult is required in the room occupancy',
+                });
             }
 
             /* Check active provider details */
@@ -67,7 +71,7 @@ export class SearchService {
             return searchResponse;
         } catch (error) {
             this.logger.error('Hotel search initiation failed:', error);
-            throw new Error(`Hotel search initiation failed: ${error.message}`);
+            throwHotelApiError(error, 'Hotel search initiation failed');
         }
     }
 
@@ -139,7 +143,7 @@ export class SearchService {
             return completeResponse;
         } catch (error) {
             this.logger.error('Hotel search check results failed:', error);
-            throw new Error(`Hotel search check results failed: ${error.message}`);
+            throwHotelApiError(error, 'Hotel search check results failed');
         }
     }
 
@@ -245,12 +249,8 @@ export class SearchService {
 
             return completeResponse;
         } catch (error) {
-            console.log('~ ProvidersSearchService ~ searchFiltration ~ error:', error);
-            if (error instanceof HttpException) {
-                throw error;
-            } else {
-                throw new InternalServerErrorException('ERR_FILTRATION_PROCESSING_FAILED');
-            }
+            this.logger.error('Hotel search filtration failed:', error);
+            throwHotelApiError(error, 'Hotel search filtration failed');
         }
     }
 

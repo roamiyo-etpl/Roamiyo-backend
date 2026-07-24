@@ -610,16 +610,24 @@ export class BookRepository extends Repository<Booking> {
 
     // Function to transform DayRates into NightlyRates with a fallback for missing data
     private transformDayRatesToNightly(dayRates: any[] | null | undefined): NightlyRate[] {
-        // If DayRates is null, undefined, or an empty array, return an empty array
         if (!dayRates || dayRates.length === 0) {
             return [];
         }
 
-        // Otherwise, transform the data
-        return dayRates.map(rate => ({
-            price: rate.Amount.toFixed(2), // Convert the price to string with two decimal places
-            dateYmd: rate.Date.split('T')[0] // Extract the date part (YYYY-MM-DD)
-        }));
+        return dayRates
+            .filter((rate) => rate != null)
+            .map((rate) => {
+                const amount = Number(rate.Amount ?? rate.amount ?? 0);
+                const rawDate = rate.Date ?? rate.date ?? '';
+                const dateYmd = typeof rawDate === 'string' && rawDate.includes('T')
+                    ? rawDate.split('T')[0]
+                    : String(rawDate || '');
+
+                return {
+                    price: Number.isFinite(amount) ? amount.toFixed(2) : '0.00',
+                    dateYmd,
+                };
+            });
     }
 
 }

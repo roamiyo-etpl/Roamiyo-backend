@@ -1,5 +1,6 @@
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { TboOrderDetailService } from "./tbo/tbo-order-detail.service";
+import { throwHotelApiError } from "src/shared/utilities/hotel/hotel-error.utility";
 
 @Injectable()
 export class ProviderOrderDetailService {
@@ -56,9 +57,7 @@ export class ProviderOrderDetailService {
             
         } catch (error) {
             console.log('supplier book detail error', error);
-            throw new InternalServerErrorException('ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER');
-            
-            
+            throwHotelApiError(error, 'Failed to fetch hotel order details from provider');
         }
     }
 

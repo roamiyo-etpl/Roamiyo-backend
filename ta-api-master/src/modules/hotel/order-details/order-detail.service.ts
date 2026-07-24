@@ -3,6 +3,7 @@ import { ProviderOrderDetailService } from '../providers/provider-order-detail.s
 import { SupplierCredService } from 'src/modules/generic/supplier-credientials/supplier-cred.service';
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { Generic } from 'src/shared/utilities/flight/generic.utility';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 
 
@@ -29,7 +30,6 @@ export class HotelOrderDetailService {
 
       Object.assign(orderReq, { activeProviders: activeProviders });
       const response = await this.providerOrderDetailService.orderDetail(orderReq, headers);
-      // console.log(response, "response");
       const getBookingResponse = this.convertBookingResponse(response.bookDetailsResponse)
       return {
         success: true,
@@ -38,7 +38,7 @@ export class HotelOrderDetailService {
       };
     } catch (error) {
       this.logger.error('Hotel Order Detail failed:', error);
-      throw new Error(`Hotel Order Detail failed: ${error.message}`);
+      throwHotelApiError(error, 'Hotel order detail failed');
     }
   }
 

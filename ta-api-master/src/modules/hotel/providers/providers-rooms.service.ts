@@ -1,8 +1,9 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
 import { HotelRoomResponse } from '../room/interfaces/room-list-response.interface';
 import { HotelRoomQuoteResponse } from '../room/interfaces/room-quote-response.interface';
 import { TboRoomService } from './tbo/tbo-room.service';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class ProviderRoomsService {
@@ -76,19 +77,22 @@ export class ProviderRoomsService {
             let result: HotelRoomResponse;
             try {
                 if (roomResults.length === 0) {
-                    throw new InternalServerErrorException('ERR_NO_ACTIVE_PROVIDERS');
+                    throwHotelApiError(
+                        new Error('No active hotel providers available for room list'),
+                        'No active hotel providers available for room list',
+                    );
                 }
                 result = await Promise.race(roomResults);
             } catch (error) {
                 console.log('supplier room details error', error);
-                throw new InternalServerErrorException('ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER');
+                throwHotelApiError(error, 'Failed to fetch hotel room list from provider');
             }
             const results: HotelRoomResponse = result;
 
             return results;
         } catch (error) {
             console.log('supplier room details error', error);
-            throw new InternalServerErrorException('ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER');
+            throwHotelApiError(error, 'Failed to fetch hotel room list from provider');
         }
     }
 
@@ -159,19 +163,22 @@ export class ProviderRoomsService {
             let result: HotelRoomQuoteResponse;
             try {
                 if (roomQuoteResults.length === 0) {
-                    throw new InternalServerErrorException('ERR_NO_ACTIVE_PROVIDERS');
+                    throwHotelApiError(
+                        new Error('No active hotel providers available for room quote'),
+                        'No active hotel providers available for room quote',
+                    );
                 }
                 result = await Promise.race(roomQuoteResults);
             } catch (error) {
                 console.log('supplier room quote error', error);
-                throw new InternalServerErrorException('ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER');
+                throwHotelApiError(error, 'Failed to fetch hotel room quote from provider');
             }
             const results: HotelRoomQuoteResponse = result;
 
             return results;
         } catch (error) {
             console.log('supplier room quote error', error);
-            throw new InternalServerErrorException('ERR_ISSUE_IN_FETCHING_DATA_FROM_PROVIDER');
+            throwHotelApiError(error, 'Failed to fetch hotel room quote from provider');
         }
     }
 }

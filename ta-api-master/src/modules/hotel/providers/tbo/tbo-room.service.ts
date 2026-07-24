@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { HotelRoomResponse } from '../../room/interfaces/room-list-response.interface';
 import { HotelRoomQuoteResponse, ValidationInfo } from '../../room/interfaces/room-quote-response.interface';
 import { TboRepository } from './tbo.repository';
@@ -11,6 +11,7 @@ import { TboHotelAdditionalDetailsEntity } from 'src/modules/dump/hotel/entities
 import { Generic } from 'src/shared/utilities/flight/generic.utility';
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { HotelPrice } from '../../search/interfaces/initiate-result-response.interface';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 /**
  * TBO Hotel Room Service
@@ -81,7 +82,7 @@ export class TboRoomService {
             return roomResponse;
         } catch (error) {
             console.error('TBO Room Search Service Error:', error);
-            throw new InternalServerErrorException('ERR_TBO_ROOM_SEARCH_FAILED');
+            throwHotelApiError(error, 'TBO hotel room list failed');
         }
     }
 
@@ -127,7 +128,7 @@ export class TboRoomService {
             return quoteResponse;
         } catch (error) {
             console.error('TBO Room Quote Service Error:', error);
-            throw new InternalServerErrorException('ERR_TBO_ROOM_QUOTE_FAILED');
+            throwHotelApiError(error, 'TBO hotel room quote failed');
         }
     }
 

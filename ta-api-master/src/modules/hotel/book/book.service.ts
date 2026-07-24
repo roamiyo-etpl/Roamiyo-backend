@@ -5,7 +5,7 @@ import { HotelBookInitiateDto, PassengerDto } from './dtos/hotel-book-initiate.d
 import { HotelBookConfirmationDto } from './dtos/hotel-book-confirmation.dto';
 import { HotelBookConfirmationResponse } from './interfaces/book-confirmation-response.interface';
 import { HotelRoomService } from '../room/room.service';
-import { PaxGroup } from 'src/shared/entities/bookings.entity';
+import { PaxGroup, paxesData } from 'src/shared/entities/bookings.entity';
 import { Generic } from 'src/shared/utilities/flight/generic.utility';
 import { BookRepository } from './book.repository';
 import { v4 as uuid } from 'uuid';
@@ -14,6 +14,7 @@ import { SupplierCredService } from 'src/modules/generic/supplier-credientials/s
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { BookingDetailResponse } from './interfaces/booking-detail-response.interface';
 import { PaymentStatus } from 'src/shared/entities/booking-logs.entity';
+import { extractHotelErrorMessage, throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class HotelBookService {
@@ -26,7 +27,11 @@ export class HotelBookService {
     ) { }
 
     async initiate(bookDto: HotelBookInitiateDto, headers: Headers): Promise<HotelBookInitiateResponse> {
-        const { hotelId, searchReqId, supplierCode, rateKey, passengers, contactDetails } = bookDto;
+        const { hotelId, searchReqId, supplierCode, rateKey, contactDetails } = bookDto;
+
+        // Map client documentType/documentNumber → pan / passportNumber when provided
+        const passengers = this.mapPassengerDocuments(bookDto.passengers);
+        bookDto.passengers = passengers;
 
         console.log(bookDto,'hdhd');
 
@@ -108,7 +113,7 @@ export class HotelBookService {
         
             console.error("error.stack:", error?.stack);
         
-            throw error;
+            throwHotelApiError(error, 'Hotel book initiate failed');
         }
     }
 
@@ -224,15 +229,13 @@ export class HotelBookService {
 
             }
 
-        } catch (error) {
+        } catch (error: any) {
             this.logger.error(
                 `[bookConfirmation] error | bookingRefId=${bookingRefId} searchReqId=${searchReqId} | ${error?.message || error}`,
             );
 
             const failureMessage =
-                error?.response?.message ||
-                error?.message ||
-                'Booking confirmation failed';
+                extractHotelErrorMessage(error, 'Booking confirmation failed');
 
             if (initiateBookingLog) {
                 try {
@@ -249,7 +252,7 @@ export class HotelBookService {
                             supplierBookingId: '',
                         },
                     });
-                } catch (logError) {
+                } catch (logError: any) {
                     this.logger.error(
                         `[bookConfirmation] failed to persist confirmation booking log | bookingRefId=${bookingRefId} | ${logError?.message || logError}`,
                     );
@@ -339,9 +342,9 @@ export class HotelBookService {
                 mode: bookingData.api_response?.booking?.response?.mode || fallbackMode,
             };
 
-        } catch (error) {
+        } catch (error: any) {
             this.logger.error(`[getBookingDetails] error | bookingRefId=${bookingRefId} | ${error?.message || error}`);
-            throw error;
+            throwHotelApiError(error, 'Hotel booking details failed');
         }
 
     }
@@ -383,26 +386,20 @@ export class HotelBookService {
                     paxData.age = calculatedAge;
                 }
 
+            const mappedPax = paxData as paxesData;
+
             if (type === 'adult') {
                 initialPaxesData.adult.count++;
-                initialPaxesData.adult.data?.push(paxData);
-                // if (pax.age !== undefined) {
-                //     initialPaxesData.adult.ages.push(pax.age);
-                // }
+                initialPaxesData.adult.data = initialPaxesData.adult.data || [];
+                initialPaxesData.adult.data.push(mappedPax);
             } else if (type === 'child') {
                 initialPaxesData.child.count++;
-                initialPaxesData.child.data = initialPaxesData.child.data || []; // Ensure it's initialized
-                initialPaxesData.child.data?.push(paxData);
-                // if (pax.age !== undefined) {
-                //     initialPaxesData.child.ages.push(pax.age);
-                // }
+                initialPaxesData.child.data = initialPaxesData.child.data || [];
+                initialPaxesData.child.data.push(mappedPax);
             } else if (type === 'infant') {
                 initialPaxesData.infant.count++;
-                initialPaxesData.infant.data = initialPaxesData.infant.data || []; // Ensure it's initialized
-                initialPaxesData.infant.data?.push(paxData);
-                // if (pax.age !== undefined) {
-                //     initialPaxesData.infant.ages.push(pax.age);
-                // }
+                initialPaxesData.infant.data = initialPaxesData.infant.data || [];
+                initialPaxesData.infant.data.push(mappedPax);
             } else {
                 throw new BadRequestException(`Invalid pax type`);
             }
@@ -425,6 +422,29 @@ export class HotelBookService {
 
         //     return acc;
         // }, initialPaxesData);
+    }
+
+    /**
+     * Maps client documentType/documentNumber onto pan or passportNumber when provided.
+     * Leaves existing pan/passportNumber unchanged when document fields are absent.
+     */
+    private mapPassengerDocuments(passengers: PassengerDto[]): PassengerDto[] {
+        return passengers.map((pax) => {
+            const documentType = pax.documentType?.trim()?.toLowerCase();
+            const documentNumber = pax.documentNumber?.trim();
+
+            if (!documentType || !documentNumber) {
+                return pax;
+            }
+
+            if (documentType === 'pan') {
+                pax.pan = documentNumber;
+            } else if (documentType === 'passport') {
+                pax.passportNumber = documentNumber;
+            }
+
+            return pax;
+        });
     }
 
     /**

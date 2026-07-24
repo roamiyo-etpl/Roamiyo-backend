@@ -4,9 +4,9 @@ import { HotelRoomResponse } from './interfaces/room-list-response.interface';
 import { HotelRoomListRequestDto } from './dtos/hotel-room-list.dto';
 import { HotelRoomQuoteDto } from './dtos/hotel-room-quote.dto';
 import { HotelRoomQuoteResponse } from './interfaces/room-quote-response.interface';
-import { v4 as uuidv4 } from 'uuid';
 import { SupplierCredService } from 'src/modules/generic/supplier-credientials/supplier-cred.service';
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
+import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 
 @Injectable()
 export class HotelRoomService {
@@ -27,7 +27,10 @@ export class HotelRoomService {
         try {
             /* Search request validations */
             if (!apiReqData.rooms.some((room) => room.adults >= 1)) {
-                throw new BadRequestException('ERR_ADULT_SHOULD_BE_ONE');
+                throw new BadRequestException({
+                    success: false,
+                    message: 'At least one adult is required in the room occupancy',
+                });
             }
             /* Check active provider details */
             const providersData = await this.supplierCred.getActiveProviders(headers);
@@ -35,12 +38,11 @@ export class HotelRoomService {
             const activeProviders = HotelProviderUtility.mapActiveProviders(providersData);
 
             Object.assign(apiReqData, { activeProviders: activeProviders });
-            // apiReqData['searchReqId'] = uuidv4();
             const roomResponse = await this.providerRoomsService.searchRoom(apiReqData, headers);
             return { ...roomResponse, mode: roomResponse.mode || HotelProviderUtility.resolveResponseMode(activeProviders) };
         } catch (error) {
             this.logger.error('Hotel Room List failed:', error);
-            throw new Error(`Hotel Room List failed: ${error.message}`);
+            throwHotelApiError(error, 'Hotel room list failed');
         }
     }
 
@@ -55,7 +57,10 @@ export class HotelRoomService {
         try {
             /* Search request validations */
             if (!hotelRoomQuoteDto.roomBookingInfo[0].rateKey) {
-                throw new BadRequestException("RateKey can't be null");
+                throw new BadRequestException({
+                    success: false,
+                    message: 'Rate key is required',
+                });
             }
             /* Check active provider details */
             const providersData = await this.supplierCred.getActiveProviders(headers);
@@ -65,7 +70,7 @@ export class HotelRoomService {
             return { ...roomQuoteResponse, mode: roomQuoteResponse.mode || HotelProviderUtility.resolveResponseMode(activeProviders) };
         } catch (error) {
             this.logger.error('Hotel Room Quote failed:', error);
-            throw new Error(`Hotel Room Quote failed: ${error.message}`);
+            throwHotelApiError(error, 'Hotel room quote failed');
         }
     }
 }
