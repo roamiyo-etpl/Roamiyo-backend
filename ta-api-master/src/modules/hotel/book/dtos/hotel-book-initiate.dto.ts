@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsEmail, IsNumber, IsOptional, IsArray, ValidateNested, Min, Max, IsEnum, IsBoolean, IsDateString } from 'class-validator';
+import { IsNotEmpty, IsString, IsEmail, IsNumber, IsOptional, IsArray, ValidateNested, Min, Max, IsEnum, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { GenderEnum, TitleEnum } from 'src/shared/enums/accounts.enum';
 
@@ -10,7 +10,7 @@ export class PassengerDto {
     })
     @IsNotEmpty()
     @IsString()
-    type: 'adult' | 'child' | 'infant';
+    type!: 'adult' | 'child' | 'infant';
 
     @ApiProperty({
         description: 'Passenger title (Mr, Miss, Mrs, Ms)',
@@ -18,7 +18,7 @@ export class PassengerDto {
     })
     @IsNotEmpty()
     @IsString()
-    title: string;
+    title!: string;
 
     @ApiProperty({
         description: 'Passenger roomId (1,2,3)',
@@ -26,7 +26,7 @@ export class PassengerDto {
     })
     @IsNotEmpty()
     @IsNumber()
-    roomId: number;
+    roomId!: number;
 
     @ApiProperty({
         description: 'Passenger age (required for child/infant)',
@@ -45,7 +45,7 @@ export class PassengerDto {
     })
     @IsNotEmpty()
     @IsString()
-    firstName: string;
+    firstName!: string;
 
     @ApiProperty({
         description: 'middle name',
@@ -62,7 +62,7 @@ export class PassengerDto {
     })
     @IsNotEmpty()
     @IsString()
-    lastName: string;
+    lastName!: string;
 
     @ApiProperty({
         description: 'Email address',
@@ -72,7 +72,6 @@ export class PassengerDto {
     @IsOptional()
     @IsEmail()
     email?: string;
-
 
     @ApiProperty({
         description: 'Date of birth',
@@ -154,6 +153,24 @@ export class PassengerDto {
     @IsOptional()
     @IsString()
     passportIssuingCountry?: string;
+
+    @ApiProperty({
+        description: 'Document type from client (PAN / Passport). Mapped to pan or passportNumber when present.',
+        example: 'PAN',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    documentType?: string;
+
+    @ApiProperty({
+        description: 'Document number from client. Used with documentType to populate pan or passportNumber.',
+        example: 'APAPY3078A',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    documentNumber?: string;
 }
 
 export class PaymentDetailsDto {
@@ -163,7 +180,7 @@ export class PaymentDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    gatewayName: string;
+    gatewayName!: string;
 
     @ApiProperty({
         description: 'Payment type',
@@ -171,7 +188,7 @@ export class PaymentDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    paymentType: string;
+    paymentType!: string;
 
     @ApiProperty({
         description: 'Amount',
@@ -180,7 +197,7 @@ export class PaymentDetailsDto {
     @IsNotEmpty()
     @IsNumber()
     @Min(0)
-    totalAmount: number;
+    totalAmount!: number;
 
     @ApiProperty({
         description: 'Cash amount',
@@ -189,7 +206,7 @@ export class PaymentDetailsDto {
     @IsNotEmpty()
     @IsNumber()
     @Min(0)
-    cashAmount: number;
+    cashAmount!: number;
 
     @ApiProperty({
         description: 'Price hash key',
@@ -197,7 +214,7 @@ export class PaymentDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    priceHashKey: string;
+    priceHashKey!: string;
 
     @ApiProperty({
         description: 'Payment token',
@@ -205,7 +222,7 @@ export class PaymentDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    paymentToken: string;
+    paymentToken!: string;
 
     @ApiProperty({
         description: 'Payment log ID',
@@ -213,7 +230,7 @@ export class PaymentDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    paymentLogId: string;
+    paymentLogId!: string;
 }
 
 export class ContactDetailsDto {
@@ -223,7 +240,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsEnum(TitleEnum)
-    title: TitleEnum;
+    title!: TitleEnum;
 
     @ApiProperty({
         description: 'First name',
@@ -231,7 +248,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    firstName: string;
+    firstName!: string;
 
     @ApiProperty({
         description: 'middle name',
@@ -240,7 +257,7 @@ export class ContactDetailsDto {
     })
     @IsOptional()
     @IsString()
-    middleName: string;
+    middleName?: string;
 
     @ApiProperty({
         description: 'Last name',
@@ -248,7 +265,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    lastName: string;
+    lastName!: string;
 
     @ApiProperty({
         description: 'Contact person/user gender male, female and other',
@@ -256,8 +273,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsEnum(GenderEnum)
-    gender: GenderEnum;
-
+    gender!: GenderEnum;
 
     @ApiProperty({
         description: 'Email address',
@@ -265,7 +281,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsEmail()
-    email: string;
+    email!: string;
 
     @ApiProperty({
         description: 'Dialer Code as country wise',
@@ -273,7 +289,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    dialCode: string;
+    dialCode!: string;
 
     @ApiProperty({
         description: 'Phone number',
@@ -281,7 +297,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    mobileNo: string;
+    mobileNo!: string;
 
     @ApiProperty({
         description: 'Address line 1',
@@ -289,7 +305,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    addressLine1: string;
+    addressLine1!: string;
 
     @ApiProperty({
         description: 'Address line 2',
@@ -298,7 +314,7 @@ export class ContactDetailsDto {
     })
     @IsOptional()
     @IsString()
-    addressLine2: string;
+    addressLine2?: string;
 
     @ApiProperty({
         description: 'City',
@@ -306,7 +322,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    city: string;
+    city!: string;
 
     @ApiProperty({
         description: 'State',
@@ -314,7 +330,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    state: string;
+    state!: string;
 
     @ApiProperty({
         description: 'Country',
@@ -322,7 +338,7 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    country: string;
+    country!: string;
 
     @ApiProperty({
         description: 'Postal code',
@@ -330,10 +346,8 @@ export class ContactDetailsDto {
     })
     @IsNotEmpty()
     @IsString()
-    postalCode: string;
+    postalCode!: string;
 }
-
-
 
 export class HotelBookInitiateDto {
     @ApiProperty({
@@ -342,7 +356,7 @@ export class HotelBookInitiateDto {
     })
     @IsNotEmpty()
     @IsString()
-    hotelId: string;
+    hotelId!: string;
 
     @ApiProperty({
         description: 'Supplier code',
@@ -350,7 +364,7 @@ export class HotelBookInitiateDto {
     })
     @IsNotEmpty()
     @IsString()
-    supplierCode: string;
+    supplierCode!: string;
 
     @ApiProperty({
         description: 'Search request ID from previous search',
@@ -358,7 +372,7 @@ export class HotelBookInitiateDto {
     })
     @IsNotEmpty()
     @IsString()
-    searchReqId: string;
+    searchReqId!: string;
 
     @ApiProperty({
         description: 'Unique booking identifier',
@@ -366,7 +380,7 @@ export class HotelBookInitiateDto {
     })
     @IsNotEmpty()
     @IsString()
-    rateKey: string;
+    rateKey!: string;
 
     @ApiProperty({
         description: 'Check-in date (YYYY-MM-DD)',
@@ -374,7 +388,7 @@ export class HotelBookInitiateDto {
     })
     @IsNotEmpty()
     @IsDateString()
-    checkIn: string;
+    checkIn!: string;
 
     @ApiProperty({
         description: 'Check-out date (YYYY-MM-DD)',
@@ -382,7 +396,7 @@ export class HotelBookInitiateDto {
     })
     @IsNotEmpty()
     @IsDateString()
-    checkOut: string;
+    checkOut!: string;
 
     @ApiProperty({
         description: 'Passenger details',
@@ -402,24 +416,27 @@ export class HotelBookInitiateDto {
             }
         ],
     })
+    @IsNotEmpty()
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => PassengerDto)
-    passengers: PassengerDto[];
+    passengers!: PassengerDto[];
 
     @ApiProperty({
         description: 'Payment details',
         type: PaymentDetailsDto,
     })
+    @IsNotEmpty()
     @ValidateNested()
     @Type(() => PaymentDetailsDto)
-    paymentDetails: PaymentDetailsDto;
+    paymentDetails!: PaymentDetailsDto;
 
     @ApiProperty({
         description: 'Contact details',
         type: ContactDetailsDto,
     })
+    @IsNotEmpty()
     @ValidateNested()
     @Type(() => ContactDetailsDto)
-    contactDetails: ContactDetailsDto;
+    contactDetails!: ContactDetailsDto;
 }
