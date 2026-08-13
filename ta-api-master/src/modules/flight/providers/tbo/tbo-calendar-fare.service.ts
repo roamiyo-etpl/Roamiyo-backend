@@ -3,8 +3,7 @@ import { TboAuthTokenService } from './tbo-auth-token.service';
 import { Http } from 'src/shared/utilities/flight/http.utility';
 import { GenericRepo } from 'src/shared/utilities/flight/generic-repo.utility';
 import { Generic } from 'src/shared/utilities/flight/generic.utility';
-import { airlines } from 'src/shared/utilities/flight/airline.utility';
-import { CalendarFareResponse, CalendarFareResult } from '../../calendar-fare/interfaces/calendar-fare.interface';
+import { CalendarFareResponse } from '../../calendar-fare/interfaces/calendar-fare.interface';
 
 @Injectable()
 export class TboCalendarFareService {
@@ -93,19 +92,6 @@ export class TboCalendarFareService {
         console.log('CalendarFare - Response shape detected:::::::::::', isWrapped ? 'wrapped under Response' : 'flat');
 
         if (responseNode?.ResponseStatus === 1 && responseNode?.SearchResults?.length > 0) {
-            const searchResults: CalendarFareResult[] = responseNode.SearchResults.map((result) => {
-                const fareResult = new CalendarFareResult();
-                fareResult.airlineCode = result?.AirlineCode;
-                fareResult.airlineName = result?.AirlineName || airlines('')[result?.AirlineCode] || result?.AirlineCode;
-                fareResult.departureTime = result?.DepartureTime;
-                fareResult.isLowestFareOfMonth = result?.IsLowestFareOfMonth;
-                fareResult.baseFare = result?.BaseFare;
-                fareResult.tax = result?.Tax;
-                fareResult.yqTax = result?.YQTax;
-                fareResult.otherCharge = result?.OtherCharge;
-                return fareResult;
-            });
-
             calendarFareResponse.error = false;
             calendarFareResponse.message = 'OK';
             calendarFareResponse.mode = 'TBO-' + providerCred.mode;
@@ -113,7 +99,8 @@ export class TboCalendarFareService {
             calendarFareResponse.origin = responseNode?.Origin;
             calendarFareResponse.destination = responseNode?.Destination;
             calendarFareResponse.cabinClass = calendarFareReq.cabinClass;
-            calendarFareResponse.searchResults = searchResults;
+            /* Untouched pass-through - whatever fields/casing TBO actually sends. */
+            calendarFareResponse.searchResults = responseNode.SearchResults;
         } else {
             calendarFareResponse.error = true;
             calendarFareResponse.message = responseNode?.Error?.ErrorMessage || 'No calendar fare found.';

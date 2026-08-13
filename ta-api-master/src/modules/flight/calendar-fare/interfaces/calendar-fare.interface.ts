@@ -6,16 +6,10 @@ export class CalendarFareResponse {
     origin: string;
     destination: string;
     cabinClass: string;
-    searchResults: CalendarFareResult[];
-}
-
-export class CalendarFareResult {
-    airlineCode: string;
-    airlineName: string;
-    departureTime: string;
-    isLowestFareOfMonth: boolean;
-    baseFare: number;
-    tax: number;
-    yqTax: number;
-    otherCharge: number;
+    /**
+     * Untouched pass-through of TBO's SearchResults array - whatever fields/casing
+     * TBO actually sends (AirlineCode, AirlineName, DepartureDate, Fare, BaseFare,
+     * Tax, OtherCharges, FuelSurcharge, Currency, etc.), unfiltered.
+     */
+    searchResults: unknown[];
 }
