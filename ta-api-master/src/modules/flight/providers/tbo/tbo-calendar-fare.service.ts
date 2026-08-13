@@ -17,11 +17,14 @@ export class TboCalendarFareService {
      * @author: Prashant Joshi at 13-08-2026 **/
     async calendarFare(calendarFareRequest): Promise<CalendarFareResponse> {
         const { providerCred, calendarFareReqId } = calendarFareRequest;
+        console.log('CalendarFare - Payload received from aggregator:::::::::::', JSON.stringify(calendarFareRequest.calendarFareReq));
+
         const authToken = await this.tboAuthTokenService.getAuthToken(calendarFareRequest);
         calendarFareRequest.authToken = authToken;
 
         try {
             const requestBody = this.creatingCalendarFareRequest(calendarFareRequest);
+            console.log('CalendarFare - Payload sent to TBO:::::::::::', JSON.stringify(requestBody));
 
             // dev endpoint
             const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCalendarFare`;
@@ -30,6 +33,7 @@ export class TboCalendarFareService {
             // const endpoint = `${providerCred.url}/rest/GetCalendarFare`;
 
             const calendarFareResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody), 'other');
+            console.log('CalendarFare - Raw response from TBO:::::::::::', JSON.stringify(calendarFareResult));
 
             if (process.env.ENABLE_LOCAL_LOGS === 'true') {
                 Generic.generateLogFile(
@@ -81,8 +85,15 @@ export class TboCalendarFareService {
         const { providerCred, calendarFareReq } = calendarFareRequest;
         const calendarFareResponse: CalendarFareResponse = new CalendarFareResponse();
 
-        if (results?.ResponseStatus === 1 && results?.SearchResults?.length > 0) {
-            const searchResults: CalendarFareResult[] = results.SearchResults.map((result) => {
+        /* TBO wraps Search/FareQuote replies under a `Response` node even though the
+         * GetCalendarFare doc table doesn't show that envelope explicitly - handle both
+         * shapes so we don't silently misread a wrapped reply as "no fare found". */
+        const isWrapped = results?.Response !== undefined;
+        const responseNode = isWrapped ? results.Response : results;
+        console.log('CalendarFare - Response shape detected:::::::::::', isWrapped ? 'wrapped under Response' : 'flat');
+
+        if (responseNode?.ResponseStatus === 1 && responseNode?.SearchResults?.length > 0) {
+            const searchResults: CalendarFareResult[] = responseNode.SearchResults.map((result) => {
                 const fareResult = new CalendarFareResult();
                 fareResult.airlineCode = result?.AirlineCode;
                 fareResult.airlineName = result?.AirlineName || airlines('')[result?.AirlineCode] || result?.AirlineCode;
@@ -98,18 +109,18 @@ export class TboCalendarFareService {
             calendarFareResponse.error = false;
             calendarFareResponse.message = 'OK';
             calendarFareResponse.mode = 'TBO-' + providerCred.mode;
-            calendarFareResponse.trackingId = results?.TraceId;
-            calendarFareResponse.origin = results?.Origin;
-            calendarFareResponse.destination = results?.Destination;
+            calendarFareResponse.trackingId = responseNode?.TraceId;
+            calendarFareResponse.origin = responseNode?.Origin;
+            calendarFareResponse.destination = responseNode?.Destination;
             calendarFareResponse.cabinClass = calendarFareReq.cabinClass;
             calendarFareResponse.searchResults = searchResults;
         } else {
             calendarFareResponse.error = true;
-            calendarFareResponse.message = results?.Error?.ErrorMessage || 'No calendar fare found.';
+            calendarFareResponse.message = responseNode?.Error?.ErrorMessage || 'No calendar fare found.';
             calendarFareResponse.mode = 'TBO-' + providerCred.mode;
-            calendarFareResponse.trackingId = results?.TraceId;
-            calendarFareResponse.origin = results?.Origin || calendarFareReq.origin;
-            calendarFareResponse.destination = results?.Destination || calendarFareReq.destination;
+            calendarFareResponse.trackingId = responseNode?.TraceId;
+            calendarFareResponse.origin = responseNode?.Origin || calendarFareReq.origin;
+            calendarFareResponse.destination = responseNode?.Destination || calendarFareReq.destination;
             calendarFareResponse.cabinClass = calendarFareReq.cabinClass;
             calendarFareResponse.searchResults = [];
         }
