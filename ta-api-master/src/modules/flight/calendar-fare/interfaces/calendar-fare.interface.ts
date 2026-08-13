@@ -5,6 +5,7 @@ export class CalendarFareResponse {
     trackingId?: string;
     origin: string;
     destination: string;
+    cabinClass: string;
     searchResults: CalendarFareResult[];
 }
 

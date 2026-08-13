@@ -101,6 +101,7 @@ export class TboCalendarFareService {
             calendarFareResponse.trackingId = results?.TraceId;
             calendarFareResponse.origin = results?.Origin;
             calendarFareResponse.destination = results?.Destination;
+            calendarFareResponse.cabinClass = calendarFareReq.cabinClass;
             calendarFareResponse.searchResults = searchResults;
         } else {
             calendarFareResponse.error = true;
@@ -109,6 +110,7 @@ export class TboCalendarFareService {
             calendarFareResponse.trackingId = results?.TraceId;
             calendarFareResponse.origin = results?.Origin || calendarFareReq.origin;
             calendarFareResponse.destination = results?.Destination || calendarFareReq.destination;
+            calendarFareResponse.cabinClass = calendarFareReq.cabinClass;
             calendarFareResponse.searchResults = [];
         }
 
