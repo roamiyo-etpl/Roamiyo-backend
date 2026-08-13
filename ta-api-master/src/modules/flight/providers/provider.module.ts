@@ -17,6 +17,8 @@ import { TboRevalidateService } from './tbo/tbo-revalidate.service';
 import { TboOrderDetailService } from './tbo/tbo-order-detail.service';
 import { TboAuthTokenService } from './tbo/tbo-auth-token.service';
 import { TboCancellationService } from './tbo/tbo-cancellation.service';
+import { TboCalendarFareService } from './tbo/tbo-calendar-fare.service';
+import { ProviderCalendarFareService } from './provider-calendar-fare.service';
 import { GenericRepo } from 'src/shared/utilities/flight/generic-repo.utility';
 import { s3BucketService } from 'src/shared/utilities/flight/s3bucket.utility';
 import { SupplierLogUtility } from 'src/shared/utilities/flight/supplier-log.utility';
@@ -40,6 +42,8 @@ import { SsrModule } from '../ssr/ssr.module';
         TboOrderDetailService,
         TboAuthTokenService,
         TboCancellationService,
+        TboCalendarFareService,
+        ProviderCalendarFareService,
         ProviderBalanceService,
         ProviderCancellationService,
         GenericRepo,
@@ -60,6 +64,8 @@ import { SsrModule } from '../ssr/ssr.module';
         TboOrderDetailService,
         TboAuthTokenService,
         TboCancellationService,
+        TboCalendarFareService,
+        ProviderCalendarFareService,
         ProviderBalanceService,
         s3BucketService,
         SupplierLogUtility,
