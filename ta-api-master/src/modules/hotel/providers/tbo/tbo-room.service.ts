@@ -121,9 +121,11 @@ export class TboRoomService {
             // Execute quote request
             const response = await this.executeQuoteWithRetry(tboRequest, endpoint, auth, 'room-quote');
 
-            // console.log(response);
+            console.log('TBO Room Quote raw response:', JSON.stringify(response));
             // Convert TBO response to our standard format
             const quoteResponse = this.convertTboQuoteResponseToStandard(response, rateKey, currency, searchReqId, supplierCode, providerCredentials);
+
+            console.log('TBO Room Quote response sent to aggregator:', JSON.stringify(quoteResponse));
 
             return quoteResponse;
         } catch (error) {
