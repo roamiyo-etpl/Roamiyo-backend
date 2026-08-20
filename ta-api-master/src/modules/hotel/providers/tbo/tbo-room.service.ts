@@ -121,7 +121,7 @@ export class TboRoomService {
                 BookingCode: bookingCode,
             };
 
-            // console.log('TBO Room Quote API Request:', tboRequest, auth);
+            console.log('TBO Room Quote API Request:', JSON.stringify({ rateKey, tboRequest }));
 
             // Execute quote request
             const response = await this.executeQuoteWithRetry(tboRequest, endpoint, auth, 'room-quote');
