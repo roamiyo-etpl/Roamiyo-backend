@@ -127,6 +127,8 @@ export class TboRoomService {
             const response = await this.executeQuoteWithRetry(tboRequest, endpoint, auth, 'room-quote');
 
             console.log('TBO Room Quote raw response:', JSON.stringify(response));
+            const tboIsSendingData = response?.Status?.Code === 200 && !!response?.HotelResult?.[0];
+            console.log(`TBO sending data: ${tboIsSendingData ? 'YES' : 'NO'} (Status: ${response?.Status?.Code}, Description: ${response?.Status?.Description})`);
             // Convert TBO response to our standard format
             const quoteResponse = this.convertTboQuoteResponseToStandard(response, rateKey, currency, searchReqId, supplierCode, providerCredentials);
 

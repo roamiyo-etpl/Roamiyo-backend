@@ -54,6 +54,7 @@ export class HotelRoomService {
      * @returns Hotel Room Quote response
      */
     async getHotelRoomQuote(hotelRoomQuoteDto: HotelRoomQuoteDto, headers): Promise<HotelRoomQuoteResponse> {
+        console.log('getHotelRoomQuote payload:', JSON.stringify(hotelRoomQuoteDto));
         try {
             /* Search request validations */
             if (!hotelRoomQuoteDto.roomBookingInfo[0].rateKey) {
