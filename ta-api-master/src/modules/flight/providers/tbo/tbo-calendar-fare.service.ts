@@ -26,10 +26,10 @@ export class TboCalendarFareService {
             console.log('CalendarFare - Payload sent to TBO:::::::::::', JSON.stringify(requestBody));
 
             // dev endpoint
-            const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCalendarFare`;
+            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCalendarFare`;
 
             // prod endpoint is
-            // const endpoint = `${providerCred.url}/rest/GetCalendarFare`;
+            const endpoint = `${providerCred.url}/rest/GetCalendarFare`;
 
             const calendarFareResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody), 'other');
             console.log('CalendarFare - Raw response from TBO:::::::::::', JSON.stringify(calendarFareResult));
