@@ -52,7 +52,8 @@ export class ConfigurationService {
             const checkToken = await this.providerRepository.findOne({
                 select: ['authToken'],
                 where: {
-                    code: searchRequest.providerCred.code,
+                    code: searchRequest.providerCred?.provider,
+                    provider_mode: searchRequest.providerCred?.mode,
                     tokenUpdatedAt: currentDate,
                     module_type: module,
                 },
@@ -66,7 +67,7 @@ export class ConfigurationService {
     async updateAuthToken({ newAuthToken, searchRequest, module }) {
         try {
             const currentDate = DateUtility.currentDateOnlyIST();
-            await this.providerRepository.update({ code: searchRequest.providerCred?.provider, module_type: module }, { authToken: newAuthToken, tokenUpdatedAt: currentDate });
+            await this.providerRepository.update({ code: searchRequest.providerCred?.provider, provider_mode: searchRequest.providerCred?.mode, module_type: module }, { authToken: newAuthToken, tokenUpdatedAt: currentDate });
         } catch (error) {
             console.log(error);
             throwHotelApiError(error, 'Failed to update hotel provider auth token');

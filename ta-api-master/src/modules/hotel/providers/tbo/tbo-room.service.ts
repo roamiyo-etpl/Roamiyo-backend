@@ -111,19 +111,26 @@ export class TboRoomService {
             };
             const endpoint = `${providerCredentials.hotel_url}/PreBook`;
 
+            // rateKey is a composite key: hotelId!TB!roomIndex!TB!<TBO BookingCode>!TB!flag!TB!supplierTag
+            // TBO only recognizes the raw BookingCode segment, not the full composite string
+            const rateKeyParts = rateKey.split('!TB!');
+            const bookingCode = rateKeyParts.length >= 3 ? rateKeyParts[2] : rateKey;
+
             // Create quote request
             const tboRequest = {
-                BookingCode: rateKey,
+                BookingCode: bookingCode,
             };
 
-            // console.log('TBO Room Quote API Request:', tboRequest, auth);
+            console.log('TBO Room Quote API Request:', JSON.stringify({ rateKey, tboRequest }));
 
             // Execute quote request
             const response = await this.executeQuoteWithRetry(tboRequest, endpoint, auth, 'room-quote');
 
-            // console.log(response);
+            console.log('TBO Room Quote raw response:', JSON.stringify(response));
             // Convert TBO response to our standard format
             const quoteResponse = this.convertTboQuoteResponseToStandard(response, rateKey, currency, searchReqId, supplierCode, providerCredentials);
+
+            console.log('TBO Room Quote response sent to aggregator:', JSON.stringify(quoteResponse));
 
             return quoteResponse;
         } catch (error) {

@@ -56,7 +56,7 @@ export class OrderDetailService {
             // Prepare bookingDetails array for provider request (each order has its own pnr/orderNo)
             const bookingDetailsArray = orderDetailsData.map((order) => ({
                 pnr: order.pnr,
-                orderNo: order.orderNo,
+                orderNo: order.bookingId,
                 // firstName: booking.contact_details.firstName,
 //                 lastName: booking.contact_details.lastName,
                 firstName,

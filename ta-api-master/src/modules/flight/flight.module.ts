@@ -8,6 +8,7 @@ import { ErrorLogs } from 'src/shared/entities/error-logs.entity';
 import { BookModule } from './book/book.module';
 import { OrderDetailModule } from './order-details/order-detail.module';
 import { RevalidateModule } from './revalidate/revalidate.module';
+import { CalendarFareModule } from './calendar-fare/calendar-fare.module';
 import { BalanceCheckModule } from './balance-check/balance-check.module';
 import { CancelModule } from './cancel/cancel.module';
 import { AirlineModule } from './airline/airline.module';
@@ -26,10 +27,11 @@ import { SsrModule } from './ssr/ssr.module';
         CancelModule,
         AirlineModule,
         AirportModule,
-        SsrModule
+        SsrModule,
+        CalendarFareModule
     ],
     controllers: [],
     providers: [],
-    exports: [SearchModule, ProviderModule, OrderDetailModule, BookModule, RevalidateModule, BalanceCheckModule, CancelModule, AirlineModule, AirportModule],
+    exports: [SearchModule, ProviderModule, OrderDetailModule, BookModule, RevalidateModule, BalanceCheckModule, CancelModule, AirlineModule, AirportModule, CalendarFareModule],
 })
 export class FlightModule {}
