@@ -84,7 +84,7 @@ export class SsrService {
           console.log('SSR Payload::::::::::', JSON.stringify(payload, null, 2));
 
           const response = await axios.post(
-            'http://api.tektravels.com/BookingEngineService_Air/AirService.svc/rest/SSR',
+            'https://tboapi.travelboutiqueonline.com/AirAPI_V10/AirService.svc/rest/SSR',
             payload,
             {
               timeout: 60000,
