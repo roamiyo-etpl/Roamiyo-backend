@@ -111,14 +111,14 @@ export class TboRoomService {
             };
             const endpoint = `${providerCredentials.hotel_url}/PreBook`;
 
-            // rateKey is a composite key: hotelId!TB!roomIndex!TB!<TBO BookingCode>!TB!flag!TB!supplierTag
-            // TBO only recognizes the raw BookingCode segment, not the full composite string
-            const rateKeyParts = rateKey.split('!TB!');
-            const bookingCode = rateKeyParts.length >= 3 ? rateKeyParts[2] : rateKey;
+            // rateKey is TBO's own BookingCode, returned as-is from TBO's Search response;
+            // TBO's PreBook expects that full composite string back unchanged
+            const bookingCode = rateKey;
 
             // Create quote request
             const tboRequest = {
                 BookingCode: bookingCode,
+                PaymentMode: 'Limit',
             };
 
             console.log('TBO Room Quote API Request:', JSON.stringify({ rateKey, tboRequest }));
