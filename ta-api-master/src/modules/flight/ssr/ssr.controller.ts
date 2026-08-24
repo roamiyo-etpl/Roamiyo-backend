@@ -22,4 +22,9 @@ export class SsrController {
   async getSeatMap(@Body() body: any, @Headers() headers: any) {
     return this.ssrService.flightSeatMapping(body, headers);
   }
+
+  @Post('ssr/grouped-seat-map')
+  async getGroupedSeatMap(@Body() body: any, @Headers() headers: any) {
+    return this.ssrService.flightGroupedSeatMap(body, headers);
+  }
 }
