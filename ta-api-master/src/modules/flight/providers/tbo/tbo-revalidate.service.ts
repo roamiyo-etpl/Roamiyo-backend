@@ -509,6 +509,10 @@ export class TboRevalidateService {
             ?.IsSeatRequired
             ? ["Seat"]
             : [];
+          flightRoute.isSeatRequired =
+            flightJourney?.RequiredFieldValidators?.IsSeatRequired === true;
+          flightRoute.requiredFieldValidators =
+            flightJourney?.RequiredFieldValidators ?? undefined;
           flightRoute.solutionId = flightJourney?.ResultIndex;
           flightRoute.airlineCode = airlineCodes;
           flightRoute.airlineName = airlineNames;
