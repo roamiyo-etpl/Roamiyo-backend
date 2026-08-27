@@ -505,7 +505,10 @@ export class TboRevalidateService {
             cabinBaggages.push(cabinB);
             checkInBaggages.push(checkInB);
           });
-          flightRoute.requiredFieldsToBook = [];
+          flightRoute.requiredFieldsToBook = flightJourney?.RequiredFieldValidators
+            ?.IsSeatRequired
+            ? ["Seat"]
+            : [];
           flightRoute.solutionId = flightJourney?.ResultIndex;
           flightRoute.airlineCode = airlineCodes;
           flightRoute.airlineName = airlineNames;
