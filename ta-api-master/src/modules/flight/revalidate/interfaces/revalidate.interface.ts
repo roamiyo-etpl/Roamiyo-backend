@@ -32,6 +32,10 @@ export class CharacterLimit {
 
 export class RevalidateData {
     requiredFieldsToBook: string[];
+    /** TBO FareQuote passthrough: true when supplier `RequiredFieldValidators.IsSeatRequired` is true. */
+    isSeatRequired?: boolean;
+    /** TBO FareQuote passthrough: raw supplier `RequiredFieldValidators` object (future-proof for new fields). */
+    requiredFieldValidators?: unknown;
     characterLimit: CharacterLimit;
     solutionId: string;
     passportRequired: boolean;
