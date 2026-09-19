@@ -243,4 +243,11 @@ export class HotelSearchInitiateDto {
     @Type(() => SortDto)
     @IsNotEmpty()
     sort: SortDto;
+
+    @ApiPropertyOptional({
+        description: 'Max time (in seconds) TBO should take to respond to the search request. Defaults to 10 if not provided.',
+        example: 20,
+    })
+    @IsOptional()
+    ResponseTime?: number;
 }

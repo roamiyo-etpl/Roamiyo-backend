@@ -43,6 +43,7 @@ export class TboSearchService {
             const { searchCriteria, currency, searchMetadata, activeProviders } = searchRequest;
             const { checkIn, checkOut, rooms, location } = searchCriteria;
             const { guestNationality } = searchMetadata;
+            const responseTime = searchRequest?.ResponseTime;
 
             // Get hotel data from database based on search type
             let hotelData = await this.getHotelDataByLocation(location);
@@ -80,6 +81,7 @@ export class TboSearchService {
                     guestNationality,
                     paxRooms: rooms,
                     hotelCodes: chunk,
+                    responseTime,
                 });
 
                 return this.executeSearchWithRetry(chunkRequest, endpoint, auth, index, 'search');
@@ -145,7 +147,7 @@ export class TboSearchService {
      * @returns TBO search request object
      */
     private createTboSearchRequest(params: any): any {
-        const { checkIn, checkOut, guestNationality, paxRooms, hotelCodes } = params;
+        const { checkIn, checkOut, guestNationality, paxRooms, hotelCodes, responseTime } = params;
 
         return {
             CheckIn: checkIn,
@@ -166,7 +168,7 @@ export class TboSearchService {
                 Children: room.children,
                 ChildrenAges: room.childAges || null,
             })),
-            ResponseTime: 23.0,
+            ResponseTime: responseTime ?? 20,
         };
     }
 
