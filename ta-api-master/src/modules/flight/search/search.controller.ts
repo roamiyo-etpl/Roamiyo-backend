@@ -40,9 +40,10 @@ export class SearchController {
     @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
     async startRouting(@Body() searchReq: StartRoutingDto, @Headers() headers: Headers): Promise<StartRoutingResponse> {
         const startTime = Date.now();
+        console.log(`[FLIGHT-SEARCH] HTTP request received at ${new Date(startTime).toISOString()}`);
         const response = await this.searchService.startRouting(searchReq, headers);
         const endTime = Date.now();
-        console.log('startRouting', `${(endTime - startTime) / 1000} seconds`);
+        console.log(`[FLIGHT-SEARCH] reqId=${response.searchReqId} response sent to client, total end-to-end time: ${((endTime - startTime) / 1000).toFixed(3)}s`);
         return response;
     }
 

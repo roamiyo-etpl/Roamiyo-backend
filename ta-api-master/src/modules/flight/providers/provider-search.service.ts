@@ -23,6 +23,7 @@ export class ProviderSearchService {
     /** [@Description: Fetch search from providers]
      * @author: Prashant Joshi at 23-09-2025 **/
     async providerSearch(searchReq: StartRoutingDto, headers: Headers): Promise<StartRoutingResponse> {
+        const requestReceivedAt = Date.now();
         const activeProviders = await this.configService.getActiveProviderList({ module: 'Flight' });
         if (activeProviders.length) {
             const activeProvidersName = activeProviders.map((data) => data.code);
@@ -34,6 +35,8 @@ export class ProviderSearchService {
             searchRequest['headers'] = headers;
             const infantCount = Generic.getInfantCount(searchReq);
 
+            console.log(`[FLIGHT-SEARCH] reqId=${searchRequest['searchReqId']} request received at ${new Date(requestReceivedAt).toISOString()}`);
+
             const supplierCount: string[] = [];
 
             /* For TBO */
@@ -42,7 +45,12 @@ export class ProviderSearchService {
                     return item.code == 'TBO';
                 });
                 searchRequest['providerCred'] = JSON.parse(tboCred[0].provider_credentials);
-                const tboSearchResult = new Promise((resolve) => resolve(this.tboSearchService.search(searchRequest)));
+                console.log(`[FLIGHT-SEARCH] reqId=${searchRequest['searchReqId']} calling TBO Search API...`);
+                const tboCallStartedAt = Date.now();
+                const tboSearchResult = new Promise((resolve) => resolve(this.tboSearchService.search(searchRequest))).then((res) => {
+                    console.log(`[FLIGHT-SEARCH] reqId=${searchRequest['searchReqId']} TBO Search responded in ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s`);
+                    return res;
+                });
                 searchResults.push(tboSearchResult);
                 supplierCount.push('TBO');
             }
@@ -59,7 +67,9 @@ export class ProviderSearchService {
             });
 
             /* Adding De-duplication */
+            const dedupStartedAt = Date.now();
             const deDuplicatedData = this.deduplicationFilter(result, 'startRouting');
+            console.log(`[FLIGHT-SEARCH] reqId=${searchRequest['searchReqId']} de-duplication processed in ${((Date.now() - dedupStartedAt) / 1000).toFixed(3)}s`);
 
             const searchResponse: StartRoutingResponse = new StartRoutingResponse();
             searchResponse.searchReqId = result.searchReqId;
@@ -77,7 +87,11 @@ export class ProviderSearchService {
             }
 
             /* Updating the supplier count into database */
+            const dbStartedAt = Date.now();
             await this.providerRepoService.updateProviderCount(searchResponse.searchReqId, supplierCount.length);
+            console.log(`[FLIGHT-SEARCH] reqId=${searchRequest['searchReqId']} DB update (provider count) completed in ${((Date.now() - dbStartedAt) / 1000).toFixed(3)}s`);
+
+            console.log(`[FLIGHT-SEARCH] reqId=${searchRequest['searchReqId']} total time before sending response to client: ${((Date.now() - requestReceivedAt) / 1000).toFixed(3)}s`);
 
             return searchResponse;
         } else {

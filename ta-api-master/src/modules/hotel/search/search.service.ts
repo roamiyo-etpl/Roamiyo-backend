@@ -23,6 +23,7 @@ export class SearchService {
     ) { }
 
     async searchInitiate(apiReqData: HotelSearchInitiateDto, headers: Headers): Promise<InitiateResultResponse> {
+        const requestReceivedAt = Date.now();
         try {
             /* Search request validations */
             // Handle both array and single object for rooms
@@ -46,7 +47,14 @@ export class SearchService {
 
             Object.assign(apiReqData, { activeProviders: activeProviders });
             apiReqData['searchReqId'] = uuidv4();
+
+            console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} request received at ${new Date(requestReceivedAt).toISOString()}`);
+            console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} calling TBO Hotel Search API...`);
+            const tboCallStartedAt = Date.now();
             const results = await this.providersSearchService.searchInitiate(apiReqData, headers);
+            console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} TBO Hotel Search responded in ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s`);
+
+            const processingStartedAt = Date.now();
             // Apply default sorting by price (ascending) before response
             const sortedResults = this.applySorting(results, { by: apiReqData.sort.by || 'price', order: apiReqData.sort.order || 'asc' });
 
@@ -60,6 +68,7 @@ export class SearchService {
                     order: apiReqData.sort.order,
                 },
             }, responseMode);
+            console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} sorting + response processing took ${((Date.now() - processingStartedAt) / 1000).toFixed(3)}s`);
 
             const cacheData = {
                 ...searchResponse,
@@ -67,7 +76,12 @@ export class SearchService {
             };
 
             // Store search results with searchReqId for filtration access
+            const cacheSaveStartedAt = Date.now();
             await this.cachingUtility.setCachedDataBySearchReqId(apiReqData['searchReqId'], cacheData);
+            console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} DB/cache save completed in ${((Date.now() - cacheSaveStartedAt) / 1000).toFixed(3)}s`);
+
+            console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} total time before sending response to client: ${((Date.now() - requestReceivedAt) / 1000).toFixed(3)}s`);
+
             return searchResponse;
         } catch (error) {
             this.logger.error('Hotel search initiation failed:', error);

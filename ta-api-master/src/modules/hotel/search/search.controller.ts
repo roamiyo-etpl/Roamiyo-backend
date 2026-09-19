@@ -38,8 +38,12 @@ export class SearchController {
     @HttpCode(HttpStatus.OK)
     @Post('initiate')
     async initiate(@Body() hotelSearchInitiateDto: HotelSearchInitiateDto, @Headers() headers): Promise<InitiateResultResponse> {
+        const startTime = Date.now();
+        console.log(`[HOTEL-SEARCH] HTTP request received at ${new Date(startTime).toISOString()}`);
         try {
-            return await this.searchService.searchInitiate(hotelSearchInitiateDto, headers);
+            const response = await this.searchService.searchInitiate(hotelSearchInitiateDto, headers);
+            console.log(`[HOTEL-SEARCH] reqId=${response.searchReqId} response sent to client, total end-to-end time: ${((Date.now() - startTime) / 1000).toFixed(3)}s`);
+            return response;
         } catch (error: unknown) {
             throwHotelApiError(error, 'Hotel search initiation failed');
         }
