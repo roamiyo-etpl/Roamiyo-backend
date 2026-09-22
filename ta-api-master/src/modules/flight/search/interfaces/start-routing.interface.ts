@@ -129,6 +129,18 @@ export class Fare {
   fareQuote?: string;
   bsPublish: number;
   bsFare: number;
+  /** TBO passthrough (raw, unchanged): supplier's own final selling price for this fare. */
+  OfferedFare?: number;
+  /** TBO passthrough (raw, unchanged). */
+  CommissionEarned?: number;
+  /** TBO passthrough (raw, unchanged). */
+  PLBEarned?: number;
+  /** TBO passthrough (raw, unchanged). */
+  IncentiveEarned?: number;
+  /** TBO passthrough (raw, unchanged). */
+  TdsOnCommission?: number;
+  /** TBO passthrough (raw, unchanged): markup/charge breakdown (TBOMARKUP, GLOBALPROCUREMENTCHARGE, CONVENIENCECHARGE, OTHERCHARGE). */
+  ChargeBU?: unknown[];
 }
 
 export class GroupHash {

@@ -271,7 +271,7 @@ export class TboSearchService {
               ResultIndex: [flight.ResultIndex, findInBound?.ResultIndex],
 
               Fare: {
-                ...flight.Fare[0],
+                ...flight.Fare,
 
                 BaseFare:
                   flight.Fare.BaseFare + (findInBound?.Fare?.BaseFare ?? 0),
@@ -284,6 +284,31 @@ export class TboSearchService {
 
                 ServiceFee:
                   flight.Fare.ServiceFee + (findInBound?.Fare?.ServiceFee ?? 0),
+
+                OfferedFare:
+                  (flight.Fare?.OfferedFare ?? 0) +
+                  (findInBound?.Fare?.OfferedFare ?? 0),
+
+                CommissionEarned:
+                  (flight.Fare?.CommissionEarned ?? 0) +
+                  (findInBound?.Fare?.CommissionEarned ?? 0),
+
+                PLBEarned:
+                  (flight.Fare?.PLBEarned ?? 0) +
+                  (findInBound?.Fare?.PLBEarned ?? 0),
+
+                IncentiveEarned:
+                  (flight.Fare?.IncentiveEarned ?? 0) +
+                  (findInBound?.Fare?.IncentiveEarned ?? 0),
+
+                TdsOnCommission:
+                  (flight.Fare?.TdsOnCommission ?? 0) +
+                  (findInBound?.Fare?.TdsOnCommission ?? 0),
+
+                ChargeBU: [
+                  ...(flight.Fare?.ChargeBU ?? []),
+                  ...(findInBound?.Fare?.ChargeBU ?? []),
+                ],
               },
 
               FareBreakdown: [
@@ -714,6 +739,14 @@ export class TboSearchService {
     /* Setting up currency */
     fareDetail.currency = preferredCurrency;
     fareDetail.fareQuote = Generic.encrypt(JSON.stringify(passengerFareArr));
+
+    /* TBO passthrough fields (raw, unchanged) */
+    fareDetail.OfferedFare = passengerFareArr?.OfferedFare;
+    fareDetail.CommissionEarned = passengerFareArr?.CommissionEarned;
+    fareDetail.PLBEarned = passengerFareArr?.PLBEarned;
+    fareDetail.IncentiveEarned = passengerFareArr?.IncentiveEarned;
+    fareDetail.TdsOnCommission = passengerFareArr?.TdsOnCommission;
+    fareDetail.ChargeBU = passengerFareArr?.ChargeBU;
 
     return fareDetail;
   }
