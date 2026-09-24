@@ -316,6 +316,15 @@ export class TboRevalidateService {
         fareQuote: [fareA?.fareQuote, fareB?.fareQuote || null],
         currency: fareA?.currency,
         currencySymbol: fareA?.currencySymbol,
+        OfferedFare: (fareA?.OfferedFare ?? 0) + (fareB?.OfferedFare ?? 0),
+        CommissionEarned:
+          (fareA?.CommissionEarned ?? 0) + (fareB?.CommissionEarned ?? 0),
+        PLBEarned: (fareA?.PLBEarned ?? 0) + (fareB?.PLBEarned ?? 0),
+        IncentiveEarned:
+          (fareA?.IncentiveEarned ?? 0) + (fareB?.IncentiveEarned ?? 0),
+        TdsOnCommission:
+          (fareA?.TdsOnCommission ?? 0) + (fareB?.TdsOnCommission ?? 0),
+        ChargeBU: [...(fareA?.ChargeBU ?? []), ...(fareB?.ChargeBU ?? [])],
       });
 
       const fareA = convertedResultArray[0]?.route?.fare[0];
@@ -901,6 +910,15 @@ export class TboRevalidateService {
     fareDetail.fareQuote = Generic.encrypt(
       JSON.stringify({ ...passengerFareArr, fareBreakDown }),
     );
+
+    /* TBO passthrough fields (raw, unchanged) */
+    fareDetail.OfferedFare = passengerFareArr?.OfferedFare;
+    fareDetail.CommissionEarned = passengerFareArr?.CommissionEarned;
+    fareDetail.PLBEarned = passengerFareArr?.PLBEarned;
+    fareDetail.IncentiveEarned = passengerFareArr?.IncentiveEarned;
+    fareDetail.TdsOnCommission = passengerFareArr?.TdsOnCommission;
+    fareDetail.ChargeBU = passengerFareArr?.ChargeBU;
+
     return fareDetail;
   }
 
