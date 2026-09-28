@@ -141,6 +141,14 @@ export class Fare {
   TdsOnCommission?: number;
   /** TBO passthrough (raw, unchanged): markup/charge breakdown (TBOMARKUP, GLOBALPROCUREMENTCHARGE, CONVENIENCECHARGE, OTHERCHARGE). */
   ChargeBU?: unknown[];
+  /** TBO passthrough (raw, unchanged) — same key name as search API's outboundFare/inboundFare. */
+  BaseFare?: number;
+  /** TBO passthrough (raw, unchanged) — same key name as search API's outboundFare/inboundFare. */
+  Tax?: number;
+  /** TBO passthrough (raw, unchanged) — same key name as search API's outboundFare/inboundFare. */
+  PublishedFare?: number;
+  /** TBO passthrough (raw, unchanged) — same key name as search API's outboundFare/inboundFare. */
+  ServiceFee?: number;
 }
 
 export class GroupHash {

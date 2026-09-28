@@ -344,6 +344,7 @@ export class TboSearchService {
                 Tax: flight.Fare?.Tax,
                 PublishedFare: flight.Fare?.PublishedFare,
                 ServiceFee: flight.Fare?.ServiceFee,
+                OfferedFare: flight.Fare?.OfferedFare,
               },
 
               inboundFare: findInBound
@@ -352,6 +353,7 @@ export class TboSearchService {
                     Tax: findInBound.Fare?.Tax,
                     PublishedFare: findInBound.Fare?.PublishedFare,
                     ServiceFee: findInBound.Fare?.ServiceFee,
+                    OfferedFare: findInBound.Fare?.OfferedFare,
                   }
                 : null,
 
@@ -420,6 +422,7 @@ export class TboSearchService {
             BaseFare: flightJourney.Fare?.BaseFare,
             Tax: flightJourney.Fare?.Tax,
             PublishedFare: flightJourney.Fare?.PublishedFare,
+            OfferedFare: flightJourney.Fare?.OfferedFare,
           },
         });
 
@@ -439,6 +442,7 @@ export class TboSearchService {
           BaseFare: flightJourney.Fare?.BaseFare,
           Tax: flightJourney.Fare?.Tax,
           PublishedFare: flightJourney.Fare?.PublishedFare,
+          OfferedFare: flightJourney.Fare?.OfferedFare,
         };
         flightRoute.inboundFare = flightJourney.inboundFare || null;
 

@@ -919,6 +919,12 @@ export class TboRevalidateService {
     fareDetail.TdsOnCommission = passengerFareArr?.TdsOnCommission;
     fareDetail.ChargeBU = passengerFareArr?.ChargeBU;
 
+    /* Same key names as search API's outboundFare/inboundFare (raw, unchanged); existing lowercase keys above are untouched */
+    fareDetail.BaseFare = passengerFareArr?.BaseFare;
+    fareDetail.Tax = passengerFareArr?.Tax;
+    fareDetail.PublishedFare = passengerFareArr?.PublishedFare;
+    fareDetail.ServiceFee = passengerFareArr?.ServiceFee;
+
     return fareDetail;
   }
 
