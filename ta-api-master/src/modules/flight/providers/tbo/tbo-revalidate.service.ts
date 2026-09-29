@@ -325,6 +325,9 @@ export class TboRevalidateService {
         TdsOnCommission:
           (fareA?.TdsOnCommission ?? 0) + (fareB?.TdsOnCommission ?? 0),
         ChargeBU: [...(fareA?.ChargeBU ?? []), ...(fareB?.ChargeBU ?? [])],
+        TotalSpecialServiceCharges:
+          (fareA?.TotalSpecialServiceCharges ?? 0) +
+          (fareB?.TotalSpecialServiceCharges ?? 0),
       });
 
       const fareA = convertedResultArray[0]?.route?.fare[0];
@@ -924,6 +927,7 @@ export class TboRevalidateService {
     fareDetail.Tax = passengerFareArr?.Tax;
     fareDetail.PublishedFare = passengerFareArr?.PublishedFare;
     fareDetail.ServiceFee = passengerFareArr?.ServiceFee;
+    fareDetail.TotalSpecialServiceCharges = passengerFareArr?.TotalSpecialServiceCharges ?? 0;
 
     return fareDetail;
   }

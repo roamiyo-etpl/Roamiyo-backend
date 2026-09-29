@@ -149,6 +149,8 @@ export class Fare {
   PublishedFare?: number;
   /** TBO passthrough (raw, unchanged) — same key name as search API's outboundFare/inboundFare. */
   ServiceFee?: number;
+  /** TBO passthrough (raw, unchanged); defaults to 0 when TBO does not send it. */
+  TotalSpecialServiceCharges?: number;
 }
 
 export class GroupHash {
