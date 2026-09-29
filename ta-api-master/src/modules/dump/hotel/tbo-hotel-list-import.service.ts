@@ -152,6 +152,8 @@ export class TboHotelListImportService {
 
     private mapRecord(record: Record<string, string>, propertyType: PropertyTypeEnum): Partial<TboHotelListEntity> | null {
         const value = (key: keyof TboHotelListEntity): string | null => record[key as string] || null;
+        // a few TBO rows have several rows merged into one cell - clip to the varchar length instead of failing the batch
+        const clipped = (key: keyof TboHotelListEntity, maxLength: number): string | null => value(key)?.slice(0, maxLength) ?? null;
 
         const tboHotelId = value('tboHotelId');
         if (!tboHotelId) {
@@ -160,13 +162,13 @@ export class TboHotelListImportService {
 
         return {
             tboHotelId,
-            hotelName: value('hotelName'),
+            hotelName: clipped('hotelName', 500),
             addressLine1: value('addressLine1'),
             addressLine2: value('addressLine2'),
-            cityId: value('cityId'),
-            cityName: value('cityName'),
-            countryName: value('countryName'),
-            countryCode: value('countryCode')?.toUpperCase() ?? null,
+            cityId: clipped('cityId', 50),
+            cityName: clipped('cityName', 150),
+            countryName: clipped('countryName', 150),
+            countryCode: clipped('countryCode', 10)?.toUpperCase() ?? null,
             latitude: this.parseCoordinate(value('latitude'), 90),
             longitude: this.parseCoordinate(value('longitude'), 180),
             starRating: this.parseStarRating(value('starRating')),
