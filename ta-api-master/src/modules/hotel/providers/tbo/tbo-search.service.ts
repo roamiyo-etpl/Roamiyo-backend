@@ -58,6 +58,7 @@ export class TboSearchService {
                 // DB data is used only for static details; all requested codes are sent to TBO
                 hotelCodes = [...new Set(requestedHotelCodes)];
                 hotelData = await this.tboRepository.findHotelsByHotelCode(hotelCodes);
+                console.log(`[HOTEL-SEARCH] reqId=${searchReqId} using ${hotelCodes.length} hotel code(s) from payload (${hotelData.length} found in DB)`);
             } else {
                 // Get hotel data from database based on search type
                 hotelData = await this.getHotelDataByLocation(location);

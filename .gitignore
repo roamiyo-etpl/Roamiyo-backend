@@ -48,3 +48,6 @@ Thumbs.db
 *.mov
 *.wmv
 
+
+# TBO hotel/homestay CSVs for dump/hotel/import-hotel-list (large, local only)
+ta-api-master/dump/*.csv
