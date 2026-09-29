@@ -45,15 +45,30 @@ export class TboSearchService {
             const { guestNationality } = searchMetadata;
             const responseTime = searchRequest?.ResponseTime;
 
-            // Get hotel data from database based on search type
-            let hotelData = await this.getHotelDataByLocation(location);
+            // Hotel codes sent by client take priority over location based lookup
+            const requestedHotelCodes: string[] = String(searchCriteria?.HotelCodes ?? '')
+                .split(',')
+                .map((code) => code.trim())
+                .filter(Boolean);
 
-            if (!hotelData || hotelData.length === 0) {
-                return [];
+            let hotelData: any[];
+            let hotelCodes: string[];
+
+            if (requestedHotelCodes.length > 0) {
+                // DB data is used only for static details; all requested codes are sent to TBO
+                hotelCodes = [...new Set(requestedHotelCodes)];
+                hotelData = await this.tboRepository.findHotelsByHotelCode(hotelCodes);
+            } else {
+                // Get hotel data from database based on search type
+                hotelData = await this.getHotelDataByLocation(location);
+
+                if (!hotelData || hotelData.length === 0) {
+                    return [];
+                }
+
+                // Extract hotel codes
+                hotelCodes = hotelData.map((hotel) => hotel.hotelCode).filter((code) => code);
             }
-
-            // Extract hotel codes
-            const hotelCodes = hotelData.map((hotel) => hotel.hotelCode).filter((code) => code);
 
             if (hotelCodes.length === 0) {
                 return [];
