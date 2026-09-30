@@ -195,6 +195,13 @@ export class BookService {
         : fare?.[0]?.searchTotalFare ?? 0;
       const payableAmount = tboFare + ssrTotal;
 
+      this.logger.log(
+        `Book initiate api-version: header=${headers?.["api-version"] ?? "(missing)"}, ` +
+        `resolved=v${apiMajorVersion}, fareUsed=${useOfferedFare ? "OfferedFare" : "searchTotalFare"}, ` +
+        `offeredFareFlag=${process.env.FLIGHT_OFFERED_FARE_ENABLED}, tboFare=${tboFare}, ssrTotal=${ssrTotal}, ` +
+        `payableAmount=${payableAmount}, searchReqId=${bookReq.searchReqId}`,
+      );
+
       fare = fare.map((f) => ({
         ...f,
       }));
