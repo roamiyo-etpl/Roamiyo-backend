@@ -43,7 +43,6 @@ export class TboSearchService {
             const { searchCriteria, currency, searchMetadata, activeProviders } = searchRequest;
             const { checkIn, checkOut, rooms, location } = searchCriteria;
             const { guestNationality } = searchMetadata;
-            const responseTime = searchRequest?.ResponseTime;
 
             // Hotel codes sent by client take priority over location based lookup
             const requestedHotelCodes: string[] = String(searchCriteria?.HotelCodes ?? '')
@@ -100,7 +99,6 @@ export class TboSearchService {
                     guestNationality,
                     paxRooms: rooms,
                     hotelCodes: chunk,
-                    responseTime,
                 });
 
                 return this.executeSearchWithRetry(chunkRequest, endpoint, auth, index, 'search');
@@ -169,7 +167,7 @@ export class TboSearchService {
      * @returns TBO search request object
      */
     private createTboSearchRequest(params: any): any {
-        const { checkIn, checkOut, guestNationality, paxRooms, hotelCodes, responseTime } = params;
+        const { checkIn, checkOut, guestNationality, paxRooms, hotelCodes } = params;
 
         return {
             CheckIn: checkIn,
@@ -190,7 +188,7 @@ export class TboSearchService {
                 Children: room.children,
                 ChildrenAges: room.childAges || null,
             })),
-            ResponseTime: responseTime ?? 20,
+            ResponseTime: 23.0,
         };
     }
 
