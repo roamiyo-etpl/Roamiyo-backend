@@ -830,7 +830,7 @@ export class BookRepository extends Repository<Booking> {
 
         // Map detailed passenger data for each type
         const adultData: paxesData[] = adultPassengers.map((p) => ({
-            age: Generic.calculateAge(p.dateOfBirth),
+            age: p.dateOfBirth ? Generic.calculateAge(p.dateOfBirth) : undefined,
             dob: p.dateOfBirth,
             firstName: p.passengerDetail.firstName,
             middleName: p.passengerDetail.middleName,
@@ -844,7 +844,7 @@ export class BookRepository extends Repository<Booking> {
         }));
 
         const childData: paxesData[] = childPassengers.map((p) => ({
-            age: Generic.calculateAge(p.dateOfBirth),
+            age: p.dateOfBirth ? Generic.calculateAge(p.dateOfBirth) : undefined,
             dob: p.dateOfBirth,
             firstName: p.passengerDetail.firstName,
             middleName: p.passengerDetail.middleName,
@@ -858,7 +858,7 @@ export class BookRepository extends Repository<Booking> {
         }));
 
         const infantData: paxesData[] = infantPassengers.map((p) => ({
-            age: Generic.calculateAge(p.dateOfBirth),
+            age: p.dateOfBirth ? Generic.calculateAge(p.dateOfBirth) : undefined,
             dob: p.dateOfBirth,
             firstName: p.passengerDetail.firstName,
             middleName: p.passengerDetail.middleName,

@@ -137,6 +137,19 @@ export class TboRevalidateService {
           'revalidate',
         );
 
+        /* Raw TBO FareQuote fare, unchanged */
+        console.log(
+          `TBO FareQuote raw Fare [leg ${i}] ${solutionIds[i]}`,
+          JSON.stringify(
+            {
+              Fare: revalidateResult?.Response?.Results?.Fare,
+              FareBreakdown: revalidateResult?.Response?.Results?.FareBreakdown,
+            },
+            null,
+            2,
+          ),
+        );
+
         /* Saving the revalidate result */
         await this.revalidateRepo.save({
           solution_id: solutionIds[i],

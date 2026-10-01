@@ -183,15 +183,34 @@ export class BookService {
       const ssrTotal = mealFare + seatFare + baggageFare;
 
       fare = revalidateResult.route?.fare as unknown as Fare[];
-      const tboFare = fare?.[0]?.searchTotalFare ?? 0;
+      // Api-Version v1 (old builds) keeps searchTotalFare; v2 and above charge TBO OfferedFare.
+      // FLIGHT_OFFERED_FARE_ENABLED=false switches v2 back to the v1 flow without a deploy.
+      const apiMajorVersion =
+        Number(String(headers?.["api-version"] ?? "").match(/^v(\d+)/i)?.[1]) || 1;
+      const useOfferedFare =
+        apiMajorVersion >= 2 &&
+        process.env.FLIGHT_OFFERED_FARE_ENABLED === "true";
+      const tboFare = useOfferedFare
+        ? Number(fare?.[0]?.OfferedFare ?? 0)
+        : fare?.[0]?.searchTotalFare ?? 0;
       const payableAmount = tboFare + ssrTotal;
+
+      this.logger.log(
+        `Book initiate api-version: header=${headers?.["api-version"] ?? "(missing)"}, ` +
+        `resolved=v${apiMajorVersion}, fareUsed=${useOfferedFare ? "OfferedFare" : "searchTotalFare"}, ` +
+        `offeredFareFlag=${process.env.FLIGHT_OFFERED_FARE_ENABLED}, tboFare=${tboFare}, ssrTotal=${ssrTotal}, ` +
+        `payableAmount=${payableAmount}, searchReqId=${bookReq.searchReqId}`,
+      );
 
       fare = fare.map((f) => ({
         ...f,
       }));
 
       flightBookingDebug('Book initiate fare', {
+        apiMajorVersion,
+        useOfferedFare,
         searchTotalFare: fare?.[0]?.searchTotalFare,
+        OfferedFare: fare?.[0]?.OfferedFare,
         payableAmount,
       });
 

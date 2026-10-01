@@ -1,4 +1,4 @@
-import { IsArray, IsNotEmpty, ValidateNested, IsDateString, IsString, IsOptional, IsEmail, IsBoolean } from 'class-validator';
+import { IsArray, IsNotEmpty, ValidateNested, IsDateString, IsString, IsOptional, IsEmail, IsBoolean, ValidateIf } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -192,14 +192,15 @@ export class Passenger {
     @Type(() => PassengerDetail)
     passengerDetail: PassengerDetail;
 
-    @ApiProperty({
-        description: 'Passenger date of birth',
+    @ApiPropertyOptional({
+        description: 'Passenger date of birth. Mandatory for CHD/INF, optional for ADT (sent to TBO whenever provided).',
         example: '1990-01-15',
         format: 'date',
     })
+    @ValidateIf((o) => o.passengerType !== 'ADT' || o.dateOfBirth != null)
     @IsNotEmpty()
     @IsString()
-    dateOfBirth: string;
+    dateOfBirth?: string;
 
     @ApiPropertyOptional({
         description: 'Travel document information',
@@ -225,20 +226,45 @@ export class Passenger {
     @IsString()
     nationality: string;
 
-    @ApiProperty({
-        description: 'Passenger mobile number',
+    @ApiPropertyOptional({
+        description: 'Passenger country name, sent to TBO as CountryName',
+        example: 'India',
+    })
+    @IsOptional()
+    @IsString()
+    countryName?: string;
+
+    @ApiPropertyOptional({
+        description: 'Deprecated: TBO ContactNo is taken from contact.mobile. Used only as fallback for older clients.',
         example: '1234567890',
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
-    mobile: string;
+    mobile?: string;
 
-    @ApiProperty({
-        description: 'Mobile country code',
+    @ApiPropertyOptional({
+        description: 'Deprecated: TBO CellCountryCode is taken from contact.mobileCountryCode. Used only as fallback for older clients.',
         example: '+1',
     })
+    @IsOptional()
     @IsString()
-    mobileCountryCode: string;
+    mobileCountryCode?: string;
+
+    @ApiPropertyOptional({
+        description: 'Frequent flyer number',
+        example: '123456789',
+    })
+    @IsOptional()
+    @IsString()
+    frequentFlyerNumber?: string;
+
+    @ApiPropertyOptional({
+        description: 'Airline code of the frequent flyer programme. Defaults to the airline of the booked leg when omitted.',
+        example: '6E',
+    })
+    @IsOptional()
+    @IsString()
+    frequentFlyerAirlineCode?: string;
 }
 
 export class ContactInfo {
@@ -316,6 +342,25 @@ export class ContactInfo {
     @IsNotEmpty()
     @IsString()
     postalCode: string;
+}
+
+/** Values are not type-checked so older app builds never get rejected; the TBO mapper stringifies them. */
+export class BillingDetails {
+    @ApiPropertyOptional({ description: 'Billing address, sent to TBO as AddressLine1', example: '12, MG Road' })
+    @IsOptional()
+    address?: string;
+
+    @ApiPropertyOptional({ description: 'Billing city, sent to TBO as City', example: 'Bengaluru' })
+    @IsOptional()
+    city?: string;
+
+    @ApiPropertyOptional({ description: 'Billing state', example: 'Karnataka' })
+    @IsOptional()
+    state?: string;
+
+    @ApiPropertyOptional({ description: 'Billing pincode', example: '560001' })
+    @IsOptional()
+    pincode?: string | number;
 }
 
 export class GSTDetails {
@@ -548,6 +593,15 @@ export class BookDto {
     @ValidateNested()
     @Type(() => GSTDetails)
     gst?: GSTDetails;
+
+    @ApiPropertyOptional({
+        description: 'Billing details; address and city are sent to TBO for every passenger',
+        type: BillingDetails,
+    })
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => BillingDetails)
+    billing_details?: BillingDetails;
 
     @ApiPropertyOptional({
   description: 'SSR data (Seat, Meal, Baggage)',
