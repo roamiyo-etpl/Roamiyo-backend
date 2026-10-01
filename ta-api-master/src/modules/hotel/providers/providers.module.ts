@@ -9,6 +9,7 @@ import { TboRepository } from './tbo/tbo.repository';
 import { HotelMasterEntity } from 'src/shared/entities/hotel-master.entity';
 import { TboHotelAdditionalDetailsEntity } from 'src/modules/dump/hotel/entities/tbo-hotel-additional-details.entity';
 import { TboHotelImagesEntity } from 'src/modules/dump/hotel/entities/tbo-hotel-images.entity';
+import { TboHotelListEntity } from 'src/modules/dump/hotel/entities/tbo-hotel-list.entity';
 import { ProviderBookService } from './provider-book.service';
 import { TboBookService } from './tbo/tbo-book.service';
 import { TboAuthTokenService } from './tbo/tbo-auth-token.service';
@@ -20,7 +21,7 @@ import { TboCancellationService } from './tbo/tbo-cancellation.service';
 import { ProviderCancellationService } from './provider-cancellation.service';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([ProviderMaster,HotelMasterEntity, TboHotelAdditionalDetailsEntity, TboHotelImagesEntity]), ConfigurationModule],
+    imports: [TypeOrmModule.forFeature([ProviderMaster,HotelMasterEntity, TboHotelAdditionalDetailsEntity, TboHotelImagesEntity, TboHotelListEntity]), ConfigurationModule],
     providers: [ProvidersSearchService, ProviderRoomsService, ProviderBookService, ProviderOrderDetailService, HotelbedsSearchService, TboSearchService, TboRoomService,TboBookService, TboCancellationService, TboOrderDetailService, TboAuthTokenService, TboRepository, ProviderCancellationService],
     exports: [ProvidersSearchService, ProviderRoomsService, ProviderBookService, ProviderOrderDetailService, TboAuthTokenService, ProviderCancellationService],
 })

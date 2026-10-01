@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { HotelMasterEntity } from 'src/shared/entities/hotel-master.entity';
+import { TboHotelListEntity } from 'src/modules/dump/hotel/entities/tbo-hotel-list.entity';
 
 /**
  * TBO Repository for hotel data operations
@@ -14,22 +15,57 @@ export class TboRepository {
     constructor(
         @InjectRepository(HotelMasterEntity)
         private readonly hotelMasterRepo: Repository<HotelMasterEntity>,
+        @InjectRepository(TboHotelListEntity)
+        private readonly tboHotelListRepo: Repository<TboHotelListEntity>,
     ) {}
+
+    /**
+     * Hotels come from tbo_hotel_list. hotel_master is only read for the extra details
+     * (state, hero image, postal code), matched by hotel code. Hotels missing there are kept.
+     */
+    private async addExtraDetails(hotels: TboHotelListEntity[]): Promise<any[]> {
+        if (hotels.length === 0) {
+            return [];
+        }
+
+        const oldHotels = await this.hotelMasterRepo
+            .createQueryBuilder('hotel')
+            .where('hotel.hotelCode IN (:...hotelCodes)', { hotelCodes: hotels.map((h) => h.tboHotelId) })
+            .andWhere('hotel.providerCode = :providerCode', { providerCode: 'TBO' })
+            .getMany();
+        const oldHotelMap = new Map(oldHotels.map((h) => [h.hotelCode, h]));
+
+        return hotels.map((h) => {
+            const old = oldHotelMap.get(h.tboHotelId);
+            return {
+                hotelCode: h.tboHotelId,
+                hotelName: h.hotelName,
+                address: [h.addressLine1, h.addressLine2].filter(Boolean).join(', '),
+                city: h.cityName,
+                country: h.countryName,
+                countryCode: h.countryCode,
+                latitude: h.latitude,
+                longitude: h.longitude,
+                starRating: h.starRating,
+                state: old?.state || '',
+                postalCode: old?.postalCode || '',
+                heroImage: old?.heroImage || '',
+            };
+        });
+    }
 
     /**
      * Find hotels by city name
      * @param cityName - City name to search for
      * @returns Promise<HotelMasterEntity[]> - Array of hotels
      */
-    async findHotelsByCity(cityName: string): Promise<HotelMasterEntity[]> {
+    async findHotelsByCity(cityName: string): Promise<any[]> {
         try {
-            return await this.hotelMasterRepo
+            const hotels = await this.tboHotelListRepo
                 .createQueryBuilder('hotel')
-                .where('LOWER(hotel.city) LIKE LOWER(:cityName)', { cityName: `%${cityName}%` })
-                .andWhere('hotel.isActive = :isActive', { isActive: true })
-                .andWhere('hotel.isDeleted = :isDeleted', { isDeleted: false })
-                .andWhere('hotel.providerCode = :providerCode', { providerCode: 'TBO' })
+                .where('LOWER(hotel.cityName) LIKE LOWER(:cityName)', { cityName: `%${cityName}%` })
                 .getMany();
+            return await this.addExtraDetails(hotels);
         } catch (error) {
             console.error('Error finding hotels by city:', error);
             throw new BadRequestException('Failed to find hotels by city');
@@ -176,7 +212,7 @@ export class TboRepository {
      * @param radiusKm - Search radius in kilometers
      * @returns Promise<HotelMasterEntity[]> - Array of hotels
      */
-    async findHotelsByCoordinates(coordinates: { lat: number; lng: number }, radiusKm: number = 50): Promise<HotelMasterEntity[]> {
+    async findHotelsByCoordinates(coordinates: { lat: number; lng: number }, radiusKm: number = 50): Promise<any[]> {
         const { lat, lng } = coordinates;
 
         // Validate input coordinates
@@ -201,7 +237,7 @@ export class TboRepository {
             const lngMax = lng + lngRadiusInDegrees;
 
             // Use Haversine formula for accurate distance calculation
-            const query = this.hotelMasterRepo
+            const query = this.tboHotelListRepo
                 .createQueryBuilder('hotel')
                 .where('hotel.latitude IS NOT NULL AND hotel.longitude IS NOT NULL')
                 .andWhere('hotel.latitude BETWEEN :latMin AND :latMax', {
@@ -212,9 +248,6 @@ export class TboRepository {
                     lngMin,
                     lngMax,
                 })
-                .andWhere('hotel.isActive = :isActive', { isActive: true })
-                .andWhere('hotel.isDeleted = :isDeleted', { isDeleted: false })
-                .andWhere('hotel.providerCode = :providerCode', { providerCode: 'TBO' })
                 .andWhere(
                     `
                     6371 * acos(
@@ -240,7 +273,7 @@ export class TboRepository {
                     'ASC',
                 );
 
-            return await query.getMany();
+            return await this.addExtraDetails(await query.getMany());
         } catch (error) {
             console.error('Error finding hotels by coordinates:', error);
             throw new BadRequestException('Failed to find hotels by location');
