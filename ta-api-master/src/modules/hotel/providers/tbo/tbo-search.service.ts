@@ -44,15 +44,31 @@ export class TboSearchService {
             const { checkIn, checkOut, rooms, location } = searchCriteria;
             const { guestNationality } = searchMetadata;
 
-            // Get hotel data from database based on search type
-            let hotelData = await this.getHotelDataByLocation(location);
+            // Hotel codes sent by client take priority over location based lookup
+            const requestedHotelCodes: string[] = String(searchCriteria?.HotelCodes ?? '')
+                .split(',')
+                .map((code) => code.trim())
+                .filter(Boolean);
 
-            if (!hotelData || hotelData.length === 0) {
-                return [];
+            let hotelData: any[];
+            let hotelCodes: string[];
+
+            if (requestedHotelCodes.length > 0) {
+                // DB data is used only for static details; all requested codes are sent to TBO
+                hotelCodes = [...new Set(requestedHotelCodes)];
+                hotelData = await this.tboRepository.findHotelsByHotelCode(hotelCodes);
+                console.log(`[HOTEL-SEARCH] reqId=${searchReqId} using ${hotelCodes.length} hotel code(s) from payload (${hotelData.length} found in DB)`);
+            } else {
+                // Get hotel data from database based on search type
+                hotelData = await this.getHotelDataByLocation(location);
+
+                if (!hotelData || hotelData.length === 0) {
+                    return [];
+                }
+
+                // Extract hotel codes
+                hotelCodes = hotelData.map((hotel) => hotel.hotelCode).filter((code) => code);
             }
-
-            // Extract hotel codes
-            const hotelCodes = hotelData.map((hotel) => hotel.hotelCode).filter((code) => code);
 
             if (hotelCodes.length === 0) {
                 return [];
@@ -73,6 +89,9 @@ export class TboSearchService {
            
             const endpoint = `${providerCredentials.hotel_url}/Search`;
 
+            console.log(`[HOTEL-SEARCH] reqId=${searchReqId} calling TBO Search API (${hotelChunks.length} chunk(s), ${hotelCodes.length} hotels)...`);
+            const tboCallStartedAt = Date.now();
+
             const searchPromises = hotelChunks.map((chunk, index) => {
                 const chunkRequest = this.createTboSearchRequest({
                     checkIn,
@@ -87,6 +106,7 @@ export class TboSearchService {
 
             // Execute all searches in parallel
             const responses = await Promise.allSettled(searchPromises);
+            console.log(`[HOTEL-SEARCH] reqId=${searchReqId} TBO Search responded (all chunks) in ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s`);
 
             // Process successful responses
             const successfulResponses = responses
@@ -99,7 +119,9 @@ export class TboSearchService {
             }
 
             // Convert TBO responses to our standard format
+            const conversionStartedAt = Date.now();
             const convertedResults = await Promise.all(successfulResponses.map((response) => this.convertTboResponseToHotelResult(response, hotelData, searchReqId, searchCriteria, currency)));
+            console.log(`[HOTEL-SEARCH] reqId=${searchReqId} response conversion (TBO->our format) took ${((Date.now() - conversionStartedAt) / 1000).toFixed(3)}s`);
 
             // Flatten and sort results
             const allResults = convertedResults.flat();
@@ -182,8 +204,9 @@ export class TboSearchService {
     private async executeSearchWithRetry(request: any, endpoint: string, auth: any, chunkIndex: number, flow: string, maxRetries: number = 2): Promise<any> {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
+                const chunkCallStartedAt = Date.now();
                 const response = await this.makeAuthenticatedRequest('POST', request, endpoint, auth, flow);
-                console.log(`TBO Chunk ${chunkIndex} (attempt ${attempt}): ${response?.HotelResult?.length || 0} hotels`);
+                console.log(`[HOTEL-SEARCH] TBO chunk ${chunkIndex} (attempt ${attempt}) raw HTTP call took ${((Date.now() - chunkCallStartedAt) / 1000).toFixed(3)}s, ${response?.HotelResult?.length || 0} hotels`);
                 return response;
             } catch (error) {
                 console.error(`TBO Chunk ${chunkIndex} attempt ${attempt} failed:`, error.message);

@@ -1364,6 +1364,16 @@ export class TboBookService {
 
     const passengers = bookReq.passengers;
 
+    // New clients send billing_details + contact mobile once per booking; older
+    // payloads (incl. booking logs replayed at confirmation) fall back per passenger.
+    const trimOrEmpty = (v: unknown) => (v == null ? "" : String(v).trim());
+    const billingAddress = trimOrEmpty(bookReq?.billing_details?.address);
+    const billingCity = trimOrEmpty(bookReq?.billing_details?.city);
+    const contactMobile = trimOrEmpty(bookReq?.contact?.mobile);
+    const contactMobileCountryCode = trimOrEmpty(bookReq?.contact?.mobileCountryCode);
+    const legAirlineCode =
+      bookReq?.selectedSegment?.[0]?.airline ?? bookReq?.routes?.[idx]?.[0]?.airline ?? null;
+
     // ===== SSR START =====
     bookReq.ssr = this.normalizeSsrMealDescriptions(bookReq.ssr || {});
     const ssr = bookReq.ssr;
@@ -1394,9 +1404,11 @@ export class TboBookService {
         LastName: element?.passengerDetail?.lastName.trim(),
         PaxType: pexT,
         PassengerInformation: "NN",
-        DateOfBirth: moment(element?.dateOfBirth, "YYYY-MM-DD").format(
-          "YYYY-MM-DDTHH:mm:ss",
-        ),
+        ...(element?.dateOfBirth && {
+          DateOfBirth: moment(element.dateOfBirth, "YYYY-MM-DD").format(
+            "YYYY-MM-DDTHH:mm:ss",
+          ),
+        }),
         Gender: element.gender == "M" ? 1 : 2,
         PassportNo: element?.document?.documentNumber,
         PassportExpiry: this.formatTboDateField(element?.document?.expiryDate),
@@ -1404,24 +1416,29 @@ export class TboBookService {
           this.resolvePassportIssueDate(element),
         ),
         PassportIssueCountryCode: element?.document?.country,
-        AddressLine1: `${element?.city?.name || ""}, ${element?.country?.name || ""}, ${bookReq?.contact?.postalCode}`,
+        AddressLine1:
+          billingAddress ||
+          trimOrEmpty(bookReq?.gst?.gstCompanyAddress) ||
+          `${element?.city?.name || ""}, ${element?.country?.name || ""}, ${bookReq?.contact?.postalCode}`,
         AddressLine2: "",
-        City: element?.city?.name || 'Mumbai',
-        CountryName: element?.country?.name || 'India',
-        CountryCode: element?.document?.country || 'IN',
+        City: billingCity || element?.city?.name || 'Mumbai',
+        CountryName: element?.countryName || element?.country?.name || 'India',
+        CountryCode: element?.nationality || element?.document?.country || 'IN',
         Nationality: element?.nationality,
         GSTCompanyAddress: bookReq?.gst?.gstCompanyAddress || "",
         GSTCompanyContactNumber: bookReq?.gst?.gstCompanyContactNumber || "",
         GSTCompanyName: bookReq?.gst?.gstCompanyName || "",
         GSTNumber: bookReq?.gst?.gstNumber || "",
         GSTCompanyEmail: bookReq?.gst?.gstCompanyEmail || "",
-        ContactNo: element.mobile.replace("+", "").trim(),
-        CellCountryCode: element?.mobileCountryCode,
+        ContactNo: (contactMobile || trimOrEmpty(element?.mobile)).replace("+", "").trim(),
+        CellCountryCode: contactMobileCountryCode || element?.mobileCountryCode,
         Email: element?.email || bookReq?.contact?.email,
         IsLeadPax: passengerIndex === 0,
-        FFAirlineCode: null,
+        FFAirlineCode: element?.frequentFlyerNumber
+          ? element?.frequentFlyerAirlineCode || legAirlineCode
+          : null,
         FFAirline: null,
-        FFNumber: null,
+        FFNumber: element?.frequentFlyerNumber || null,
         Fare: {
           Currency: fare?.Currency,
           BaseFare: (fare?.BaseFare ?? 0) / paxCount,

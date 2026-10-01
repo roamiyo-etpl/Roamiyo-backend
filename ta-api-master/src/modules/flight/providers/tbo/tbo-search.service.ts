@@ -99,10 +99,14 @@ export class TboSearchService {
         supplierResponseTime: `${(endTime - startTime) / 1000} seconds`,
       };
       console.log(
-        "logsWithRes.supplierResponseTime",
-        logsWithRes.supplierResponseTime,
+        `[FLIGHT-SEARCH] reqId=${searchReqId} raw TBO HTTP call took ${(endTime - startTime) / 1000}s`,
       );
-      console.log("ConvertTime", logsWithRes.ApiResponseTime);
+      console.log(
+        `[FLIGHT-SEARCH] reqId=${searchReqId} response conversion (TBO->our format) took ${(convertResponseTime - endTime) / 1000}s`,
+      );
+      console.log(
+        `[FLIGHT-SEARCH] reqId=${searchReqId} total supplier phase (call + convert) took ${(convertResponseTime - startTime) / 1000}s`,
+      );
       // Generic.generateLogFile(searchReqId + "-TBO", logsWithRes, "search");
       if (process.env.ENABLE_LOCAL_LOGS === "true") {
         Generic.generateLogFile(searchReqId + "-TBO", logsWithRes, "search");
@@ -340,6 +344,7 @@ export class TboSearchService {
                 Tax: flight.Fare?.Tax,
                 PublishedFare: flight.Fare?.PublishedFare,
                 ServiceFee: flight.Fare?.ServiceFee,
+                OfferedFare: flight.Fare?.OfferedFare,
               },
 
               inboundFare: findInBound
@@ -348,6 +353,7 @@ export class TboSearchService {
                     Tax: findInBound.Fare?.Tax,
                     PublishedFare: findInBound.Fare?.PublishedFare,
                     ServiceFee: findInBound.Fare?.ServiceFee,
+                    OfferedFare: findInBound.Fare?.OfferedFare,
                   }
                 : null,
 
@@ -416,6 +422,7 @@ export class TboSearchService {
             BaseFare: flightJourney.Fare?.BaseFare,
             Tax: flightJourney.Fare?.Tax,
             PublishedFare: flightJourney.Fare?.PublishedFare,
+            OfferedFare: flightJourney.Fare?.OfferedFare,
           },
         });
 
@@ -435,6 +442,7 @@ export class TboSearchService {
           BaseFare: flightJourney.Fare?.BaseFare,
           Tax: flightJourney.Fare?.Tax,
           PublishedFare: flightJourney.Fare?.PublishedFare,
+          OfferedFare: flightJourney.Fare?.OfferedFare,
         };
         flightRoute.inboundFare = flightJourney.inboundFare || null;
 
@@ -464,10 +472,13 @@ export class TboSearchService {
             totalInterval += fSegment.intervalMinutes;
 
             /* Creating flight HashCode */
+            /* SupplierFareClass is included so distinct fare buckets (e.g. Saver/Flexi/Corporate)
+               for the same flight+cabin don't collapse into one card in the dedup filter */
             hashCode +=
               fSegment.airlineCode +
               fSegment.flightNumber +
-              fSegment.cabinClass;
+              fSegment.cabinClass +
+              fSegment.supplierFareClass;
           });
 
           airlineCodes.push(airlineCode);
@@ -764,6 +775,7 @@ export class TboSearchService {
     flightSegment.airlineName =
       airlines[segment.Airline.AirlineCode] || segment.Airline;
     flightSegment.supplierFareClass = segment.SupplierFareClass;
+    flightSegment.SupplierFareClass = segment.SupplierFareClass;
     flightSegment.cabinClass = Generic.convertCabinClassCode(
       "TBO",
       segment.CabinClass,

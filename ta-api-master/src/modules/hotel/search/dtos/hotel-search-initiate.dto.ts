@@ -140,6 +140,14 @@ export class SearchCriteriaDto {
     @ValidateNested()
     @Type(() => LocationDto)
     location: LocationDto;
+
+    @ApiPropertyOptional({
+        description: 'Comma separated TBO hotel codes. When sent, search is done only for these hotels instead of location',
+        example: '1016351,1022371,1033558',
+    })
+    @IsOptional()
+    @IsString()
+    HotelCodes?: string;
 }
 export class SearchMetaDataDto {
     @ApiProperty({

@@ -137,6 +137,19 @@ export class TboRevalidateService {
           'revalidate',
         );
 
+        /* Raw TBO FareQuote fare, unchanged */
+        console.log(
+          `TBO FareQuote raw Fare [leg ${i}] ${solutionIds[i]}`,
+          JSON.stringify(
+            {
+              Fare: revalidateResult?.Response?.Results?.Fare,
+              FareBreakdown: revalidateResult?.Response?.Results?.FareBreakdown,
+            },
+            null,
+            2,
+          ),
+        );
+
         /* Saving the revalidate result */
         await this.revalidateRepo.save({
           solution_id: solutionIds[i],
@@ -316,6 +329,18 @@ export class TboRevalidateService {
         fareQuote: [fareA?.fareQuote, fareB?.fareQuote || null],
         currency: fareA?.currency,
         currencySymbol: fareA?.currencySymbol,
+        OfferedFare: (fareA?.OfferedFare ?? 0) + (fareB?.OfferedFare ?? 0),
+        CommissionEarned:
+          (fareA?.CommissionEarned ?? 0) + (fareB?.CommissionEarned ?? 0),
+        PLBEarned: (fareA?.PLBEarned ?? 0) + (fareB?.PLBEarned ?? 0),
+        IncentiveEarned:
+          (fareA?.IncentiveEarned ?? 0) + (fareB?.IncentiveEarned ?? 0),
+        TdsOnCommission:
+          (fareA?.TdsOnCommission ?? 0) + (fareB?.TdsOnCommission ?? 0),
+        ChargeBU: [...(fareA?.ChargeBU ?? []), ...(fareB?.ChargeBU ?? [])],
+        TotalSpecialServiceCharges:
+          (fareA?.TotalSpecialServiceCharges ?? 0) +
+          (fareB?.TotalSpecialServiceCharges ?? 0),
       });
 
       const fareA = convertedResultArray[0]?.route?.fare[0];
@@ -901,6 +926,22 @@ export class TboRevalidateService {
     fareDetail.fareQuote = Generic.encrypt(
       JSON.stringify({ ...passengerFareArr, fareBreakDown }),
     );
+
+    /* TBO passthrough fields (raw, unchanged) */
+    fareDetail.OfferedFare = passengerFareArr?.OfferedFare;
+    fareDetail.CommissionEarned = passengerFareArr?.CommissionEarned;
+    fareDetail.PLBEarned = passengerFareArr?.PLBEarned;
+    fareDetail.IncentiveEarned = passengerFareArr?.IncentiveEarned;
+    fareDetail.TdsOnCommission = passengerFareArr?.TdsOnCommission;
+    fareDetail.ChargeBU = passengerFareArr?.ChargeBU;
+
+    /* Same key names as search API's outboundFare/inboundFare (raw, unchanged); existing lowercase keys above are untouched */
+    fareDetail.BaseFare = passengerFareArr?.BaseFare;
+    fareDetail.Tax = passengerFareArr?.Tax;
+    fareDetail.PublishedFare = passengerFareArr?.PublishedFare;
+    fareDetail.ServiceFee = passengerFareArr?.ServiceFee;
+    fareDetail.TotalSpecialServiceCharges = passengerFareArr?.TotalSpecialServiceCharges ?? 0;
+
     return fareDetail;
   }
 

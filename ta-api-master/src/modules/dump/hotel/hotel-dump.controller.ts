@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Query, Headers, HttpCode, HttpStatus, InternalServerErrorException, HttpException, Put, Body } from '@nestjs/common';
 import { HotelDumpService } from './hotel-dump.service';
+import { TboHotelListImportService } from './tbo-hotel-list-import.service';
 import { HotelDetailRequestDto } from './dtos/hotel-detail.dto';
 
 /**
@@ -42,7 +43,10 @@ import { TransferDataToHotelContent } from './dtos/transfer-data-to-hotel-conten
 @RequiredHeaders([DEC_HEADER_IP_ADDRESS_MANDATE, DEC_HEADER_API_VERSION_MANDATE, DEC_HEADER_CURRENCY_PREFERENCE_MANDATE])
 @Controller('dump/hotel')
 export class HotelDumpController {
-    constructor(private readonly hotelDumpService: HotelDumpService) {}
+    constructor(
+        private readonly hotelDumpService: HotelDumpService,
+        private readonly tboHotelListImportService: TboHotelListImportService,
+    ) {}
 
     @ApiOperation({ summary: 'Get hotel autocomplete suggestions' })
     @ApiResponse(SWG_SUCCESS_RESPONSE)
@@ -198,5 +202,17 @@ export class HotelDumpController {
         }
     }
 
+    @ApiOperation({ summary: 'Import TBO hotel & homestay CSVs (dump/tbo_hotels.csv, dump/tbo_homestays.csv) into tbo_hotel_list' })
+    @ApiResponse(SWG_SUCCESS_RESPONSE)
+    @ApiResponse(SWG_BAD_REQUEST_RESPONSE)
+    @ApiResponse(SWG_INTERNAL_SERVER_ERROR_RESPONSE)
+    @Post('import-hotel-list')
+    @HttpCode(HttpStatus.OK)
+    async importHotelList(@Headers() headers: Headers): Promise<CommonResponse> {
+        try {
+            return await this.tboHotelListImportService.importHotelList();
+        } catch (error) {
+            throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 }
- 

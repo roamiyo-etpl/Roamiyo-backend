@@ -10,7 +10,39 @@ import {
   tryExtractTraceIdFromPayload,
 } from 'src/shared/utilities/flight/tbo-api-instrumentation.utility';
 
-function groupByFlight(segments: any, baggage: any[], meals: any[], seats: any[]) {
+function mapSpecialServices(result: any): any[] {
+  const services: any[] = [];
+
+  (result?.SpecialServices || []).forEach((group: any) => {
+    (group?.SegmentSpecialService || []).forEach((segService: any) => {
+      (segService?.SSRService || []).forEach((item: any) => {
+        services.push({
+          airline: item.AirlineCode,
+          flightNumber: item.FlightNumber,
+          origin: item.Origin,
+          destination: item.Destination,
+          departureTime: item.DepartureTime,
+          code: item.Code,
+          text: item.Text,
+          serviceType: item.ServiceType,
+          wayType: item.WayType,
+          price: item.Price,
+          currency: item.Currency,
+        });
+      });
+    });
+  });
+
+  return services;
+}
+
+function groupByFlight(
+  segments: any,
+  baggage: any[],
+  meals: any[],
+  seats: any[],
+  specialServices: any[] = [],
+) {
   const fnKey = (n: unknown) => String(n ?? '').trim();
 
   const build = (segmentList: any[]) => {
@@ -38,6 +70,13 @@ function groupByFlight(segments: any, baggage: any[], meals: any[], seats: any[]
           fnKey(s.flightNumber) === fnKey(seg.flightNumber) &&
           fnKey(s.origin) === fnKey(seg.origin) &&
           fnKey(s.destination) === fnKey(seg.destination),
+      ),
+
+      specialServices: specialServices.filter(
+        (sp) =>
+          fnKey(sp.flightNumber) === fnKey(seg.flightNumber) &&
+          fnKey(sp.origin) === fnKey(seg.origin) &&
+          fnKey(sp.destination) === fnKey(seg.destination),
       ),
     }));
   };
@@ -183,10 +222,24 @@ export class SsrService {
       });
 
       // =========================================
+      // ✅ SPECIAL SERVICES (FFWD / Priority Check-in etc.)
+      // =========================================
+
+      const specialServices = results.flatMap((result: any) =>
+        mapSpecialServices(result),
+      );
+
+      // =========================================
       // ✅ GROUP SSR BY FLIGHT
       // =========================================
 
-      const groupedSSR = groupByFlight(data.segments, baggage, meals, seats);
+      const groupedSSR = groupByFlight(
+        data.segments,
+        baggage,
+        meals,
+        seats,
+        specialServices,
+      );
 
       const groupedArray: any[] = [];
 
@@ -215,6 +268,7 @@ export class SsrService {
         baggageCount: baggage.length,
         mealCount: meals.length,
         seatCount: seats.length,
+        specialServiceCount: specialServices.length,
         tboResponse: results,
       };
     } catch (error: any) {
@@ -344,14 +398,18 @@ export class SsrService {
         });
       });
 
+      const specialServices = mapSpecialServices(result);
+
       return {
         traceId: result.TraceId,
         baggage,
         meals,
         seats,
+        specialServices,
         seatCount: seats.length,
         baggageCount: baggage.length,
         mealCount: meals.length,
+        specialServiceCount: specialServices.length,
         tboResponse: result,
       };
     } catch (error: any) {

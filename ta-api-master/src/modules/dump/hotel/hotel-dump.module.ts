@@ -16,6 +16,8 @@ import { TboHotelRoomContentEntity } from './entities/tbo-hotel-room-content.ent
 import { TboHotelContentEntity } from './entities/tbo-hotel-content.entity';
 import { TboHotelImagesEntity } from './entities/tbo-hotel-images.entity';
 import { TboHotelAdditionalDetailsEntity } from './entities/tbo-hotel-additional-details.entity';
+import { TboHotelListEntity } from './entities/tbo-hotel-list.entity';
+import { TboHotelListImportService } from './tbo-hotel-list-import.service';
 
 /**
  * Hotel dump module - handles hotel data dump operations
@@ -33,13 +35,14 @@ import { TboHotelAdditionalDetailsEntity } from './entities/tbo-hotel-additional
             TboHotelImagesEntity,
             TboHotelContentEntity,
             TboHotelRoomContentEntity,
+            TboHotelListEntity,
             CountryEntity,
             CityEntity,
             HotelMasterEntity,
             ProviderMaster,
         ]),
     ],
-    providers: [HotelDumpService, SupplierCredService],
+    providers: [HotelDumpService, TboHotelListImportService, SupplierCredService],
     controllers: [HotelDumpController],
     exports: [HotelDumpService],
 })
