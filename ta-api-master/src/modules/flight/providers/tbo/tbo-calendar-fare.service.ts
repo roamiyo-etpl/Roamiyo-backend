@@ -4,6 +4,7 @@ import { Http } from 'src/shared/utilities/flight/http.utility';
 import { GenericRepo } from 'src/shared/utilities/flight/generic-repo.utility';
 import { Generic } from 'src/shared/utilities/flight/generic.utility';
 import { CalendarFareResponse } from '../../calendar-fare/interfaces/calendar-fare.interface';
+import { redactTboCredentialsForLog } from 'src/shared/utilities/flight/tbo-request-context.utility';
 
 @Injectable()
 export class TboCalendarFareService {
@@ -16,23 +17,30 @@ export class TboCalendarFareService {
      * @author: Prashant Joshi at 13-08-2026 **/
     async calendarFare(calendarFareRequest): Promise<CalendarFareResponse> {
         const { providerCred, calendarFareReqId } = calendarFareRequest;
-        console.log('CalendarFare - Payload received from aggregator:::::::::::', JSON.stringify(calendarFareRequest.calendarFareReq));
+        console.log(`CalendarFare [${calendarFareReqId}] - Payload received from aggregator:::::::::::`, JSON.stringify(calendarFareRequest.calendarFareReq, null, 2));
+        console.log(`CalendarFare [${calendarFareReqId}] - Provider credentials (password redacted):::::::::::`, JSON.stringify(redactTboCredentialsForLog(providerCred), null, 2));
 
         const authToken = await this.tboAuthTokenService.getAuthToken(calendarFareRequest);
         calendarFareRequest.authToken = authToken;
+        console.log(`CalendarFare [${calendarFareReqId}] - TBO auth token:::::::::::`, authToken);
 
+        let endpoint = '';
         try {
             const requestBody = this.creatingCalendarFareRequest(calendarFareRequest);
-            console.log('CalendarFare - Payload sent to TBO:::::::::::', JSON.stringify(requestBody));
+            console.log(`CalendarFare [${calendarFareReqId}] - Payload sent to TBO:::::::::::`, JSON.stringify(requestBody, null, 2));
 
             // dev endpoint
-            // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCalendarFare`;
+            // endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/GetCalendarFare`;
 
             // prod endpoint is
-            const endpoint = `${providerCred.url}/rest/GetCalendarFare`;
+            endpoint = `${providerCred.url}/rest/GetCalendarFare`;
 
+            console.log(`CalendarFare [${calendarFareReqId}] - Calling TBO URL:::::::::::`, `POST ${endpoint}`);
+            const tboCallStartedAt = Date.now();
             const calendarFareResult = await Http.httpRequestTBO('POST', endpoint, JSON.stringify(requestBody), 'other');
-            console.log('CalendarFare - Raw response from TBO:::::::::::', JSON.stringify(calendarFareResult));
+            console.log(`CalendarFare [${calendarFareReqId}] - TBO responded in ${Date.now() - tboCallStartedAt} ms`);
+            console.log(`CalendarFare [${calendarFareReqId}] - Raw response from TBO:::::::::::`, JSON.stringify(calendarFareResult, null, 2));
+            this.logFareSummary(calendarFareReqId, calendarFareResult);
 
             if (process.env.ENABLE_LOCAL_LOGS === 'true') {
                 Generic.generateLogFile(
@@ -49,9 +57,31 @@ export class TboCalendarFareService {
             return this.convertingResponse(calendarFareRequest, calendarFareResult);
         } catch (error) {
             await this.genericRepo.storeLogs(calendarFareReqId, 1, error, 0);
+            console.log(`CalendarFare [${calendarFareReqId}] - TBO call failed for URL:::::::::::`, endpoint);
+            console.log(`CalendarFare [${calendarFareReqId}] - TBO error status:::::::::::`, error?.response?.status);
+            console.log(`CalendarFare [${calendarFareReqId}] - TBO error body:::::::::::`, JSON.stringify(error?.response?.data, null, 2));
             console.log(error);
             throw new InternalServerErrorException('There is an issue while fetching data from the providers.');
         }
+    }
+
+    /** [@Description: Logs one line per day (date, fare, airline) so a flat price across days is easy to spot] */
+    logFareSummary(calendarFareReqId: string, results) {
+        const responseNode = results?.Response ?? results;
+        const searchResults = responseNode?.SearchResults ?? [];
+        const rows = searchResults.map((r) => ({
+            date: r?.DepartureDate,
+            fare: r?.Fare,
+            baseFare: r?.BaseFare,
+            tax: r?.Tax,
+            airline: r?.AirlineCode,
+            isLowestFareOfMonth: r?.IsLowestFareOfMonth,
+        }));
+        const distinctFares = new Set(rows.map((r) => r.fare));
+        console.log(
+            `CalendarFare [${calendarFareReqId}] - Fare summary: ResponseStatus=${responseNode?.ResponseStatus}, TraceId=${responseNode?.TraceId}, days=${rows.length}, distinctFares=${distinctFares.size}`,
+        );
+        console.table(rows);
     }
 
     /** [@Description: This method is used to create the calendar fare request]
