@@ -27,7 +27,7 @@ export class TboBookService {
             const authToken = await this.tboAuthTokenService.getAuthToken(getTokenRequest);
             // console.log(authToken, "token");
 
-            const hotelPassengers = this.creatingBookRequest(originalBookRequest.passengers);
+            const hotelPassengers = this.creatingBookRequest(originalBookRequest.passengers, originalBookRequest.contactDetails);
             // console.log(hotelPassengers[0]);
 
             const prices = this.parsePriceHash(roomQuoteResponse.prices.priceHash);
@@ -150,7 +150,7 @@ export class TboBookService {
 
     /** [@Description: Transforms book criteria into Tbo API request format
         * @author: Qamar Ali at 30-10-2025 **/
-    private creatingBookRequest(passengers): any {
+    private creatingBookRequest(passengers, contactDetails?): any {
         // Group passengers by roomId
         const rooms = {};
         passengers.forEach(pax => {
@@ -188,10 +188,22 @@ export class TboBookService {
             }
         }
 
+        // Contact details are the last fallback for lead pax Email / Phoneno (mandatory for lead in TBO)
+        const contactEmail = contactDetails?.email || null;
+        const contactPhoneno = contactDetails?.dialCode && contactDetails?.mobileNo
+            ? `${contactDetails.dialCode}${contactDetails.mobileNo}`
+            : null;
+
         // Build HotelRoomsDetails array
         const HotelRoomsDetails = Object.keys(rooms).map(roomId => {
             const roomPassengers = rooms[roomId];
             let leadAssigned = false;
+
+            // Prefer the adult marked LeadPassenger by client; otherwise first adult of the room
+            const clientLead = roomPassengers.find(
+                pax => pax.type?.toLowerCase() === "adult" && (pax.LeadPassenger === true || pax.LeadPassenger === 'true'),
+            );
+            const leadPax = clientLead || roomPassengers.find(pax => pax.type?.toLowerCase() === "adult");
             let sharedEmail = null;
             let sharedPan = null;
             let sharedPhoneno: string|null = null;
@@ -251,7 +263,7 @@ export class TboBookService {
                     PaxType: isAdult ? 1 : 2,
                     LeadPassenger: false,
                     Age: pax.age || 0,
-                    PassportNo: pax.passport || null,
+                    PassportNo: pax.passportNumber || pax.passport || null,
                     PassportIssueDate: pax.passportIssueDate || null,
                     PassportExpDate: pax.passportExpDate || null,
                     Phoneno: isAdult ? (pax.phone || sharedPhoneno) : null,
@@ -264,10 +276,14 @@ export class TboBookService {
                     PAN: pax.pan || sharedPan || null,
                 };
 
-                // Mark the first adult as LeadPassenger
-                if (isAdult && !leadAssigned) {
+                // Mark one adult per room as LeadPassenger (client's lead first, else first adult)
+                if (isAdult && !leadAssigned && pax === leadPax) {
                     passengerData.LeadPassenger = true;
                     leadAssigned = true;
+
+                    const ownPhoneno = pax.dialCode && pax.mobileNo ? `${pax.dialCode}${pax.mobileNo}` : null;
+                    passengerData.Email = pax.email || sharedEmail || contactEmail;
+                    passengerData.Phoneno = ownPhoneno || sharedPhoneno || contactPhoneno;
                 }
 
                 return passengerData;

@@ -78,7 +78,7 @@ export class BookRepository extends Repository<Booking> {
             addressLine2: booking.contactDetails.addressLine2 || '',
             city: booking.contactDetails.city || '',
             state: booking.contactDetails.state || '',
-            country: booking.contactDetails.country || '',
+            country: booking.contactDetails.nationality || booking.contactDetails.country || '',
             postalCode: booking.contactDetails.postalCode || '',
         };
 

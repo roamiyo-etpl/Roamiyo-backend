@@ -1,9 +1,28 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsEmail, IsNumber, IsOptional, IsArray, ValidateNested, Min, Max, IsEnum, IsDateString } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsNotEmpty, IsString, IsEmail, IsNumber, IsOptional, IsArray, ValidateNested, Min, Max, IsEnum, IsDateString, IsBoolean } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { GenderEnum, TitleEnum } from 'src/shared/enums/accounts.enum';
 
 export class PassengerDto {
+    @ApiProperty({
+        description: 'Passenger id from client',
+        example: '6f1c0b8e-1d2a-4c3b-9e8f-0a1b2c3d4e5f',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    id?: string;
+
+    @ApiProperty({
+        description: 'Lead passenger of the room. If not sent for a room, the first adult of that room is used as lead.',
+        example: true,
+        required: false,
+    })
+    @IsOptional()
+    @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
+    @IsBoolean()
+    LeadPassenger?: boolean;
+
     @ApiProperty({
         description: 'Passenger type (adult, child, infant)',
         example: 'adult',
@@ -237,10 +256,11 @@ export class ContactDetailsDto {
     @ApiProperty({
         description: 'User title Mr, Miss, and Mrs',
         example: 'Mr',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsEnum(TitleEnum)
-    title!: TitleEnum;
+    title?: TitleEnum;
 
     @ApiProperty({
         description: 'First name',
@@ -270,10 +290,11 @@ export class ContactDetailsDto {
     @ApiProperty({
         description: 'Contact person/user gender male, female and other',
         example: 'male',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsEnum(GenderEnum)
-    gender!: GenderEnum;
+    gender?: GenderEnum;
 
     @ApiProperty({
         description: 'Email address',
@@ -302,10 +323,11 @@ export class ContactDetailsDto {
     @ApiProperty({
         description: 'Address line 1',
         example: '123 Main Street',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
-    addressLine1!: string;
+    addressLine1?: string;
 
     @ApiProperty({
         description: 'Address line 2',
@@ -319,34 +341,64 @@ export class ContactDetailsDto {
     @ApiProperty({
         description: 'City',
         example: 'New York',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
-    city!: string;
+    city?: string;
 
     @ApiProperty({
         description: 'State',
         example: 'NY',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
-    state!: string;
+    state?: string;
 
     @ApiProperty({
         description: 'Country',
         example: 'United States',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
-    country!: string;
+    country?: string;
 
     @ApiProperty({
         description: 'Postal code',
         example: '10001',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
-    postalCode!: string;
+    postalCode?: string;
+
+    @ApiProperty({
+        description: 'Nationality code. Saved in contact country column.',
+        example: 'IN',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    nationality?: string;
+}
+
+export class BookRoomDto {
+    @ApiProperty({ description: 'Room id', example: 1, required: false })
+    @IsOptional()
+    @IsNumber()
+    roomId?: number;
+
+    @ApiProperty({ description: 'Number of adults', example: 2, required: false })
+    @IsOptional()
+    @IsNumber()
+    adults?: number;
+
+    @ApiProperty({ description: 'Child ages', example: [5], required: false })
+    @IsOptional()
+    @IsArray()
+    childAges?: number[];
 }
 
 export class HotelBookInitiateDto {
@@ -397,6 +449,17 @@ export class HotelBookInitiateDto {
     @IsNotEmpty()
     @IsDateString()
     checkOut!: string;
+
+    @ApiProperty({
+        description: 'Room occupancy used by aggregator. Not used by this API.',
+        type: [BookRoomDto],
+        required: false,
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => BookRoomDto)
+    rooms?: BookRoomDto[];
 
     @ApiProperty({
         description: 'Passenger details',
