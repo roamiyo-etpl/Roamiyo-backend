@@ -55,7 +55,7 @@ export class SearchService {
             console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} TBO Hotel Search responded in ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s`);
 
             const processingStartedAt = Date.now();
-            // Apply default sorting by price (ascending) before response
+            // Group by star rating (5 → 1), then apply requested sort (default price asc) within each group
             const sortedResults = this.applySorting(results, { by: apiReqData.sort.by || 'price', order: apiReqData.sort.order || 'asc' });
 
             // Create complete response structure at provider level
@@ -923,6 +923,13 @@ export class SearchService {
      */
     private applySorting(results: HotelResult[], sort: any): HotelResult[] {
         return results.sort((a, b) => {
+            // Always group by star rating first (5 → 4 → 3 → 2 → 1 → unrated), unless the
+            // client explicitly asked to sort by rating, in which case its order is honoured below.
+            if (sort.by !== 'rating') {
+                const starDiff = (b.rating?.stars || 0) - (a.rating?.stars || 0);
+                if (starDiff !== 0) return starDiff;
+            }
+
             let comparison = 0;
 
             switch (sort.by) {
