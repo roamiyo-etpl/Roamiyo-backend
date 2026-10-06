@@ -10,6 +10,7 @@ import { SupplierCredService } from 'src/modules/generic/supplier-credientials/s
 import { CachingUtility } from 'src/shared/utilities/common/caching.utility';
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
+import { HOTEL_STAR_MIX_PATTERN } from 'src/shared/constants/hotel-ranking.constant';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -55,7 +56,7 @@ export class SearchService {
             console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} TBO Hotel Search responded in ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s`);
 
             const processingStartedAt = Date.now();
-            // Group by star rating (5 → 1), then apply requested sort (default price asc) within each group
+            // Apply requested sort (default price asc), then mix star ratings per HOTEL_STAR_MIX_PATTERN
             const sortedResults = this.applySorting(results, { by: apiReqData.sort.by || 'price', order: apiReqData.sort.order || 'asc' });
 
             // Create complete response structure at provider level
@@ -922,14 +923,7 @@ export class SearchService {
      * @returns Sorted results array
      */
     private applySorting(results: HotelResult[], sort: any): HotelResult[] {
-        return results.sort((a, b) => {
-            // Always group by star rating first (5 → 4 → 3 → 2 → 1 → unrated), unless the
-            // client explicitly asked to sort by rating, in which case its order is honoured below.
-            if (sort.by !== 'rating') {
-                const starDiff = (b.rating?.stars || 0) - (a.rating?.stars || 0);
-                if (starDiff !== 0) return starDiff;
-            }
-
+        const sorted = results.sort((a, b) => {
             let comparison = 0;
 
             switch (sort.by) {
@@ -964,5 +958,37 @@ export class SearchService {
             // Apply sort order
             return sort.order === 'desc' ? -comparison : comparison;
         });
+
+        return sort.by === 'rating' ? sorted : this.applyStarMix(sorted);
+    }
+
+    /**
+     * Interleaves already-sorted results by star rating following HOTEL_STAR_MIX_PATTERN
+     * @param results - Hotel results, already sorted by the requested sort
+     * @returns Results reordered into the star mix; ratings outside the pattern are appended at the end
+     */
+    private applyStarMix(results: HotelResult[]): HotelResult[] {
+        const patternStars = [...new Set(HOTEL_STAR_MIX_PATTERN)];
+        const buckets = new Map<number, HotelResult[]>(patternStars.map((star) => [star, []]));
+        const others: HotelResult[] = [];
+
+        for (const hotel of results) {
+            const bucket = buckets.get(Math.floor(hotel.rating?.stars || 0));
+            if (bucket) bucket.push(hotel);
+            else others.push(hotel);
+        }
+
+        const mixed: HotelResult[] = [];
+        const mixedTotal = results.length - others.length;
+        for (let slot = 0; mixed.length < mixedTotal; slot++) {
+            const wanted = HOTEL_STAR_MIX_PATTERN[slot % HOTEL_STAR_MIX_PATTERN.length];
+            // Use the wanted rating, or the nearest one still available (ties go to the higher star)
+            const star = patternStars
+                .filter((s) => buckets.get(s)!.length > 0)
+                .sort((a, b) => Math.abs(a - wanted) - Math.abs(b - wanted) || b - a)[0];
+            mixed.push(buckets.get(star)!.shift()!);
+        }
+
+        return [...mixed, ...others];
     }
 }
