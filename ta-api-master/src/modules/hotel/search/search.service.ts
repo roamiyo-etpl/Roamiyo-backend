@@ -12,6 +12,7 @@ import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.
 import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
 import { HOTEL_STAR_MIX_PATTERN } from 'src/shared/constants/hotel-ranking.constant';
 import { v4 as uuidv4 } from 'uuid';
+import { HotelSearchBy, SortOrder } from 'src/shared/enums/hotel/hotel.enum';
 
 @Injectable()
 export class SearchService {
@@ -271,6 +272,8 @@ export class SearchService {
                 },
             }, searchResponse.mode || fallbackMode);
 
+            completeResponse.radiusKm = searchResponse.radiusKm ?? completeResponse.radiusKm;
+
             // Search may still be running in the background (early response); report the cached status
             if (searchResponse.status && searchResponse.status !== 'completed') {
                 return { ...completeResponse, status: searchResponse.status, message: searchResponse.message };
@@ -291,8 +294,10 @@ export class SearchService {
      */
     async searchFiltration(filtrationRequest: HotelSearchFiltrationDto, headers: Headers): Promise<InitiateResultResponse> {
         try {
-            const { searchReqId, sort, pagination } = filtrationRequest;
-            let { filters } = filtrationRequest;
+            const { searchReqId, pagination } = filtrationRequest;
+            let filters: any = filtrationRequest.filters;
+            // sort / filters are optional: default sort price asc, missing filters = no filter
+            const sort = { ...filtrationRequest.sort, by: filtrationRequest.sort?.by || HotelSearchBy.PRICE, order: filtrationRequest.sort?.order || SortOrder.ASC };
             const providersData = await this.supplierCred.getActiveProviders(headers);
             const fallbackMode = HotelProviderUtility.resolveResponseMode(HotelProviderUtility.mapActiveProviders(providersData));
 
@@ -301,7 +306,7 @@ export class SearchService {
 
             // Handle no cached data or expired data
             if (!cachedData || !cachedData.data) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'completed', 'No search results found or search results expired. Please perform a new search.', fallbackMode);
+                return this.createEmptyResponse(searchReqId, pagination, filters || {}, sort, 'completed', 'No search results found or search results expired. Please perform a new search.', fallbackMode);
             }
 
             // Parse cached data
@@ -309,12 +314,12 @@ export class SearchService {
             try {
                 searchResponse = JSON.parse(cachedData.data);
             } catch (parseError) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'expired', 'Your search session has expired. Please perform a new search.', fallbackMode);
+                return this.createEmptyResponse(searchReqId, pagination, filters || {}, sort, 'expired', 'Your search session has expired. Please perform a new search.', fallbackMode);
             }
 
             // Validate search response structure
             if (!searchResponse || !searchResponse.results || !Array.isArray(searchResponse.results)) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'expired', 'Your search session has expired or is invalid. Please perform a new search.', searchResponse?.mode || fallbackMode);
+                return this.createEmptyResponse(searchReqId, pagination, filters || {}, sort, 'expired', 'Your search session has expired or is invalid. Please perform a new search.', searchResponse?.mode || fallbackMode);
             }
 
             // Get ALL results from cache (not paginated)
@@ -370,13 +375,13 @@ export class SearchService {
                 appliedFilters: {
                     filteredResults: filteredResults.length,
                     priceRange: filters.priceRange as [number, number],
-                    starRating: filters.starRating,
-                    amenities: filters.amenities,
-                    mealTypes: filters.mealTypes,
-                    neighborhoods: filters.neighborhoods,
-                    poi: filters.poi,
-                    cancellation: filters.cancellation,
-                    hotelNames: filters.hotelNames,
+                    starRating: filters.starRating ?? [],
+                    amenities: filters.amenities ?? [],
+                    mealTypes: filters.mealTypes ?? [],
+                    neighborhoods: filters.neighborhoods ?? [],
+                    poi: filters.poi ?? [],
+                    cancellation: filters.cancellation ?? [],
+                    hotelNames: filters.hotelNames ?? [],
                 },
                 appliedSort: {
                     by: sort.by,
@@ -468,7 +473,7 @@ export class SearchService {
                 timestamp: DateUtility.toISOString(),
                 totalResults: 0,
                 location: { lat: 0, lon: 0 },
-                radiusKm: 5,
+                radiusKm: Number(searchReq?.searchCriteria?.location?.radius) || 5,
                 facets: {
                     ratings: {},
                     price: { min: 0, max: 0, buckets: {} },
@@ -520,7 +525,7 @@ export class SearchService {
             timestamp: DateUtility.toISOString(),
             totalResults,
             location,
-            radiusKm: 5,
+            radiusKm: Number(searchReq?.searchCriteria?.location?.radius) || 5,
             facets,
             pagination,
             results: paginatedResults, // Only return paginated results
