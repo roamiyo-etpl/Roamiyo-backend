@@ -87,8 +87,8 @@ export interface HotelResult {
     mealType: string;
     /** Supplements for the cheapest displayed rate (same room as top-level prices). */
     supplements: HotelSupplement[][];
-    /** All room-rate options returned by TBO for this hotel. */
-    rooms: HotelSearchRoomOffer[];
+    /** All room-rate options returned by TBO for this hotel (not sent in search; see room list API). */
+    rooms?: HotelSearchRoomOffer[];
     providerID: string;
     providerCode: string;
 }

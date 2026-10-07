@@ -414,7 +414,8 @@ export class TboSearchService {
 
         // console.log(additionalDetails,"additionalDetails",hotelDetailsMap);
         let images = imagesMap.size > 0 ? Array.from(imagesMap.values())[0] : [];
-        const hotelImages: string[] = images.map(img => img.url);
+        // Same image URL can appear more than once in the DB; send each only once
+        const hotelImages: string[] = [...new Set(images.map((img) => img.url).filter(Boolean))];
 
 
         return {
@@ -456,7 +457,7 @@ export class TboSearchService {
             neighborhoods: [], // Neighborhoods
             mealType: room?.MealType || '',
             supplements: this.normalizeSupplements(room?.Supplements),
-            rooms: allRooms.map((r) => this.mapTboRoomOffer(r, providerCurrency, preferredCurrency)),
+            // All room-rate options are not sent in search; the room list API returns live rooms for the selected hotel
             providerID: 'TBO',
             providerCode: 'TBO',
         };
