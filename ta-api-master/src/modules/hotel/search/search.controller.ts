@@ -43,6 +43,7 @@ export class SearchController {
         try {
             const response = await this.searchService.searchInitiate(hotelSearchInitiateDto, headers);
             console.log(`[HOTEL-SEARCH] reqId=${response.searchReqId} response sent to client, total end-to-end time: ${((Date.now() - startTime) / 1000).toFixed(3)}s`);
+            this.logResponseSize('search', response);
             return response;
         } catch (error: unknown) {
             throwHotelApiError(error, 'Hotel search initiation failed');
@@ -74,9 +75,19 @@ export class SearchController {
     @Post('filtration')
     async filtration(@Body() hotelSearchFiltrationDto: HotelSearchFiltrationDto, @Headers() headers): Promise<InitiateResultResponse> {
         try {
-            return await this.searchService.searchFiltration(hotelSearchFiltrationDto, headers);
+            const response = await this.searchService.searchFiltration(hotelSearchFiltrationDto, headers);
+            this.logResponseSize('filtration', response);
+            return response;
         } catch (error: unknown) {
             throwHotelApiError(error, 'Hotel search filtration failed');
         }
+    }
+
+    /** Logs the JSON size of a search/filtration response (before gzip) to track payload growth */
+    private logResponseSize(api: 'search' | 'filtration', response: InitiateResultResponse): void {
+        const sizeKb = Buffer.byteLength(JSON.stringify(response ?? {})) / 1024;
+        console.log(
+            `[HOTEL-SEARCH] reqId=${response?.searchReqId} ${api} response size: ${sizeKb.toFixed(1)} KB (before gzip), ${response?.results?.length ?? 0} hotels on page, status=${response?.status}`,
+        );
     }
 }
