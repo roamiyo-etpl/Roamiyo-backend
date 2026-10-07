@@ -172,10 +172,8 @@ export class CachingUtility {
             };
 
             const valueToStore = JSON.stringify(redisObj);
-            await this.client.set(hashKey, valueToStore);
-
-            // Set expiration to 1 hour (3600 seconds)
-            await (this.client as any).expire(hashKey, 3600);
+            // Expire after 1 hour (Cacheable takes the TTL in set; it has no expire method)
+            await this.client.set(hashKey, valueToStore, '1h');
 
             return { success: true, hashKey: hashKey };
         } catch (error) {

@@ -12,7 +12,7 @@ export class ProvidersSearchService {
         private tboSearchService: TboSearchService,
     ) {}
 
-    async searchInitiate(searchReq, headers: Headers): Promise<HotelResult[]> {
+    async searchInitiate(searchReq, headers: Headers, onPartialResults?: (results: HotelResult[]) => void): Promise<HotelResult[]> {
         const { activeProviders } = searchReq;
         const searchRequest = [];
         searchRequest['searchReqId'] = searchReq['searchReqId'];
@@ -54,7 +54,7 @@ export class ProvidersSearchService {
                 });
 
                 if (tboCred.length > 0) {
-                    const tboSearchResult = this.tboSearchService.search(searchReq, tboCred[0]?.providerCredentials);
+                    const tboSearchResult = this.tboSearchService.search(searchReq, tboCred[0]?.providerCredentials, onPartialResults);
                     searchResults.push(tboSearchResult);
                 }
             }

@@ -1,6 +1,5 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsInt, IsNotEmpty, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
-import { ApiEnvironment } from 'src/shared/enums/hotel/hotel.enum';
-import { SortDto } from './hotel-search-initiate.dto';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import { ApiEnvironment, HotelSearchBy, SortOrder } from 'src/shared/enums/hotel/hotel.enum';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -36,65 +35,94 @@ export class FiltersDto {
     @ApiProperty({
         description: 'Array of star rating',
         example: [2, 4, 5],
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsArray()
     @IsInt({ each: true })
-    starRating: number[];
+    starRating?: number[];
 
     @ApiProperty({
         description: 'Array of amenities',
         example: ['Parking', 'Free WiFi'],
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsArray()
     @IsString({ each: true })
-    amenities: string[];
+    amenities?: string[];
 
     @ApiProperty({
         description: 'Meal Type Array of string',
         example: ['Room_Only', 'BreakFast'],
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsArray()
     @IsString({ each: true })
-    mealTypes: string[];
+    mealTypes?: string[];
 
     @ApiProperty({
         description: 'Nearborhood location',
         example: ['Kalkaji Mandir', 'Indira Gandhi International Airport (DEL)'],
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsArray()
     @IsString({ each: true })
-    neighborhoods: string[];
+    neighborhoods?: string[];
 
     @ApiProperty({
         description: 'Point of interest',
         example: ['Kalkaji Mandir', 'Indira Gandhi International Airport (DEL)'],
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsArray()
     @IsString({ each: true })
-    poi: string[];
+    poi?: string[];
 
     @ApiProperty({
         description: 'Cancellation policy',
         example: ['refundable', 'non-refundable'],
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsArray()
     @IsString({ each: true })
-    cancellation: string[];
+    cancellation?: string[];
 
     @ApiProperty({
         description: 'Hotel Name',
         example: '["The Suryaa New Delhi", "Moustache Delhi"]',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsArray()
     @IsString({ each: true })
-    hotelNames: string[];
+    hotelNames?: string[];
+}
+
+export class FiltrationSortDto {
+    @ApiProperty({
+        description: 'Sort by. Defaults to price if not sent.',
+        example: 'price',
+        enum: HotelSearchBy,
+        required: false,
+    })
+    @IsOptional()
+    @IsEnum(HotelSearchBy)
+    by?: HotelSearchBy;
+
+    @ApiProperty({
+        description: 'Sort order. Defaults to asc if not sent.',
+        example: 'asc',
+        enum: SortOrder,
+        required: false,
+    })
+    @IsOptional()
+    @IsEnum(SortOrder)
+    order?: SortOrder;
 }
 
 export class HotelSearchFiltrationDto {
@@ -114,19 +142,20 @@ export class HotelSearchFiltrationDto {
     @IsEnum(ApiEnvironment)
     apiEnvironment: ApiEnvironment;
 
-    @ApiProperty({ type: SortDto })
+    @ApiProperty({ type: FiltrationSortDto, required: false })
+    @IsOptional()
     @ValidateNested()
-    @Type(() => SortDto)
-    @IsNotEmpty()
-    sort: SortDto;
+    @Type(() => FiltrationSortDto)
+    sort?: FiltrationSortDto;
 
     @ApiProperty({ type: PaginationDto })
     @ValidateNested()
     @Type(() => PaginationDto)
     pagination: PaginationDto;
 
-    @ApiProperty({ type: FiltersDto })
+    @ApiProperty({ type: FiltersDto, required: false })
+    @IsOptional()
     @ValidateNested()
     @Type(() => FiltersDto)
-    filters: FiltersDto;
+    filters?: FiltersDto;
 }

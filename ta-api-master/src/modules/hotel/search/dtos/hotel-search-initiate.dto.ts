@@ -251,4 +251,16 @@ export class HotelSearchInitiateDto {
     @Type(() => SortDto)
     @IsNotEmpty()
     sort: SortDto;
+
+    @ApiPropertyOptional({
+        description:
+            'Seconds the client waits for search results. If TBO is not done by then, the hotels ready so far are returned with status inProgress ' +
+            'and the search continues in the background; poll filtration with the same searchReqId until status is completed. ' +
+            'TBO always gets its full response time. If not sent, the API waits for all results (status completed).',
+        example: 10,
+    })
+    @IsOptional()
+    @Type(() => Number)
+    @IsPositive()
+    ResponseTime?: number;
 }

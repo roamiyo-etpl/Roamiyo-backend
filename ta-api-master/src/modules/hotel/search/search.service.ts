@@ -10,11 +10,17 @@ import { SupplierCredService } from 'src/modules/generic/supplier-credientials/s
 import { CachingUtility } from 'src/shared/utilities/common/caching.utility';
 import { HotelProviderUtility } from 'src/shared/utilities/hotel/hotel-provider.utility';
 import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
+import { HOTEL_STAR_MIX_PATTERN } from 'src/shared/constants/hotel-ranking.constant';
 import { v4 as uuidv4 } from 'uuid';
+import { HotelSearchBy, SortOrder } from 'src/shared/enums/hotel/hotel.enum';
 
 @Injectable()
 export class SearchService {
     private readonly logger = new Logger(SearchService.name);
+
+    /* Early-response search: after this long (from request received) the background search stops waiting for TBO */
+    private static readonly SEARCH_HARD_LIMIT_MS = 30000;
+    private static readonly SEARCH_IN_PROGRESS_MESSAGE = 'Search in progress, more hotels are loading';
 
     constructor(
         private readonly providersSearchService: ProvidersSearchService,
@@ -51,34 +57,17 @@ export class SearchService {
             console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} request received at ${new Date(requestReceivedAt).toISOString()}`);
             console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} calling TBO Hotel Search API...`);
             const tboCallStartedAt = Date.now();
+
+            // ResponseTime (seconds) = how long the client waits; TBO itself always gets the full time
+            const responseTimeMs = Number(apiReqData.ResponseTime) > 0 ? Number(apiReqData.ResponseTime) * 1000 : 0;
+            if (responseTimeMs) {
+                return await this.searchWithEarlyResponse(apiReqData, headers, responseMode, responseTimeMs, requestReceivedAt);
+            }
+
             const results = await this.providersSearchService.searchInitiate(apiReqData, headers);
             console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} TBO Hotel Search responded in ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s`);
 
-            const processingStartedAt = Date.now();
-            // Apply default sorting by price (ascending) before response
-            const sortedResults = this.applySorting(results, { by: apiReqData.sort.by || 'price', order: apiReqData.sort.order || 'asc' });
-
-            // Create complete response structure at provider level
-            const searchResponse: InitiateResultResponse = this.createCompleteResponse(sortedResults, apiReqData['searchReqId'], {
-                ...apiReqData,
-                page: 1,
-                limit: apiReqData.searchSetting.pageLimit,
-                sort: {
-                    by: apiReqData.sort.by,
-                    order: apiReqData.sort.order,
-                },
-            }, responseMode);
-            console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} sorting + response processing took ${((Date.now() - processingStartedAt) / 1000).toFixed(3)}s`);
-
-            const cacheData = {
-                ...searchResponse,
-                results: sortedResults,
-            };
-
-            // Store search results with searchReqId for filtration access
-            const cacheSaveStartedAt = Date.now();
-            await this.cachingUtility.setCachedDataBySearchReqId(apiReqData['searchReqId'], cacheData);
-            console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} DB/cache save completed in ${((Date.now() - cacheSaveStartedAt) / 1000).toFixed(3)}s`);
+            const searchResponse = await this.cacheSearchResults(apiReqData, results, responseMode, 'completed');
 
             console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} total time before sending response to client: ${((Date.now() - requestReceivedAt) / 1000).toFixed(3)}s`);
 
@@ -87,6 +76,135 @@ export class SearchService {
             this.logger.error('Hotel search initiation failed:', error);
             throwHotelApiError(error, 'Hotel search initiation failed');
         }
+    }
+
+    /**
+     * Sorts results, builds the search response and stores it in cache under searchReqId (used by filtration / check-results)
+     */
+    private async cacheSearchResults(
+        apiReqData: HotelSearchInitiateDto,
+        results: HotelResult[],
+        responseMode: string,
+        status: 'inProgress' | 'completed' | 'failed',
+        message?: string,
+    ): Promise<InitiateResultResponse> {
+        const processingStartedAt = Date.now();
+        // Apply requested sort (default price asc), then mix star ratings per HOTEL_STAR_MIX_PATTERN
+        const sortedResults = this.applySorting(results, { by: apiReqData.sort.by || 'price', order: apiReqData.sort.order || 'asc' });
+
+        // Create complete response structure at provider level
+        let searchResponse: InitiateResultResponse = this.createCompleteResponse(sortedResults, apiReqData['searchReqId'], {
+            ...apiReqData,
+            page: 1,
+            limit: apiReqData.searchSetting.pageLimit,
+            sort: {
+                by: apiReqData.sort.by,
+                order: apiReqData.sort.order,
+            },
+        }, responseMode);
+        if (status !== 'completed') {
+            searchResponse = { ...searchResponse, status, message: message ?? searchResponse.message };
+        }
+        console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} sorting + response processing took ${((Date.now() - processingStartedAt) / 1000).toFixed(3)}s`);
+
+        const cacheData = {
+            ...searchResponse,
+            results: sortedResults,
+        };
+
+        // Store search results with searchReqId for filtration access
+        const cacheSaveStartedAt = Date.now();
+        await this.cachingUtility.setCachedDataBySearchReqId(apiReqData['searchReqId'], cacheData);
+        console.log(`[HOTEL-SEARCH] reqId=${apiReqData['searchReqId']} cache save (${status}, ${sortedResults.length} hotels) completed in ${((Date.now() - cacheSaveStartedAt) / 1000).toFixed(3)}s`);
+
+        return searchResponse;
+    }
+
+    /**
+     * Responds to the client after ResponseTime with the hotels ready so far (status inProgress),
+     * while TBO keeps running in the background. Every chunk that finishes later updates the cache;
+     * the last update is saved as completed. Client polls filtration until status is completed.
+     * If TBO finishes before ResponseTime, the full result is returned as completed (same as normal search).
+     */
+    private async searchWithEarlyResponse(
+        apiReqData: HotelSearchInitiateDto,
+        headers: Headers,
+        responseMode: string,
+        responseTimeMs: number,
+        requestReceivedAt: number,
+    ): Promise<InitiateResultResponse> {
+        const searchReqId = apiReqData['searchReqId'];
+        const tboCallStartedAt = Date.now();
+        let latestResults: HotelResult[] = [];
+        let respondedEarly = false;
+        let finalized = false;
+
+        // Cache writes run one after another so an older partial list never overwrites a newer one
+        let saveQueue: Promise<unknown> = Promise.resolve();
+        const queueSave = (results: HotelResult[], status: 'inProgress' | 'completed' | 'failed', message?: string) => {
+            const job = saveQueue.then(async () => {
+                if (finalized) return undefined;
+                if (status !== 'inProgress') finalized = true;
+                return this.cacheSearchResults(apiReqData, results, responseMode, status, message);
+            });
+            saveQueue = job.catch((error) => this.logger.error(`[HOTEL-SEARCH] reqId=${searchReqId} cache save failed`, error));
+            return job;
+        };
+
+        const fullSearch = this.providersSearchService.searchInitiate(apiReqData, headers, (partialResults) => {
+            latestResults = partialResults;
+            if (respondedEarly) {
+                queueSave(partialResults, 'inProgress', SearchService.SEARCH_IN_PROGRESS_MESSAGE);
+            }
+        });
+
+        let responseTimer: NodeJS.Timeout | undefined;
+        const firstOutcome = await Promise.race([
+            fullSearch.then((results) => ({ done: true as const, results })),
+            new Promise<{ done: false }>((resolve) => {
+                responseTimer = setTimeout(() => resolve({ done: false }), responseTimeMs);
+            }),
+        ]);
+        clearTimeout(responseTimer);
+
+        if (firstOutcome.done) {
+            console.log(`[HOTEL-SEARCH] reqId=${searchReqId} TBO Hotel Search responded in ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s (within ResponseTime ${responseTimeMs / 1000}s)`);
+            const searchResponse = await this.cacheSearchResults(apiReqData, firstOutcome.results, responseMode, 'completed');
+            console.log(`[HOTEL-SEARCH] reqId=${searchReqId} total time before sending response to client: ${((Date.now() - requestReceivedAt) / 1000).toFixed(3)}s`);
+            return searchResponse;
+        }
+
+        // ResponseTime reached: respond with what is ready, keep TBO running in the background
+        respondedEarly = true;
+        console.log(`[HOTEL-SEARCH] reqId=${searchReqId} ResponseTime ${responseTimeMs / 1000}s reached, responding with ${latestResults.length} hotels (inProgress)`);
+        // Nothing is finalized before the early response, so this save always returns a response
+        const earlyResponse = (await queueSave(latestResults, 'inProgress', SearchService.SEARCH_IN_PROGRESS_MESSAGE)) as InitiateResultResponse;
+
+        const hardLimitMs = Math.max(0, SearchService.SEARCH_HARD_LIMIT_MS - (Date.now() - requestReceivedAt));
+        let hardLimitTimer: NodeJS.Timeout | undefined;
+        Promise.race([
+            fullSearch.then((results) => ({ results, hitHardLimit: false })),
+            new Promise<{ results: HotelResult[]; hitHardLimit: boolean }>((resolve) => {
+                hardLimitTimer = setTimeout(() => resolve({ results: latestResults, hitHardLimit: true }), hardLimitMs);
+            }),
+        ])
+            .then(({ results, hitHardLimit }) => {
+                clearTimeout(hardLimitTimer);
+                console.log(
+                    `[HOTEL-SEARCH] reqId=${searchReqId} background search ${hitHardLimit ? `stopped at hard limit ${SearchService.SEARCH_HARD_LIMIT_MS / 1000}s` : 'finished'} after ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s, ${results.length} hotels (completed)`,
+                );
+                return queueSave(results, 'completed');
+            })
+            .catch((error) => {
+                clearTimeout(hardLimitTimer);
+                this.logger.error(`[HOTEL-SEARCH] reqId=${searchReqId} background search failed`, error);
+                return latestResults.length > 0
+                    ? queueSave(latestResults, 'completed')
+                    : queueSave([], 'failed', 'Hotel search failed. Please perform a new search.');
+            });
+
+        console.log(`[HOTEL-SEARCH] reqId=${searchReqId} total time before sending response to client: ${((Date.now() - requestReceivedAt) / 1000).toFixed(3)}s`);
+        return earlyResponse;
     }
 
     async searchCheckResults(searchCheckResultsRequest: HotelSearchCheckResultsDto, headers: Headers): Promise<InitiateResultResponse> {
@@ -154,6 +272,13 @@ export class SearchService {
                 },
             }, searchResponse.mode || fallbackMode);
 
+            completeResponse.radiusKm = searchResponse.radiusKm ?? completeResponse.radiusKm;
+
+            // Search may still be running in the background (early response); report the cached status
+            if (searchResponse.status && searchResponse.status !== 'completed') {
+                return { ...completeResponse, status: searchResponse.status, message: searchResponse.message };
+            }
+
             return completeResponse;
         } catch (error) {
             this.logger.error('Hotel search check results failed:', error);
@@ -169,8 +294,10 @@ export class SearchService {
      */
     async searchFiltration(filtrationRequest: HotelSearchFiltrationDto, headers: Headers): Promise<InitiateResultResponse> {
         try {
-            const { searchReqId, sort, pagination } = filtrationRequest;
-            let { filters } = filtrationRequest;
+            const { searchReqId, pagination } = filtrationRequest;
+            let filters: any = filtrationRequest.filters;
+            // sort / filters are optional: default sort price asc, missing filters = no filter
+            const sort = { ...filtrationRequest.sort, by: filtrationRequest.sort?.by || HotelSearchBy.PRICE, order: filtrationRequest.sort?.order || SortOrder.ASC };
             const providersData = await this.supplierCred.getActiveProviders(headers);
             const fallbackMode = HotelProviderUtility.resolveResponseMode(HotelProviderUtility.mapActiveProviders(providersData));
 
@@ -179,7 +306,7 @@ export class SearchService {
 
             // Handle no cached data or expired data
             if (!cachedData || !cachedData.data) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'completed', 'No search results found or search results expired. Please perform a new search.', fallbackMode);
+                return this.createEmptyResponse(searchReqId, pagination, filters || {}, sort, 'completed', 'No search results found or search results expired. Please perform a new search.', fallbackMode);
             }
 
             // Parse cached data
@@ -187,12 +314,12 @@ export class SearchService {
             try {
                 searchResponse = JSON.parse(cachedData.data);
             } catch (parseError) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'expired', 'Your search session has expired. Please perform a new search.', fallbackMode);
+                return this.createEmptyResponse(searchReqId, pagination, filters || {}, sort, 'expired', 'Your search session has expired. Please perform a new search.', fallbackMode);
             }
 
             // Validate search response structure
             if (!searchResponse || !searchResponse.results || !Array.isArray(searchResponse.results)) {
-                return this.createEmptyResponse(searchReqId, pagination, filters, sort, 'expired', 'Your search session has expired or is invalid. Please perform a new search.', searchResponse?.mode || fallbackMode);
+                return this.createEmptyResponse(searchReqId, pagination, filters || {}, sort, 'expired', 'Your search session has expired or is invalid. Please perform a new search.', searchResponse?.mode || fallbackMode);
             }
 
             // Get ALL results from cache (not paginated)
@@ -230,8 +357,9 @@ export class SearchService {
             const completeResponse: InitiateResultResponse = {
                 searchReqId,
                 mode: searchResponse.mode || fallbackMode,
-                status: 'completed' as const,
-                message: `Found ${totalFilteredResults} hotels matching your criteria`,
+                // Search may still be running in the background (early response); report the cached status
+                status: searchResponse.status || 'completed',
+                message: searchResponse.status === 'failed' ? searchResponse.message : `Found ${totalFilteredResults} hotels matching your criteria`,
                 timestamp: DateUtility.toISOString(),
                 totalResults: allResults.length,
                 location: { lat: searchResponse.location.lat, lon: searchResponse.location.lon },
@@ -247,13 +375,13 @@ export class SearchService {
                 appliedFilters: {
                     filteredResults: filteredResults.length,
                     priceRange: filters.priceRange as [number, number],
-                    starRating: filters.starRating,
-                    amenities: filters.amenities,
-                    mealTypes: filters.mealTypes,
-                    neighborhoods: filters.neighborhoods,
-                    poi: filters.poi,
-                    cancellation: filters.cancellation,
-                    hotelNames: filters.hotelNames,
+                    starRating: filters.starRating ?? [],
+                    amenities: filters.amenities ?? [],
+                    mealTypes: filters.mealTypes ?? [],
+                    neighborhoods: filters.neighborhoods ?? [],
+                    poi: filters.poi ?? [],
+                    cancellation: filters.cancellation ?? [],
+                    hotelNames: filters.hotelNames ?? [],
                 },
                 appliedSort: {
                     by: sort.by,
@@ -345,7 +473,7 @@ export class SearchService {
                 timestamp: DateUtility.toISOString(),
                 totalResults: 0,
                 location: { lat: 0, lon: 0 },
-                radiusKm: 5,
+                radiusKm: Number(searchReq?.searchCriteria?.location?.radius) || 5,
                 facets: {
                     ratings: {},
                     price: { min: 0, max: 0, buckets: {} },
@@ -397,7 +525,7 @@ export class SearchService {
             timestamp: DateUtility.toISOString(),
             totalResults,
             location,
-            radiusKm: 5,
+            radiusKm: Number(searchReq?.searchCriteria?.location?.radius) || 5,
             facets,
             pagination,
             results: paginatedResults, // Only return paginated results
@@ -922,7 +1050,7 @@ export class SearchService {
      * @returns Sorted results array
      */
     private applySorting(results: HotelResult[], sort: any): HotelResult[] {
-        return results.sort((a, b) => {
+        const sorted = results.sort((a, b) => {
             let comparison = 0;
 
             switch (sort.by) {
@@ -957,5 +1085,37 @@ export class SearchService {
             // Apply sort order
             return sort.order === 'desc' ? -comparison : comparison;
         });
+
+        return sort.by === 'rating' ? sorted : this.applyStarMix(sorted);
+    }
+
+    /**
+     * Interleaves already-sorted results by star rating following HOTEL_STAR_MIX_PATTERN
+     * @param results - Hotel results, already sorted by the requested sort
+     * @returns Results reordered into the star mix; ratings outside the pattern are appended at the end
+     */
+    private applyStarMix(results: HotelResult[]): HotelResult[] {
+        const patternStars = [...new Set(HOTEL_STAR_MIX_PATTERN)];
+        const buckets = new Map<number, HotelResult[]>(patternStars.map((star) => [star, []]));
+        const others: HotelResult[] = [];
+
+        for (const hotel of results) {
+            const bucket = buckets.get(Math.floor(hotel.rating?.stars || 0));
+            if (bucket) bucket.push(hotel);
+            else others.push(hotel);
+        }
+
+        const mixed: HotelResult[] = [];
+        const mixedTotal = results.length - others.length;
+        for (let slot = 0; mixed.length < mixedTotal; slot++) {
+            const wanted = HOTEL_STAR_MIX_PATTERN[slot % HOTEL_STAR_MIX_PATTERN.length];
+            // Use the wanted rating, or the nearest one still available (ties go to the higher star)
+            const star = patternStars
+                .filter((s) => buckets.get(s)!.length > 0)
+                .sort((a, b) => Math.abs(a - wanted) - Math.abs(b - wanted) || b - a)[0];
+            mixed.push(buckets.get(star)!.shift()!);
+        }
+
+        return [...mixed, ...others];
     }
 }

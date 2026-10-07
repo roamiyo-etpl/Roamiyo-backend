@@ -34,9 +34,10 @@ export class TboSearchService {
      * Search hotels using TBO API
      * @param searchRequest - Search request parameters
      * @param providerCredentials - TBO provider credentials
+     * @param onPartialResults - Optional. Called with all hotels converted so far each time a chunk finishes
      * @returns Promise<HotelResult[]> - Array of hotel results
      */
-    async search(searchRequest: any, providerCredentials: any): Promise<HotelResult[]> {
+    async search(searchRequest: any, providerCredentials: any, onPartialResults?: (results: HotelResult[]) => void): Promise<HotelResult[]> {
         const searchReqId = searchRequest?.searchReqId || uuid();
         try {
             // Extract search parameters
@@ -104,6 +105,32 @@ export class TboSearchService {
                 return this.executeSearchWithRetry(chunkRequest, endpoint, auth, index, 'search');
             });
 
+            // Convert each chunk once; partial (early) results and final results share the same conversion
+            const conversions = new Map<any, Promise<HotelResult[]>>();
+            const convertChunk = (response: any) => {
+                if (!conversions.has(response)) {
+                    conversions.set(response, this.convertTboResponseToHotelResult(response, hotelData, searchReqId, searchCriteria, currency));
+                }
+                return conversions.get(response) as Promise<HotelResult[]>;
+            };
+
+            if (onPartialResults) {
+                const partialByChunk: HotelResult[][] = [];
+                searchPromises.forEach((chunkPromise, index) => {
+                    chunkPromise
+                        .then(async (response) => {
+                            if (!response) return;
+                            partialByChunk[index] = await convertChunk(response);
+                            const partialResults = partialByChunk.filter(Boolean).flat();
+                            console.log(`[HOTEL-SEARCH] reqId=${searchReqId} chunk ${index} ready, ${partialResults.length} hotels so far`);
+                            onPartialResults(partialResults.sort((a, b) => a.prices.selling - b.prices.selling));
+                        })
+                        .catch(() => {
+                            // Chunk errors are handled by the allSettled flow below
+                        });
+                });
+            }
+
             // Execute all searches in parallel
             const responses = await Promise.allSettled(searchPromises);
             console.log(`[HOTEL-SEARCH] reqId=${searchReqId} TBO Search responded (all chunks) in ${((Date.now() - tboCallStartedAt) / 1000).toFixed(3)}s`);
@@ -120,7 +147,7 @@ export class TboSearchService {
 
             // Convert TBO responses to our standard format
             const conversionStartedAt = Date.now();
-            const convertedResults = await Promise.all(successfulResponses.map((response) => this.convertTboResponseToHotelResult(response, hotelData, searchReqId, searchCriteria, currency)));
+            const convertedResults = await Promise.all(successfulResponses.map((response) => convertChunk(response)));
             console.log(`[HOTEL-SEARCH] reqId=${searchReqId} response conversion (TBO->our format) took ${((Date.now() - conversionStartedAt) / 1000).toFixed(3)}s`);
 
             // Flatten and sort results
