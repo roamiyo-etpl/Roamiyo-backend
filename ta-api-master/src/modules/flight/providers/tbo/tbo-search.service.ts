@@ -25,12 +25,14 @@ import {
 import md5 from "md5";
 import { isArray } from "lodash";
 import { runWithTboInstrumentationAsync } from "src/shared/utilities/flight/tbo-api-instrumentation.utility";
+import { SupplierLogUtility } from "src/shared/utilities/flight/supplier-log.utility";
 
 @Injectable()
 export class TboSearchService {
   constructor(
     private readonly tboAuthTokenService: TboAuthTokenService,
     private readonly genericRepo: GenericRepo,
+    private readonly supplierLogUtility: SupplierLogUtility,
   ) {}
 
   /** [@Description: This method is used to search the flights]
@@ -68,19 +70,9 @@ export class TboSearchService {
         'search',
       );
       const endTime = Date.now();
-      /* Logging the data */
-      const logs = {
-        ApiRequest: searchReq,
-        supplierRequest: requestBody,
-        supplierResponse: searchResult,
-      };
 
       // console.log("searchResult::::::::::",searchResult);
       // Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
-
-      if (process.env.ENABLE_LOCAL_LOGS === "false") {
-        Generic.generateLogFile(searchReqId + "-TBO", logs, "search");
-      }
 
       /* Convert the response to our standard format */
       const searchResponse = await this.convertingResponse(
@@ -108,9 +100,19 @@ export class TboSearchService {
         `[FLIGHT-SEARCH] reqId=${searchReqId} total supplier phase (call + convert) took ${(convertResponseTime - startTime) / 1000}s`,
       );
       // Generic.generateLogFile(searchReqId + "-TBO", logsWithRes, "search");
-      if (process.env.ENABLE_LOCAL_LOGS === "true") {
-        Generic.generateLogFile(searchReqId + "-TBO", logsWithRes, "search");
-      }
+      /* Store log file (Azure/local) and save its path in supplier_log_flight.
+         Not awaited so the upload doesn't delay the search response */
+      this.supplierLogUtility
+        .generateLogFile({
+          fileName: searchReqId + "-" + Date.now() + "-TBO",
+          logData: logsWithRes,
+          folderName: "search",
+          logId: null,
+          title: "Search-TBO",
+          searchReqId: searchReqId,
+          bookingReferenceId: null,
+        })
+        .catch((error) => this.genericRepo.storeLogs(searchReqId, 1, error, 0));
 
       return searchResponse;
     } catch (error) {
