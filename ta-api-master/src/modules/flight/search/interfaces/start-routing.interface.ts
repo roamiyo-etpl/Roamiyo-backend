@@ -115,8 +115,6 @@ export class FareInclusion {
   status: "included" | "chargeable" | "excluded" | "unknown";
   /** TBO's own wording, unchanged, e.g. "Complementary meal" */
   description: string;
-  /** tbo = from TBO inclusions, derived = from IsFreeMealAvailable when TBO sent none */
-  source: "tbo" | "derived";
 }
 
 export class Fare {

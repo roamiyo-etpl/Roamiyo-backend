@@ -891,8 +891,7 @@ export class TboSearchService {
   }
 
   /** [@Description: Normalizes TBO's FareInclusionsNew / FareInclusions (which come in different
-   * shapes per airline) into one list for the client. Falls back to IsFreeMealAvailable when
-   * TBO sends no inclusions] **/
+   * shapes per airline) into one list for the client. Empty when TBO sends no inclusions] **/
   formatFareInclusions(flightJourney): FareInclusion[] {
     const pairs: { name: string; value: string }[] = [];
 
@@ -932,7 +931,7 @@ export class TboSearchService {
       }
     }
 
-    const inclusions: FareInclusion[] = pairs.map(({ name, value }) => ({
+    return pairs.map(({ name, value }) => ({
       key: name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "_")
@@ -940,25 +939,7 @@ export class TboSearchService {
       label: name.charAt(0).toUpperCase() + name.slice(1),
       status: this.getFareInclusionStatus(value),
       description: value,
-      source: "tbo",
     }));
-
-    if (
-      !inclusions.length &&
-      typeof flightJourney?.IsFreeMealAvailable === "boolean"
-    ) {
-      inclusions.push({
-        key: "meal",
-        label: "Meal",
-        status: flightJourney.IsFreeMealAvailable ? "included" : "chargeable",
-        description: flightJourney.IsFreeMealAvailable
-          ? "Free meal"
-          : "Meal chargeable",
-        source: "derived",
-      });
-    }
-
-    return inclusions;
   }
 
   /** [@Description: Maps TBO's free-text inclusion value to included / chargeable / excluded / unknown.
