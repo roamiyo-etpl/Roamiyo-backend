@@ -17,6 +17,7 @@ import {
   LocationInfo,
   BaggageInfo,
   GroupHash,
+  FareInclusion,
 } from "../../search/interfaces/start-routing.interface";
 import {
   AirlineCategory,
@@ -535,6 +536,8 @@ export class TboSearchService {
 
         flightRoute.fareRules = flightJourney?.FareRules ?? undefined;
         flightRoute.miniFareRules = flightJourney?.MiniFareRules ?? undefined;
+        flightRoute.fareInclusionsFormatted =
+          this.formatFareInclusions(flightJourney);
 
         /* TBO passthrough: every other result-level key TBO sends (unchanged, TBO key names).
            Segments are passed per segment; ResultIndex/FareRules/MiniFareRules already go out as
@@ -885,6 +888,98 @@ export class TboSearchService {
     this.addTboPassthrough(flightSegment, segment);
 
     return flightSegment;
+  }
+
+  /** [@Description: Normalizes TBO's FareInclusionsNew / FareInclusions (which come in different
+   * shapes per airline) into one list for the client. Falls back to IsFreeMealAvailable when
+   * TBO sends no inclusions] **/
+  formatFareInclusions(flightJourney): FareInclusion[] {
+    const pairs: { name: string; value: string }[] = [];
+
+    if (
+      Array.isArray(flightJourney?.FareInclusionsNew) &&
+      flightJourney.FareInclusionsNew.length
+    ) {
+      /* e.g. [{ Key: "meal", Value: "Chargeable" }] */
+      flightJourney.FareInclusionsNew.forEach((item) => {
+        if (item?.Key) {
+          pairs.push({
+            name: String(item.Key).trim(),
+            value: String(item.Value ?? "").trim(),
+          });
+        }
+      });
+    } else if (Array.isArray(flightJourney?.FareInclusions)) {
+      /* e.g. ["Meal - Chargeable"] or ["Meal:Included&&Lounge Pass&&Included"] */
+      const separator = /^(.+?)\s*(?::|\s-\s)\s*(.+)$/;
+      const parts: string[] = flightJourney.FareInclusions.flatMap((text) =>
+        String(text ?? "").split("&&"),
+      )
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      for (let i = 0; i < parts.length; i++) {
+        const match = parts[i].match(separator);
+        if (match) {
+          pairs.push({ name: match[1].trim(), value: match[2].trim() });
+        } else if (parts[i + 1] && !separator.test(parts[i + 1])) {
+          /* Malformed "Lounge Pass&&Included": name and value split by && */
+          pairs.push({ name: parts[i], value: parts[i + 1] });
+          i++;
+        } else {
+          pairs.push({ name: parts[i], value: "" });
+        }
+      }
+    }
+
+    const inclusions: FareInclusion[] = pairs.map(({ name, value }) => ({
+      key: name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, ""),
+      label: name.charAt(0).toUpperCase() + name.slice(1),
+      status: this.getFareInclusionStatus(value),
+      description: value,
+      source: "tbo",
+    }));
+
+    if (
+      !inclusions.length &&
+      typeof flightJourney?.IsFreeMealAvailable === "boolean"
+    ) {
+      inclusions.push({
+        key: "meal",
+        label: "Meal",
+        status: flightJourney.IsFreeMealAvailable ? "included" : "chargeable",
+        description: flightJourney.IsFreeMealAvailable
+          ? "Free meal"
+          : "Meal chargeable",
+        source: "derived",
+      });
+    }
+
+    return inclusions;
+  }
+
+  /** [@Description: Maps TBO's free-text inclusion value to included / chargeable / excluded / unknown.
+   * Any other non-empty value ("Complementary meal", "Lite Bite", "Business Class Seat") is a benefit
+   * TBO lists as part of the fare, so it counts as included. "Applicable" is used for fees
+   * ("Cancellation fees - Applicable"), meaning the customer pays, so it counts as chargeable] **/
+  getFareInclusionStatus(value: string): FareInclusion["status"] {
+    if (!value) return "unknown";
+    if (
+      /excluded|not\s*included|not\s*available|not\s*applicable|^no$/i.test(
+        value,
+      )
+    ) {
+      return "excluded";
+    }
+    if (
+      /chargeable|applicable|paid|extra\s*cost|at\s*a\s*charge/i.test(value)
+    ) {
+      return "chargeable";
+    }
+    return "included";
   }
 
   /** [@Description: Copies supplier keys onto our object as-is. Keys we already set are never

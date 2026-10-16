@@ -104,6 +104,19 @@ export class Route {
    * includes Cancellation / Reissue rows and any other types returned).
    */
   miniFareRules?: unknown[];
+  /** Normalized from TBO FareInclusionsNew / FareInclusions (raw ones are also sent unchanged). */
+  fareInclusionsFormatted?: FareInclusion[];
+}
+
+export class FareInclusion {
+  /** Stable key for icons, e.g. meal, seat, lounge_pass, priority_checkin */
+  key: string;
+  label: string;
+  status: "included" | "chargeable" | "excluded" | "unknown";
+  /** TBO's own wording, unchanged, e.g. "Complementary meal" */
+  description: string;
+  /** tbo = from TBO inclusions, derived = from IsFreeMealAvailable when TBO sent none */
+  source: "tbo" | "derived";
 }
 
 export class Fare {
