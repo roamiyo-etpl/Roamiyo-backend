@@ -536,6 +536,19 @@ export class TboSearchService {
         flightRoute.fareRules = flightJourney?.FareRules ?? undefined;
         flightRoute.miniFareRules = flightJourney?.MiniFareRules ?? undefined;
 
+        /* TBO passthrough: every other result-level key TBO sends (unchanged, TBO key names).
+           Segments are passed per segment; ResultIndex/FareRules/MiniFareRules already go out as
+           solutionId/fareRules/miniFareRules; outboundFare/inboundFare/totalFare are our roundtrip merge keys */
+        this.addTboPassthrough(flightRoute, flightJourney, [
+          "Segments",
+          "ResultIndex",
+          "FareRules",
+          "MiniFareRules",
+          "outboundFare",
+          "inboundFare",
+          "totalFare",
+        ]);
+
         return flightRoute;
       });
 
@@ -868,7 +881,21 @@ export class TboSearchService {
     );
     flightSegment.intervalMinutes = segment.GroundTime;
 
+    /* TBO passthrough: every segment key TBO sends (unchanged, TBO key names) */
+    this.addTboPassthrough(flightSegment, segment);
+
     return flightSegment;
+  }
+
+  /** [@Description: Copies supplier keys onto our object as-is. Keys we already set are never
+   * overwritten, so existing response keys stay unchanged] **/
+  addTboPassthrough(target: object, source: object, skipKeys: string[] = []) {
+    if (!source) return;
+    Object.entries(source).forEach(([key, value]) => {
+      if (!skipKeys.includes(key) && !(key in target)) {
+        target[key] = value;
+      }
+    });
   }
 
   /** [@Description: This method is used to set up the location info]
