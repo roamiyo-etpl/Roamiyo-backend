@@ -192,12 +192,26 @@ export class TboSearchService {
       JourneyType: Generic.getTripTypeTbo(
         searchReq.travelPreferences[0].airTripType,
       ),
-      PreferredAirlines: null,
+      PreferredAirlines: this.getPreferredAirlines(searchReq.PreferredAirlines),
       Segments: searchAirLegs,
       Sources: null,
     };
 
     return params;
+  }
+
+  /** [@Description: Client PreferredAirlines ("AI", "AI,UK" or ["AI","UK"]) to TBO's string[].
+   * Missing / null / empty means all airlines (null), same as before] **/
+  getPreferredAirlines(preferredAirlines): string[] | null {
+    const codes = (
+      Array.isArray(preferredAirlines)
+        ? preferredAirlines
+        : String(preferredAirlines ?? "").split(",")
+    )
+      .map((code) => String(code ?? "").trim().toUpperCase())
+      .filter(Boolean);
+
+    return codes.length ? codes : null;
   }
 
   /** [@Description: This method is used to convert the response]
