@@ -537,6 +537,288 @@
         ]
       }
     },
+    "/hotel/v2/autocomplete": {
+      "get": {
+        "operationId": "SearchV2Controller_autocomplete",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "required": true,
+            "in": "query",
+            "description": "Text typed by the user (city or hotel name)",
+            "schema": {
+              "example": "leela palace",
+              "type": "string"
+            }
+          },
+          {
+            "name": "countryCode",
+            "required": false,
+            "in": "query",
+            "description": "Only return cities / hotels of this country (ISO 2 letter)",
+            "schema": {
+              "example": "IN",
+              "type": "string"
+            }
+          },
+          {
+            "name": "market",
+            "required": false,
+            "in": "query",
+            "description": "Booking market (ISO 2 letter). Cities / hotels of this country are shown first, others are still returned",
+            "schema": {
+              "example": "IN",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": [
+          "Hotel V2"
+        ]
+      }
+    },
+    "/hotel/v2/search/initiate": {
+      "post": {
+        "operationId": "SearchV2Controller_initiate",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HotelSearchInitiateV2Dto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Entity not found"
+          },
+          "422": {
+            "description": "Unprocessable entity"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": [
+          "Hotel V2"
+        ]
+      }
+    },
+    "/hotel/v2/search/check-results": {
+      "post": {
+        "operationId": "SearchV2Controller_checkResults",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HotelSearchCheckResultsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Entity not found"
+          },
+          "422": {
+            "description": "Unprocessable entity"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": [
+          "Hotel V2"
+        ]
+      }
+    },
+    "/hotel/v2/search/filtration": {
+      "post": {
+        "operationId": "SearchV2Controller_filtration",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HotelSearchFiltrationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Entity not found"
+          },
+          "422": {
+            "description": "Unprocessable entity"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": [
+          "Hotel V2"
+        ]
+      }
+    },
     "/flight/search/start-routing": {
       "post": {
         "operationId": "SearchController_startRouting",
@@ -676,6 +958,20 @@
     "/flight/ssr/seat-map": {
       "post": {
         "operationId": "SsrController_getSeatMap",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Ssr"
+        ]
+      }
+    },
+    "/flight/ssr/grouped-seat-map": {
+      "post": {
+        "operationId": "SsrController_getGroupedSeatMap",
         "parameters": [],
         "responses": {
           "201": {
@@ -1117,6 +1413,74 @@
           }
         },
         "summary": "Check balance",
+        "tags": [
+          "Flight"
+        ]
+      }
+    },
+    "/flight/calendar-fare": {
+      "post": {
+        "operationId": "CalendarFareController_calendarFare",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarFareDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Entity not found"
+          },
+          "422": {
+            "description": "Unprocessable entity"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get the lowest airfare of the month for a domestic sector",
         "tags": [
           "Flight"
         ]
@@ -1667,6 +2031,58 @@
           }
         },
         "summary": "update hotel information details from TBO API",
+        "tags": [
+          "Hotel Dump"
+        ]
+      }
+    },
+    "/dump/hotel/import-hotel-list": {
+      "post": {
+        "operationId": "HotelDumpController_importHotelList",
+        "parameters": [
+          {
+            "name": "Currency-Preference",
+            "in": "header",
+            "description": "Please enter preferred currency code. (3 digit currency code)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Ip-Address",
+            "in": "header",
+            "description": "Please enter IP address. (e.g., 127.0.0.1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Api-version",
+            "in": "header",
+            "description": "Please enter API version.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Import TBO hotel & homestay CSVs (dump/tbo_hotels.csv, dump/tbo_homestays.csv) into tbo_hotel_list",
         "tags": [
           "Hotel Dump"
         ]
@@ -2512,6 +2928,11 @@
           },
           "location": {
             "$ref": "#/components/schemas/LocationDto"
+          },
+          "HotelCodes": {
+            "type": "string",
+            "description": "Comma separated TBO hotel codes. When sent, search is done only for these hotels instead of location",
+            "example": "1016351,1022371,1033558"
           }
         },
         "required": [
@@ -2624,6 +3045,11 @@
           },
           "sort": {
             "$ref": "#/components/schemas/SortDto"
+          },
+          "ResponseTime": {
+            "type": "number",
+            "description": "Seconds the client waits for search results. If TBO is not done by then, the hotels ready so far are returned with status inProgress and the search continues in the background; poll filtration with the same searchReqId until status is completed. TBO always gets its full response time. If not sent, the API waits for all results (status completed).",
+            "example": 10
           }
         },
         "required": [
@@ -2653,6 +3079,35 @@
           "searchSetting",
           "sort"
         ]
+      },
+      "FiltrationSortDto": {
+        "type": "object",
+        "properties": {
+          "by": {
+            "type": "string",
+            "description": "Sort by. Defaults to price if not sent.",
+            "example": "price",
+            "enum": [
+              "name",
+              "price",
+              "distance",
+              "rating",
+              "popularity",
+              "biggest",
+              "percentage",
+              "savings"
+            ]
+          },
+          "order": {
+            "type": "string",
+            "description": "Sort order. Defaults to asc if not sent.",
+            "example": "asc",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          }
+        }
       },
       "PaginationDto": {
         "type": "object",
@@ -2762,16 +3217,7 @@
               "type": "string"
             }
           }
-        },
-        "required": [
-          "starRating",
-          "amenities",
-          "mealTypes",
-          "neighborhoods",
-          "poi",
-          "cancellation",
-          "hotelNames"
-        ]
+        }
       },
       "HotelSearchFiltrationDto": {
         "type": "object",
@@ -2787,7 +3233,7 @@
             "example": "test"
           },
           "sort": {
-            "$ref": "#/components/schemas/SortDto"
+            "$ref": "#/components/schemas/FiltrationSortDto"
           },
           "pagination": {
             "$ref": "#/components/schemas/PaginationDto"
@@ -2799,9 +3245,7 @@
         "required": [
           "searchReqId",
           "apiEnvironment",
-          "sort",
-          "pagination",
-          "filters"
+          "pagination"
         ]
       },
       "HotelRoomListRequestDto": {
@@ -2930,9 +3374,44 @@
           "roomBookingInfo"
         ]
       },
+      "BookRoomDto": {
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "number",
+            "description": "Room id",
+            "example": 1
+          },
+          "adults": {
+            "type": "number",
+            "description": "Number of adults",
+            "example": 2
+          },
+          "childAges": {
+            "description": "Child ages",
+            "example": [
+              5
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "PassengerDto": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Passenger id from client",
+            "example": "6f1c0b8e-1d2a-4c3b-9e8f-0a1b2c3d4e5f"
+          },
+          "LeadPassenger": {
+            "type": "boolean",
+            "description": "Lead passenger of the room. If not sent for a room, the first adult of that room is used as lead.",
+            "example": true
+          },
           "type": {
             "type": "string",
             "description": "Passenger type (adult, child, infant)",
@@ -3017,6 +3496,16 @@
             "type": "string",
             "description": "Nationality code",
             "example": "IN"
+          },
+          "documentType": {
+            "type": "string",
+            "description": "Document type from client (PAN / Passport). Mapped to pan or passportNumber when present.",
+            "example": "PAN"
+          },
+          "documentNumber": {
+            "type": "string",
+            "description": "Document number from client. Used with documentType to populate pan or passportNumber.",
+            "example": "APAPY3078A"
           }
         },
         "required": [
@@ -3148,21 +3637,19 @@
             "type": "string",
             "description": "Postal code",
             "example": "10001"
+          },
+          "nationality": {
+            "type": "string",
+            "description": "Nationality code. Saved in contact country column.",
+            "example": "IN"
           }
         },
         "required": [
-          "title",
           "firstName",
           "lastName",
-          "gender",
           "email",
           "dialCode",
-          "mobileNo",
-          "addressLine1",
-          "city",
-          "state",
-          "country",
-          "postalCode"
+          "mobileNo"
         ]
       },
       "HotelBookInitiateDto": {
@@ -3197,6 +3684,13 @@
             "type": "string",
             "description": "Check-out date (YYYY-MM-DD)",
             "example": "2026-05-16"
+          },
+          "rooms": {
+            "description": "Room occupancy used by aggregator. Not used by this API.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BookRoomDto"
+            }
           },
           "passengers": {
             "description": "Passenger details",
@@ -3271,6 +3765,127 @@
           "bookingRefId",
           "searchReqId",
           "paymentLogId"
+        ]
+      },
+      "LocationV2Dto": {
+        "type": "object",
+        "properties": {
+          "geoLocation": {
+            "description": "Required for city search: geoLocation of the selected city suggestion",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GeoLocationDto"
+              }
+            ]
+          },
+          "searchKeyword": {
+            "type": "string",
+            "description": "Text of the selected suggestion",
+            "example": "New Delhi"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country Code of the selected suggestion",
+            "example": "IN"
+          },
+          "city": {
+            "type": "string",
+            "description": "City of the selected suggestion",
+            "example": "New Delhi"
+          },
+          "area": {
+            "type": "string",
+            "description": "Area of the selected suggestion",
+            "example": "New Delhi"
+          },
+          "radius": {
+            "type": "number",
+            "description": "Radius in km (city search)",
+            "example": 10
+          },
+          "radiusUnit": {
+            "type": "string",
+            "description": "Radius unit",
+            "example": "km"
+          },
+          "hotelId": {
+            "type": "number",
+            "description": "Hotel ID",
+            "example": 1863197
+          }
+        },
+        "required": [
+          "country"
+        ]
+      },
+      "SearchCriteriaV2Dto": {
+        "type": "object",
+        "properties": {
+          "checkIn": {
+            "type": "string",
+            "description": "Check In Date",
+            "example": "2026-11-08"
+          },
+          "checkOut": {
+            "type": "string",
+            "description": "Check Out Date",
+            "example": "2026-11-09"
+          },
+          "rooms": {
+            "example": [
+              {
+                "adults": 2,
+                "children": 0,
+                "childAges": []
+              }
+            ],
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoomDto"
+            }
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationV2Dto"
+          },
+          "HotelCodes": {
+            "type": "string",
+            "description": "Hotel search: hotelCode of the selected hotel suggestion (comma separated for more than one). When sent, geoLocation is ignored",
+            "example": "1357541"
+          }
+        },
+        "required": [
+          "checkIn",
+          "checkOut",
+          "rooms",
+          "location"
+        ]
+      },
+      "HotelSearchInitiateV2Dto": {
+        "type": "object",
+        "properties": {
+          "searchCriteria": {
+            "$ref": "#/components/schemas/SearchCriteriaV2Dto"
+          },
+          "searchMetadata": {
+            "$ref": "#/components/schemas/SearchMetaDataDto"
+          },
+          "searchSetting": {
+            "$ref": "#/components/schemas/SearchSettingDto"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/SortDto"
+          },
+          "ResponseTime": {
+            "type": "number",
+            "description": "Same as v1: seconds the client waits before an inProgress response",
+            "example": 10
+          }
+        },
+        "required": [
+          "searchCriteria",
+          "searchMetadata",
+          "searchSetting",
+          "sort"
         ]
       },
       "SearchAirLegs": {
@@ -3417,6 +4032,11 @@
             "items": {
               "$ref": "#/components/schemas/Paxes"
             }
+          },
+          "PreferredAirlines": {
+            "type": "object",
+            "description": "Airline codes to search: \"AI\", \"AI,UK\" or [\"AI\",\"UK\"]. Omit, null or empty for all airlines. Note: TBO applies this filter only to GDS airlines.",
+            "example": "AI"
           }
         },
         "required": [
@@ -3624,7 +4244,7 @@
           },
           "dateOfBirth": {
             "type": "string",
-            "description": "Passenger date of birth",
+            "description": "Passenger date of birth. Mandatory for CHD/INF, optional for ADT (sent to TBO whenever provided).",
             "example": "1990-01-15",
             "format": "date"
           },
@@ -3648,25 +4268,37 @@
             "description": "Passenger nationality",
             "example": "US"
           },
+          "countryName": {
+            "type": "string",
+            "description": "Passenger country name, sent to TBO as CountryName",
+            "example": "India"
+          },
           "mobile": {
             "type": "string",
-            "description": "Passenger mobile number",
+            "description": "Deprecated: TBO ContactNo is taken from contact.mobile. Used only as fallback for older clients.",
             "example": "1234567890"
           },
           "mobileCountryCode": {
             "type": "string",
-            "description": "Mobile country code",
+            "description": "Deprecated: TBO CellCountryCode is taken from contact.mobileCountryCode. Used only as fallback for older clients.",
             "example": "+1"
+          },
+          "frequentFlyerNumber": {
+            "type": "string",
+            "description": "Frequent flyer number",
+            "example": "123456789"
+          },
+          "frequentFlyerAirlineCode": {
+            "type": "string",
+            "description": "Airline code of the frequent flyer programme. Defaults to the airline of the booked leg when omitted.",
+            "example": "6E"
           }
         },
         "required": [
           "passengerType",
           "gender",
           "passengerDetail",
-          "dateOfBirth",
-          "nationality",
-          "mobile",
-          "mobileCountryCode"
+          "nationality"
         ]
       },
       "ContactInfo": {
@@ -3835,6 +4467,31 @@
           }
         }
       },
+      "BillingDetails": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Billing address, sent to TBO as AddressLine1",
+            "example": "12, MG Road"
+          },
+          "city": {
+            "type": "string",
+            "description": "Billing city, sent to TBO as City",
+            "example": "Bengaluru"
+          },
+          "state": {
+            "type": "string",
+            "description": "Billing state",
+            "example": "Karnataka"
+          },
+          "pincode": {
+            "type": "object",
+            "description": "Billing pincode",
+            "example": "560001"
+          }
+        }
+      },
       "BookDto": {
         "type": "object",
         "properties": {
@@ -3999,6 +4656,14 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/GSTDetails"
+              }
+            ]
+          },
+          "billing_details": {
+            "description": "Billing details; address and city are sent to TBO for every passenger",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BillingDetails"
               }
             ]
           },
@@ -4278,6 +4943,70 @@
         "required": [
           "mode",
           "providerCode"
+        ]
+      },
+      "CalendarFareDto": {
+        "type": "object",
+        "properties": {
+          "origin": {
+            "type": "string",
+            "description": "Origin city code",
+            "example": "DEL"
+          },
+          "destination": {
+            "type": "string",
+            "description": "Destination city code",
+            "example": "BOM"
+          },
+          "cabinClass": {
+            "type": "string",
+            "description": "Cabin class preference",
+            "example": "Economy",
+            "enum": [
+              "Economy",
+              "Business",
+              "First",
+              "All",
+              "Premium_Economy"
+            ]
+          },
+          "preferredDepartureDate": {
+            "type": "string",
+            "description": "Preferred departure date - any date within the target month, GetCalendarFare returns the whole month",
+            "example": "2026-08-01",
+            "format": "date"
+          },
+          "preferredAirlines": {
+            "description": "Preferred airlines filter - works only on GDS airline",
+            "example": [
+              "AI",
+              "9W",
+              "SG"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "description": "Airline sources filter",
+            "example": [
+              "GDS",
+              "6E",
+              "SG",
+              "G8"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "origin",
+          "destination",
+          "cabinClass",
+          "preferredDepartureDate"
         ]
       },
       "HotelDetailRequestDto": {
