@@ -15,8 +15,6 @@ interface CityIndexEntry {
     countryName: string;
     cityCodes: string[];
     hotelCount: number;
-    /* Median of the city's hotel coordinates, used only when Google geocoding is not available */
-    fallbackGeo: AutocompleteGeoLocation | null;
 }
 
 /**
@@ -31,6 +29,7 @@ export class HotelAutocompleteV2Service implements OnModuleInit {
     private static readonly MAX_HOTELS = 20;
     private static readonly CITY_INDEX_TTL_MS = 24 * 60 * 60 * 1000;
     private static readonly CITY_INDEX_MAX_WAIT_MS = 3000;
+    private static readonly HOTEL_QUERY_TIMEOUT_MS = 8000;
     private static readonly QUERY_CACHE_TTL = '6h';
     private static readonly GEOCODE_RETRY_AFTER_MS = 60 * 60 * 1000;
     private static readonly GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
@@ -146,7 +145,7 @@ export class HotelAutocompleteV2Service implements OnModuleInit {
 
         return matches
             .map((city): CitySuggestion | null => {
-                const geoLocation = geoByKey.get(this.geoKey(city)) ?? city.fallbackGeo;
+                const geoLocation = geoByKey.get(this.geoKey(city));
                 if (!geoLocation) {
                     return null; // Without coordinates the city cannot be searched
                 }
@@ -182,14 +181,18 @@ export class HotelAutocompleteV2Service implements OnModuleInit {
         params.push(HotelAutocompleteV2Service.MAX_HOTELS);
 
         try {
-            const rows: any[] = await this.hotelListRepo.query(
-                `SELECT tbo_hotel_id, hotel_name, address_line1, address_line2, city_name, country_code, country_name, star_rating, latitude, longitude
-                 FROM tbo_hotel_list
-                 WHERE (hotel_name ILIKE $1 OR hotel_name ILIKE $2) ${countryFilter}
-                 ORDER BY ${marketOrder} CASE WHEN hotel_name ILIKE $1 THEN 0 ELSE 1 END, star_rating DESC NULLS LAST, hotel_name ASC
-                 LIMIT $${params.length}`,
-                params,
-            );
+            // statement_timeout makes Postgres itself cancel a slow lookup (e.g. trigram index missing) instead of piling up
+            const rows: any[] = await this.hotelListRepo.manager.transaction(async (manager) => {
+                await manager.query(`SET LOCAL statement_timeout = ${HotelAutocompleteV2Service.HOTEL_QUERY_TIMEOUT_MS}`);
+                return manager.query(
+                    `SELECT tbo_hotel_id, hotel_name, address_line1, address_line2, city_name, country_code, country_name, star_rating, latitude, longitude
+                     FROM tbo_hotel_list
+                     WHERE (hotel_name ILIKE $1 OR hotel_name ILIKE $2) ${countryFilter}
+                     ORDER BY ${marketOrder} CASE WHEN hotel_name ILIKE $1 THEN 0 ELSE 1 END, star_rating DESC NULLS LAST, hotel_name ASC
+                     LIMIT $${params.length}`,
+                    params,
+                );
+            });
 
             return rows.map((row) => ({
                 type: 'hotel',
@@ -209,7 +212,8 @@ export class HotelAutocompleteV2Service implements OnModuleInit {
     }
 
     /**
-     * Coordinates for the given cities: saved ones from hotel_city_geo, missing ones from Google (then saved)
+     * Coordinates for the given cities: saved ones from hotel_city_geo, missing ones from Google (then saved),
+     * and if Google is not available the median of the city's hotel coordinates (not saved)
      */
     private async resolveCityGeo(cities: CityIndexEntry[]): Promise<Map<string, AutocompleteGeoLocation>> {
         const geoByKey = new Map<string, AutocompleteGeoLocation>();
@@ -248,6 +252,53 @@ export class HotelAutocompleteV2Service implements OnModuleInit {
             } catch (error) {
                 this.logger.error('[HOTEL-AUTOCOMPLETE-V2] saving hotel_city_geo failed', error);
             }
+        }
+
+        const stillMissing = missing.filter((city) => !geoByKey.has(this.geoKey(city)));
+        if (stillMissing.length > 0) {
+            const fallback = await this.medianHotelGeo(stillMissing);
+            fallback.forEach((geo, key) => geoByKey.set(key, geo));
+        }
+
+        return geoByKey;
+    }
+
+    /**
+     * Median hotel coordinates per city (from its biggest TBO city code), via the city_id index
+     */
+    private async medianHotelGeo(cities: CityIndexEntry[]): Promise<Map<string, AutocompleteGeoLocation>> {
+        const geoByKey = new Map<string, AutocompleteGeoLocation>();
+        const cityCodes = [...new Set(cities.flatMap((city) => city.cityCodes))];
+        if (cityCodes.length === 0) {
+            return geoByKey;
+        }
+
+        try {
+            const rows: any[] = await this.hotelListRepo.query(
+                `SELECT city_id,
+                        COUNT(*)::int AS hotel_count,
+                        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY latitude) AS median_lat,
+                        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY longitude) AS median_lng
+                 FROM tbo_hotel_list
+                 WHERE city_id = ANY($1)
+                   AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180 AND NOT (latitude = 0 AND longitude = 0)
+                 GROUP BY city_id`,
+                [cityCodes],
+            );
+            const byCode = new Map(rows.map((row) => [String(row.city_id), row]));
+
+            for (const city of cities) {
+                const best = city.cityCodes
+                    .map((code) => byCode.get(code))
+                    .filter(Boolean)
+                    .sort((a, b) => b.hotel_count - a.hotel_count)[0];
+                const geo = best ? this.toGeo(best.median_lat, best.median_lng) : null;
+                if (geo) {
+                    geoByKey.set(this.geoKey(city), geo);
+                }
+            }
+        } catch (error) {
+            this.logger.error('[HOTEL-AUTOCOMPLETE-V2] hotel coordinate fallback failed', error);
         }
 
         return geoByKey;
@@ -315,30 +366,39 @@ export class HotelAutocompleteV2Service implements OnModuleInit {
 
     private async buildCityIndex(): Promise<CityIndexEntry[]> {
         const startedAt = Date.now();
-        const validGeo = 'latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180 AND NOT (latitude = 0 AND longitude = 0)';
+        // Plain hash aggregate (no sorting aggregates) so the one full scan of tbo_hotel_list stays light
         const rows: any[] = await this.hotelListRepo.query(
             `SELECT LOWER(TRIM(city_name)) AS norm_name,
                     country_code,
-                    MODE() WITHIN GROUP (ORDER BY TRIM(city_name)) AS city_name,
+                    city_id,
+                    MIN(TRIM(city_name)) AS city_name,
                     MAX(country_name) AS country_name,
-                    ARRAY_AGG(DISTINCT city_id) FILTER (WHERE city_id IS NOT NULL) AS city_codes,
-                    COUNT(*)::int AS hotel_count,
-                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY latitude) FILTER (WHERE ${validGeo}) AS median_lat,
-                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY longitude) FILTER (WHERE ${validGeo}) AS median_lng
+                    COUNT(*)::int AS hotel_count
              FROM tbo_hotel_list
              WHERE city_name IS NOT NULL AND TRIM(city_name) <> '' AND country_code IS NOT NULL
-             GROUP BY LOWER(TRIM(city_name)), country_code`,
+             GROUP BY LOWER(TRIM(city_name)), country_code, city_id`,
         );
 
-        const index = rows.map((row) => ({
-            normName: this.normalize(row.norm_name),
-            cityName: row.city_name,
-            countryCode: row.country_code,
-            countryName: row.country_name ?? '',
-            cityCodes: row.city_codes ?? [],
-            hotelCount: Number(row.hotel_count) || 0,
-            fallbackGeo: this.toGeo(row.median_lat, row.median_lng),
-        }));
+        // One entry per city name + country; the display name comes from its biggest TBO city code
+        const byKey = new Map<string, CityIndexEntry & { topCount: number }>();
+        for (const row of rows) {
+            const normName = this.normalize(row.norm_name);
+            const key = `${row.country_code}|${normName}`;
+            const hotelCount = Number(row.hotel_count) || 0;
+            let entry = byKey.get(key);
+            if (!entry) {
+                entry = { normName, cityName: row.city_name, countryCode: row.country_code, countryName: row.country_name ?? '', cityCodes: [], hotelCount: 0, topCount: 0 };
+                byKey.set(key, entry);
+            }
+            entry.hotelCount += hotelCount;
+            if (row.city_id) entry.cityCodes.push(String(row.city_id));
+            if (hotelCount > entry.topCount) {
+                entry.topCount = hotelCount;
+                entry.cityName = row.city_name;
+                entry.countryName = row.country_name ?? entry.countryName;
+            }
+        }
+        const index: CityIndexEntry[] = [...byKey.values()].map(({ topCount, ...city }) => city);
 
         console.log(`[HOTEL-AUTOCOMPLETE-V2] city index built: ${index.length} cities in ${((Date.now() - startedAt) / 1000).toFixed(3)}s`);
         return index;
