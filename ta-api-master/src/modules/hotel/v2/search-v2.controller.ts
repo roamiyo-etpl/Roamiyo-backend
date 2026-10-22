@@ -17,7 +17,6 @@ import {
     SWG_UNPROCESSABLE_RESPONSE,
 } from 'src/shared/constants/standard-api-responses.constant';
 import { throwHotelApiError } from 'src/shared/utilities/hotel/hotel-error.utility';
-import { SearchService } from '../search/search.service';
 import { HotelSearchCheckResultsDto } from '../search/dtos/hotel-search-check-results.dto';
 import { HotelSearchFiltrationDto } from '../search/dtos/hotel-search-filtration.dto';
 import { InitiateResultResponse } from '../search/interfaces/initiate-result-response.interface';
@@ -29,7 +28,7 @@ import { HotelAutocompleteV2Service } from './hotel-autocomplete-v2.service';
 
 /**
  * v2 hotel search. check-results and filtration must use these v2 routes too:
- * v2 search results are cached in HotelV2Module, not in the v1 SearchModule.
+ * v2 search results (and pinned hotels of a hotel search) are cached in HotelV2Module, not in the v1 SearchModule.
  */
 @ApiTags('Hotel V2')
 @ApiHeaders([SWG_HEADER_CURRENCY_PREFERENCE, SWG_HEADER_IP_MANDATE, SWG_HEADER_API_VERSION_MANDATE])
@@ -38,7 +37,6 @@ import { HotelAutocompleteV2Service } from './hotel-autocomplete-v2.service';
 export class SearchV2Controller {
     constructor(
         private readonly searchV2Service: SearchV2Service,
-        private readonly searchService: SearchService,
         private readonly autocompleteService: HotelAutocompleteV2Service,
     ) {}
 
@@ -83,7 +81,7 @@ export class SearchV2Controller {
     @Post('search/check-results')
     async checkResults(@Body() hotelSearchCheckResultsDto: HotelSearchCheckResultsDto, @Headers() headers): Promise<InitiateResultResponse> {
         try {
-            return await this.searchService.searchCheckResults(hotelSearchCheckResultsDto, headers);
+            return await this.searchV2Service.searchCheckResults(hotelSearchCheckResultsDto, headers);
         } catch (error: unknown) {
             throwHotelApiError(error, 'Hotel search check results failed');
         }
@@ -98,7 +96,7 @@ export class SearchV2Controller {
     @Post('search/filtration')
     async filtration(@Body() hotelSearchFiltrationDto: HotelSearchFiltrationDto, @Headers() headers): Promise<InitiateResultResponse> {
         try {
-            return await this.searchService.searchFiltration(hotelSearchFiltrationDto, headers);
+            return await this.searchV2Service.searchFiltration(hotelSearchFiltrationDto, headers);
         } catch (error: unknown) {
             throwHotelApiError(error, 'Hotel search filtration failed');
         }
