@@ -16,6 +16,9 @@ const PropertyTypeEnumValue = Object.keys(PropertyTypeEnum)
 @Index(['cityId'])
 @Index(['countryCode'])
 @Index(['propertyType'])
+/* Created manually with SQL (trigram / lat-lng). synchronize: false so TypeORM sync does not drop them */
+@Index('idx_tbo_hotel_list_hotel_name_trgm', { synchronize: false })
+@Index('idx_tbo_hotel_list_lat_lng', { synchronize: false })
 export class TboHotelListEntity {
     @PrimaryGeneratedColumn({ name: 'id' })
     id: number;

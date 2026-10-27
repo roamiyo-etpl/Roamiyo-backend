@@ -6,6 +6,7 @@ import { RoomModule } from './room/room.module';
 import { HotelBookModule } from './book/book.module';
 import { HotelCancelModule } from './cancel/cancel.module';
 import { HotelApiLoggingInterceptor } from './interceptors/hotel-api-logging.interceptor';
+import { HotelV2Module } from './v2/hotel-v2.module';
 
 @Module({
     controllers: [],
@@ -15,7 +16,7 @@ import { HotelApiLoggingInterceptor } from './interceptors/hotel-api-logging.int
             useClass: HotelApiLoggingInterceptor,
         },
     ],
-    imports: [SearchModule, ProvidersModule, RoomModule, HotelBookModule, HotelCancelModule],
+    imports: [SearchModule, ProvidersModule, RoomModule, HotelBookModule, HotelCancelModule, HotelV2Module],
     exports: [HotelCancelModule],
 })
 export class HotelModule {}

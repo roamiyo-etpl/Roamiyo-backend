@@ -138,4 +138,12 @@ export class StartRoutingDto {
     @ValidateNested({ each: true })
     @Type(() => Paxes)
     paxes: Paxes[];
+
+    @ApiPropertyOptional({
+        description:
+            'Airline codes to search: "AI", "AI,UK" or ["AI","UK"]. Omit, null or empty for all airlines. Note: TBO applies this filter only to GDS airlines.',
+        example: 'AI',
+    })
+    @IsOptional()
+    PreferredAirlines?: string | string[] | null;
 }
