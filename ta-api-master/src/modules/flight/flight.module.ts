@@ -14,6 +14,7 @@ import { CancelModule } from './cancel/cancel.module';
 import { AirlineModule } from './airline/airline.module';
 import { AirportModule } from './airport/airport.module';
 import { SsrModule } from './ssr/ssr.module';
+import { FlightV2Module } from './v2/flight-v2.module';
 
 @Module({
     imports: [
@@ -28,7 +29,8 @@ import { SsrModule } from './ssr/ssr.module';
         AirlineModule,
         AirportModule,
         SsrModule,
-        CalendarFareModule
+        CalendarFareModule,
+        FlightV2Module,
     ],
     controllers: [],
     providers: [],
