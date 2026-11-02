@@ -4,6 +4,7 @@ import { ConfigurationService } from '../configuration/configuration.service';
 import { StartRoutingV2Dto } from './dtos/start-routing-v2.dto';
 import { StartRoutingV2Response } from './interfaces/start-routing-v2.interface';
 import { TboSearchV11Service } from './tbo/tbo-search-v11.service';
+import { istTime, seconds } from './utils/timing.util';
 
 /**
  * Flight search v2 (/flight/v2/search/...) on TBO Air V11.
@@ -21,6 +22,7 @@ export class SearchV2Service {
     async startRouting(searchReq: StartRoutingV2Dto, headers: Headers): Promise<StartRoutingV2Response> {
         const requestReceivedAt = Date.now();
         const activeProviders = await this.configService.getActiveProviderList({ module: 'Flight' });
+        const providerLoadedAt = Date.now();
         const tboProvider = activeProviders.find((item) => item.code == 'TBO');
         if (!tboProvider) {
             throw new ServiceUnavailableException('No active provider found.');
@@ -32,9 +34,11 @@ export class SearchV2Service {
         searchRequest['headers'] = headers;
         searchRequest['providerCred'] = JSON.parse(tboProvider.provider_credentials);
 
-        console.log(`[FLIGHT-SEARCH-V11] reqId=${searchRequest['searchReqId']} request received at ${new Date(requestReceivedAt).toISOString()}`);
+        const tag = `[FLIGHT-SEARCH-V11][TIMING] reqId=${searchRequest['searchReqId']}`;
+        console.log(`${tag} request received at ${istTime(requestReceivedAt)} | provider config loaded in ${seconds(providerLoadedAt - requestReceivedAt)}`);
         const response = await this.tboSearchV11Service.search(searchRequest);
-        console.log(`[FLIGHT-SEARCH-V11] reqId=${searchRequest['searchReqId']} total time: ${((Date.now() - requestReceivedAt) / 1000).toFixed(3)}s`);
+        const doneAt = Date.now();
+        console.log(`${tag} response ready to send at ${istTime(doneAt)} | total in our API ${seconds(doneAt - requestReceivedAt)} (received ${istTime(requestReceivedAt)})`);
 
         return response;
     }

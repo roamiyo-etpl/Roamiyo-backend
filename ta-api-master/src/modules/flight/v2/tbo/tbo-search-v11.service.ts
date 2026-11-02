@@ -21,6 +21,7 @@ import {
   StartRoutingV2Response,
 } from "../interfaces/start-routing-v2.interface";
 import { AirlineCategory } from "../../../../shared/enums/flight/flight.enum";
+import { istTime, seconds } from "../utils/timing.util";
 
 /**
  * TBO Air Search V11 (http://apiv11.tektravels.com/extapi/v1/Search).
@@ -59,8 +60,12 @@ export class TboSearchV11Service {
       );
     }
 
+    const tag = `[FLIGHT-SEARCH-V11][TIMING] reqId=${searchReqId}`;
+
+    const authStart = Date.now();
     const authToken = await this.tboAuthTokenService.getAuthToken(searchRequest);
     searchRequest.authToken = authToken;
+    console.log(`${tag} auth token ready at ${istTime(Date.now())} | took ${seconds(Date.now() - authStart)}`);
 
     let requestBody;
     let searchResult;
@@ -70,7 +75,7 @@ export class TboSearchV11Service {
 
     try {
       requestBody = this.creatingSearchRequest(searchRequest);
-      console.log(`[FLIGHT-SEARCH-V11] reqId=${searchReqId} endpoint: ${endpoint}`);
+      console.log(`${tag} TBO V11 Search call started at ${istTime(startTime)} | endpoint: ${endpoint}`);
 
       searchResult = await Http.httpRequestTBO(
         "POST",
@@ -79,11 +84,14 @@ export class TboSearchV11Service {
         "search",
       );
       endTime = Date.now();
+      console.log(
+        `${tag} TBO V11 Search responded at ${istTime(endTime)} | TBO took ${seconds(endTime - startTime)} (started ${istTime(startTime)})`,
+      );
 
       searchResponse = this.convertingResponse(searchRequest, searchResult);
-
+      const convertEnd = Date.now();
       console.log(
-        `[FLIGHT-SEARCH-V11] reqId=${searchReqId} TBO call ${(endTime - startTime) / 1000}s, convert ${(Date.now() - endTime) / 1000}s, OB/combined ${searchResponse.route.length}, IB ${searchResponse.inboundRoute.length}`,
+        `${tag} conversion done at ${istTime(convertEnd)} | took ${seconds(convertEnd - endTime)} | OB/combined ${searchResponse.route.length}, IB ${searchResponse.inboundRoute.length}`,
       );
 
       return searchResponse;

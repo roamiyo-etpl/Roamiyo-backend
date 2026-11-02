@@ -6,6 +6,9 @@ import { ProviderModule } from '../providers/provider.module';
 import { SearchV2Controller } from './search-v2.controller';
 import { SearchV2Service } from './search-v2.service';
 import { TboSearchV11Service } from './tbo/tbo-search-v11.service';
+import { FareRuleV2Controller } from './fare-rule-v2.controller';
+import { FareRuleV2Service } from './fare-rule-v2.service';
+import { TboFareRuleV11Service } from './tbo/tbo-fare-rule-v11.service';
 
 /**
  * Flight v2 (/flight/v2/...) on TBO Air API V11. Self-contained: v1 flight routes and
@@ -14,7 +17,7 @@ import { TboSearchV11Service } from './tbo/tbo-search-v11.service';
  */
 @Module({
     imports: [TypeOrmModule.forFeature([ErrorLogs]), ProviderModule],
-    controllers: [SearchV2Controller],
-    providers: [SearchV2Service, TboSearchV11Service, GenericRepo],
+    controllers: [SearchV2Controller, FareRuleV2Controller],
+    providers: [SearchV2Service, TboSearchV11Service, FareRuleV2Service, TboFareRuleV11Service, GenericRepo],
 })
 export class FlightV2Module {}
