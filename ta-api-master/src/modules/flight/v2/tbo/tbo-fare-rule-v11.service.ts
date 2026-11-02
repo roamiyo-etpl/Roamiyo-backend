@@ -57,6 +57,7 @@ export class TboFareRuleV11Service {
           endpoint,
           authToken,
           solutionId,
+          solutionIndex: index,
           journeyDirection: index === 0 ? "outbound" : "inbound",
           tag,
         }),
@@ -67,11 +68,13 @@ export class TboFareRuleV11Service {
     response.searchReqId = searchReqId;
     response.trackingId = trackingId;
     response.mode = "TBO-" + providerCred?.mode;
-    response.results = results;
+    /* Each piece of data once: rows in miniFareRules, raw TBO FareRules in fareRules,
+       results[] = per-solutionId status only */
     response.miniFareRules = results.flatMap((result) => result.miniFareRules);
     response.fareRules = results.flatMap((result) =>
       Array.isArray(result.FareRules) ? result.FareRules : [],
     );
+    response.results = results.map(({ miniFareRules, FareRules, ...status }) => status);
     response.error = results.every((result) => result.error);
     response.message = response.error
       ? results.find((result) => result.message)?.message || "No fare rule found."
@@ -86,6 +89,7 @@ export class TboFareRuleV11Service {
     endpoint,
     authToken,
     solutionId,
+    solutionIndex,
     journeyDirection,
     tag,
   }): Promise<FareRuleV2Result> {
@@ -115,7 +119,7 @@ export class TboFareRuleV11Service {
         `${tag} TBO V11 FareRule (${journeyDirection}) responded at ${istTime(endTime)} | TBO took ${seconds(endTime - startTime)} (started ${istTime(startTime)})`,
       );
 
-      result = this.convertingResponse(supplierResponse, solutionId, journeyDirection);
+      result = this.convertingResponse(supplierResponse, solutionId, journeyDirection, solutionIndex);
       return result;
     } catch (error) {
       await this.genericRepo.storeLogs(searchReqId, 1, error, 0);
@@ -150,7 +154,7 @@ export class TboFareRuleV11Service {
   }
 
   /** [@Description: TBO response -> our result. V11 sends the body at top level; V10 wraps it in Response] **/
-  convertingResponse(supplierResponse, solutionId: string, journeyDirection): FareRuleV2Result {
+  convertingResponse(supplierResponse, solutionId: string, journeyDirection, solutionIndex = 0): FareRuleV2Result {
     const body =
       supplierResponse?.Response && typeof supplierResponse.Response === "object"
         ? supplierResponse.Response
@@ -165,7 +169,7 @@ export class TboFareRuleV11Service {
       result.error = false;
       result.message = "OK";
       result.miniFareRules = fareRules.flatMap((fareRule) =>
-        this.formatMiniFareRules(fareRule, solutionId, journeyDirection),
+        this.formatMiniFareRules(fareRule, solutionIndex, journeyDirection),
       );
     } else {
       result.error = true;
@@ -188,13 +192,13 @@ export class TboFareRuleV11Service {
   /** [@Description: Flattens one FareRules item's MiniFareRules into rows (one per rule per pax type).
    * V11: { Currency, Rules: [{ DepartureType, FromDuration, ToDuration, Type, PaxPenalties[] }] }.
    * Old V10 shape (array of arrays with Type/From/To/Unit/Details) is handled too] **/
-  formatMiniFareRules(fareRule, solutionId: string, journeyDirection): MiniFareRuleV2[] {
+  formatMiniFareRules(fareRule, solutionIndex: number, journeyDirection): MiniFareRuleV2[] {
     const mini = fareRule?.MiniFareRules;
     if (!mini) return [];
 
     const base = {
       journeyDirection,
-      solutionId,
+      solutionIndex,
       origin: fareRule?.Origin ?? "",
       destination: fareRule?.Destination ?? "",
       airline: fareRule?.Airline ?? "",
@@ -257,22 +261,43 @@ export class TboFareRuleV11Service {
     return [];
   }
 
-  /** [@Description: TBO timespan "d.hh:mm:ss" or "hh:mm:ss" -> hours] **/
+  /** [@Description: TBO duration -> hours. Live V11 sends ISO 8601 ("PT4H", "P4D", "P1DT12H");
+   * the V11 doc sample shows .NET timespans ("04:00:00", "13.18:00:00"). Both handled] **/
   timeSpanToHours(value): number | null {
-    const match = String(value ?? "").match(/^(?:(\d+)\.)?(\d+):(\d+)(?::(\d+))?$/);
-    if (!match) return null;
-    const [, days, hours, minutes] = match;
-    return Number(days || 0) * 24 + Number(hours) + Number(minutes) / 60;
+    const text = String(value ?? "").trim();
+
+    const iso = text.match(/^P(?:(\d+(?:\.\d+)?)W)?(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i);
+    if (iso && text.toUpperCase() !== "P" && text.toUpperCase() !== "PT") {
+      const [, weeks, days, hours, minutes, secs] = iso;
+      return (
+        Number(weeks || 0) * 168 +
+        Number(days || 0) * 24 +
+        Number(hours || 0) +
+        Number(minutes || 0) / 60 +
+        Number(secs || 0) / 3600
+      );
+    }
+
+    const span = text.match(/^(?:(\d+)\.)?(\d+):(\d+)(?::(\d+))?$/);
+    if (span) {
+      const [, days, hours, minutes] = span;
+      return Number(days || 0) * 24 + Number(hours) + Number(minutes) / 60;
+    }
+
+    return null;
   }
 
-  /** [@Description: e.g. 4, 330 -> "4h to 13d 18h"] **/
+  /** [@Description: e.g. 4, 96 -> "4h to 4d"; 96, null -> "more than 4d" (no upper limit);
+   * null, 4 -> "up to 4h"] **/
   windowLabel(fromHours: number | null, toHours: number | null): string {
-    if (fromHours == null || toHours == null) return "";
     const label = (h: number) => {
       const days = Math.floor(h / 24);
       const rest = Math.round((h % 24) * 100) / 100;
       return [days ? `${days}d` : "", rest || !days ? `${rest}h` : ""].filter(Boolean).join(" ");
     };
-    return `${label(fromHours)} to ${label(toHours)}`;
+    if (fromHours != null && toHours != null) return `${label(fromHours)} to ${label(toHours)}`;
+    if (fromHours != null) return `more than ${label(fromHours)}`;
+    if (toHours != null) return `up to ${label(toHours)}`;
+    return "";
   }
 }

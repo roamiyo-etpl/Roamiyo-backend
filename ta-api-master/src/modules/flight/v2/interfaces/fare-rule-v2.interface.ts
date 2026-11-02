@@ -1,7 +1,8 @@
 /** One cancellation / reissue fee row, flattened from TBO V11 MiniFareRules (one row per pax type) */
 export class MiniFareRuleV2 {
     journeyDirection: 'outbound' | 'inbound';
-    solutionId: string;
+    /** Position of the solutionId in the request (0 = first / outbound); see results[] for the id */
+    solutionIndex: number;
     origin: string;
     destination: string;
     airline: string;
@@ -43,5 +44,6 @@ export class FareRuleV2Response {
     miniFareRules: MiniFareRuleV2[];
     /** TBO FareRules[] of all solutionIds, raw */
     fareRules: unknown[];
-    results: FareRuleV2Result[];
+    /** Per solutionId status (error / message / TBO ResponseStatus, TraceId, Error, ...), no rows */
+    results: Omit<FareRuleV2Result, 'miniFareRules'>[];
 }
