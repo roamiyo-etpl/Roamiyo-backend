@@ -5,6 +5,11 @@ import { StartRoutingV2Dto } from './dtos/start-routing-v2.dto';
 import { StartRoutingV2Response } from './interfaces/start-routing-v2.interface';
 import { TboSearchV11Service } from './tbo/tbo-search-v11.service';
 import { istTime, seconds } from './utils/timing.util';
+import { ProviderMaster } from 'src/shared/entities/provider-master.entity';
+
+/** TBO provider_master row kept in memory this long, so V11 search skips the DB lookup each time.
+ * A change to the row (credentials, active flag) applies within this time. Token is not cached here */
+const PROVIDER_CACHE_TTL_MS = 60 * 1000;
 
 /**
  * Flight search v2 (/flight/v2/search/...) on TBO Air V11.
@@ -18,12 +23,24 @@ export class SearchV2Service {
         private readonly tboSearchV11Service: TboSearchV11Service,
     ) {}
 
+    private tboProviderCache: { row: ProviderMaster; expiresAt: number } | null = null;
+
+    /** [@Description: Active TBO flight provider row, from memory for PROVIDER_CACHE_TTL_MS] **/
+    private async getTboProvider(): Promise<ProviderMaster | undefined> {
+        if (this.tboProviderCache && this.tboProviderCache.expiresAt > Date.now()) {
+            return this.tboProviderCache.row;
+        }
+        const activeProviders = await this.configService.getActiveProviderList({ module: 'Flight' });
+        const row = activeProviders.find((item) => item.code == 'TBO');
+        this.tboProviderCache = row ? { row, expiresAt: Date.now() + PROVIDER_CACHE_TTL_MS } : null;
+        return row;
+    }
+
     /** [@Description: Start flight search on TBO V11. Single supplier, so the response is complete] **/
     async startRouting(searchReq: StartRoutingV2Dto, headers: Headers): Promise<StartRoutingV2Response> {
         const requestReceivedAt = Date.now();
-        const activeProviders = await this.configService.getActiveProviderList({ module: 'Flight' });
+        const tboProvider = await this.getTboProvider();
         const providerLoadedAt = Date.now();
-        const tboProvider = activeProviders.find((item) => item.code == 'TBO');
         if (!tboProvider) {
             throw new ServiceUnavailableException('No active provider found.');
         }

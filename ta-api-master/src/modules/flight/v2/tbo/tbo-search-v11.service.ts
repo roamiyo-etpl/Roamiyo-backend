@@ -103,7 +103,8 @@ export class TboSearchV11Service {
       );
     } finally {
       /* Full log (our request, TBO request, complete raw TBO response, our response).
-         Not awaited so the upload doesn't delay the search response */
+         Content is built here; the write runs in setImmediate, after the response is sent:
+         it stringifies the whole TBO + our response synchronously (local file + Azure) */
       const logsWithRes = {
         ApiRequest: searchReq,
         ApiResponse: searchResponse ?? null,
@@ -113,17 +114,20 @@ export class TboSearchV11Service {
         supplierResponse: searchResult ?? null,
         supplierResponseTime: `${(endTime - startTime) / 1000} seconds`,
       };
-      this.supplierLogUtility
-        .generateLogFile({
-          fileName: searchReqId + "-" + Date.now() + "-TBO-V11",
-          logData: logsWithRes,
-          folderName: "search-v11",
-          logId: null,
-          title: "Search-TBO-V11",
-          searchReqId: searchReqId,
-          bookingReferenceId: null,
-        })
-        .catch((error) => this.genericRepo.storeLogs(searchReqId, 1, error, 0));
+      const fileName = searchReqId + "-" + Date.now() + "-TBO-V11";
+      setImmediate(() => {
+        this.supplierLogUtility
+          .generateLogFile({
+            fileName,
+            logData: logsWithRes,
+            folderName: "search-v11",
+            logId: null,
+            title: "Search-TBO-V11",
+            searchReqId: searchReqId,
+            bookingReferenceId: null,
+          })
+          .catch((error) => this.genericRepo.storeLogs(searchReqId, 1, error, 0));
+      });
     }
   }
 
@@ -440,7 +444,8 @@ export class TboSearchV11Service {
         : 0;
 
     fareDetail.currency = preferredCurrency;
-    fareDetail.fareQuote = Generic.encrypt(JSON.stringify(passengerFareArr));
+    /* No encrypted fareQuote in V11: nothing reads it (revalidate builds its own) and the raw
+       TBO Fare is already passed as-is; saves ~0.4 MB per search and the AES work per result */
 
     /* TBO Fare passthrough: every Fare key (OfferedFare, CommissionEarned, PLBEarned, GST, ...) */
     this.addTboPassthrough(fareDetail, passengerFareArr);
