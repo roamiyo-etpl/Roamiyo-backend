@@ -43,8 +43,15 @@ export class SupplierLogUtility {
         let filePath = '';
         let storageType = '';
 
-        const localResult = await this.storeLocally(fileName, logData, folderName);
+        /* Azure Blob first. A copy on the server disk only when ENABLE_LOCAL_LOGS=true, or as a
+           fallback when the Azure upload failed, so a log is never lost. Local copies on every call
+           filled the server disk (ENOSPC) */
         const azureResult = await this.storeToAzure(fileName, logData, folderName);
+        const keepLocalCopy = process.env.ENABLE_LOCAL_LOGS === 'true';
+        const localResult =
+            keepLocalCopy || !azureResult.filePath
+                ? await this.storeLocally(fileName, logData, folderName)
+                : { filePath: '', storageType: '' };
         filePath = azureResult.filePath || localResult.filePath;
         storageType = azureResult.storageType || localResult.storageType;
 
