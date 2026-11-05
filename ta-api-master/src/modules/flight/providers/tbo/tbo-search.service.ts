@@ -55,7 +55,6 @@ export class TboSearchService {
     // console.log("authToken:::::::::", authToken);
 
     try {
-      console.log("Azure URL:", process.env.AZURE_BLOB_SAS_LINK);
       const requestBody = this.creatingSearchRequest(searchRequest);
       // dev endpoint
       // const endpoint = `${providerCred.url}BookingEngineService_Air/AirService.svc/rest/Search`;
