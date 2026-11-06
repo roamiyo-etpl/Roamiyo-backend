@@ -73,6 +73,38 @@ export class TboBookService {
   }
 
   /** TBO Book/Ticket expects passport dates as `YYYY-MM-DDTHH:mm:ss` (same as DateOfBirth). */
+  /** Frequent flyer for the leg being booked:
+   * 1. frequentFlyers[] entry whose airline matches this leg's airline
+   * 2. else flat frequentFlyerNumber (airline = frequentFlyerAirlineCode or this leg's airline)
+   * 3. else null */
+  private resolveFrequentFlyer(
+    passenger: any,
+    legAirlineCode: string | null,
+  ): { airlineCode: string | null; number: string } | null {
+    const clean = (value: unknown) => String(value ?? "").trim();
+    const legAirline = clean(legAirlineCode).toUpperCase();
+
+    if (Array.isArray(passenger?.frequentFlyers) && legAirline) {
+      const match = passenger.frequentFlyers.find(
+        (ff) =>
+          clean(ff?.frequentFlyerAirlineCode).toUpperCase() === legAirline &&
+          clean(ff?.frequentFlyerNumber),
+      );
+      if (match) {
+        return { airlineCode: legAirline, number: clean(match.frequentFlyerNumber) };
+      }
+    }
+
+    const flatNumber = clean(passenger?.frequentFlyerNumber);
+    if (flatNumber) {
+      return {
+        airlineCode: clean(passenger?.frequentFlyerAirlineCode) || legAirlineCode || null,
+        number: flatNumber,
+      };
+    }
+    return null;
+  }
+
   private formatTboDateField(value: string | undefined): string | undefined {
     if (value == null || String(value).trim() === "") return undefined;
     const m = moment(String(value).trim(), [
@@ -1434,11 +1466,14 @@ export class TboBookService {
         CellCountryCode: contactMobileCountryCode || element?.mobileCountryCode,
         Email: element?.email || bookReq?.contact?.email,
         IsLeadPax: passengerIndex === 0,
-        FFAirlineCode: element?.frequentFlyerNumber
-          ? element?.frequentFlyerAirlineCode || legAirlineCode
-          : null,
-        FFAirline: null,
-        FFNumber: element?.frequentFlyerNumber || null,
+        ...(() => {
+          const ff = this.resolveFrequentFlyer(element, legAirlineCode);
+          return {
+            FFAirlineCode: ff?.airlineCode ?? null,
+            FFAirline: null,
+            FFNumber: ff?.number ?? null,
+          };
+        })(),
         Fare: {
           Currency: fare?.Currency,
           BaseFare: (fare?.BaseFare ?? 0) / paxCount,
