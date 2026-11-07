@@ -83,10 +83,14 @@ export class TboBookService {
   ): { airlineCode: string | null; number: string } | null {
     const clean = (value: unknown) => String(value ?? "").trim();
     const legAirline = clean(legAirlineCode).toUpperCase();
-    /* Air India Express (IX) rejects programme code "IX" (nsk-server:InvalidCustomerProgramCode);
-       its frequent flyer programme is Air India Maharaja Club, so send "AI". Other airlines unchanged */
-    const toProgramCode = (code: string | null) =>
-      clean(code).toUpperCase() === "IX" ? "AI" : code;
+
+    /* No FF for Air India Express (IX) until TBO confirms the right code: with FFAirlineCode "IX"
+       the airline returns nsk-server:InvalidCustomerProgramCode, with "AI" TBO returns
+       "Please enter valid airline code", and the booking fails. Other airlines unchanged */
+    const FF_UNSUPPORTED_AIRLINES = ["IX"];
+    if (FF_UNSUPPORTED_AIRLINES.includes(legAirline)) {
+      return null;
+    }
 
     if (Array.isArray(passenger?.frequentFlyers) && legAirline) {
       const match = passenger.frequentFlyers.find(
@@ -95,14 +99,18 @@ export class TboBookService {
           clean(ff?.frequentFlyerNumber),
       );
       if (match) {
-        return { airlineCode: toProgramCode(legAirline), number: clean(match.frequentFlyerNumber) };
+        return { airlineCode: legAirline, number: clean(match.frequentFlyerNumber) };
       }
     }
 
     const flatNumber = clean(passenger?.frequentFlyerNumber);
     if (flatNumber) {
+      const flatAirline = clean(passenger?.frequentFlyerAirlineCode) || legAirlineCode || null;
+      if (FF_UNSUPPORTED_AIRLINES.includes(clean(flatAirline).toUpperCase())) {
+        return null;
+      }
       return {
-        airlineCode: toProgramCode(clean(passenger?.frequentFlyerAirlineCode) || legAirlineCode || null),
+        airlineCode: flatAirline,
         number: flatNumber,
       };
     }
