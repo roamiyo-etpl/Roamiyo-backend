@@ -83,6 +83,10 @@ export class TboBookService {
   ): { airlineCode: string | null; number: string } | null {
     const clean = (value: unknown) => String(value ?? "").trim();
     const legAirline = clean(legAirlineCode).toUpperCase();
+    /* Air India Express (IX) rejects programme code "IX" (nsk-server:InvalidCustomerProgramCode);
+       its frequent flyer programme is Air India Maharaja Club, so send "AI". Other airlines unchanged */
+    const toProgramCode = (code: string | null) =>
+      clean(code).toUpperCase() === "IX" ? "AI" : code;
 
     if (Array.isArray(passenger?.frequentFlyers) && legAirline) {
       const match = passenger.frequentFlyers.find(
@@ -91,14 +95,14 @@ export class TboBookService {
           clean(ff?.frequentFlyerNumber),
       );
       if (match) {
-        return { airlineCode: legAirline, number: clean(match.frequentFlyerNumber) };
+        return { airlineCode: toProgramCode(legAirline), number: clean(match.frequentFlyerNumber) };
       }
     }
 
     const flatNumber = clean(passenger?.frequentFlyerNumber);
     if (flatNumber) {
       return {
-        airlineCode: clean(passenger?.frequentFlyerAirlineCode) || legAirlineCode || null,
+        airlineCode: toProgramCode(clean(passenger?.frequentFlyerAirlineCode) || legAirlineCode || null),
         number: flatNumber,
       };
     }
