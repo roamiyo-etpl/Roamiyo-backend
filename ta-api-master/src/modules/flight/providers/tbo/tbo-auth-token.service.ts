@@ -44,32 +44,33 @@ export class TboAuthTokenService {
       //     searchReqId: searchRequest?.searchReqId,
       //     bookingReferenceId: null,
       // });
-      if (process.env.ENABLE_LOCAL_LOGS === "false") {
-        const safeLogs = {
-          request: {
-            ...searchRequest,
-            providerCred: redactTboCredentialsForLog(
-              searchRequest?.providerCred as Record<string, unknown>,
-            ),
-          },
-          response: authToken,
-        };
-        await this.supplierLogUtility.generateLogFile({
-          fileName:
-            (searchRequest?.searchReqId || "unknown") +
-            "-" +
-            new Date().toISOString().slice(0, 10) +
-            "-auth-TBO",
-          logData: safeLogs,
-          folderName: "auth",
-          logId: null,
-          title: "Auth-TBO",
-          searchReqId:
-            searchRequest?.searchReqId ??
-            searchRequest?.tokenReqData?.searchReqId,
-          bookingReferenceId: searchRequest?.bookingReferenceId ?? null,
-        });
-      }
+      /* Auth-TBO log disabled: written on every TBO call and took a lot of space in supplier_log_flight */
+      // if (process.env.ENABLE_LOCAL_LOGS === "false") {
+      //   const safeLogs = {
+      //     request: {
+      //       ...searchRequest,
+      //       providerCred: redactTboCredentialsForLog(
+      //         searchRequest?.providerCred as Record<string, unknown>,
+      //       ),
+      //     },
+      //     response: authToken,
+      //   };
+      //   await this.supplierLogUtility.generateLogFile({
+      //     fileName:
+      //       (searchRequest?.searchReqId || "unknown") +
+      //       "-" +
+      //       new Date().toISOString().slice(0, 10) +
+      //       "-auth-TBO",
+      //     logData: safeLogs,
+      //     folderName: "auth",
+      //     logId: null,
+      //     title: "Auth-TBO",
+      //     searchReqId:
+      //       searchRequest?.searchReqId ??
+      //       searchRequest?.tokenReqData?.searchReqId,
+      //     bookingReferenceId: searchRequest?.bookingReferenceId ?? null,
+      //   });
+      // }
       return authToken;
     } catch (error) {
       console.log(error);
@@ -103,34 +104,35 @@ export class TboAuthTokenService {
         JSON.stringify(data),
         'auth',
       );
-      const logs = {
-        request: { ...data, Password: "[REDACTED]" },
-        response: sessionData,
-        ApiRequest: {
-          ...searchRequest,
-          providerCred: redactTboCredentialsForLog(
-            searchRequest?.providerCred as Record<string, unknown>,
-          ),
-        },
-        ApiResponse: sessionData,
-      };
+      /* Auth-TBO log disabled: took a lot of space in supplier_log_flight */
+      // const logs = {
+      //   request: { ...data, Password: "[REDACTED]" },
+      //   response: sessionData,
+      //   ApiRequest: {
+      //     ...searchRequest,
+      //     providerCred: redactTboCredentialsForLog(
+      //       searchRequest?.providerCred as Record<string, unknown>,
+      //     ),
+      //   },
+      //   ApiResponse: sessionData,
+      // };
       // Log auth request to S3
       // await this.s3BucketService.generateS3LogFile((searchRequest?.searchReqId || 'unknown') + '-' + new Date().toISOString().slice(0, 10) + '-auth-request-TBO', logs, 'auth');
-      await this.supplierLogUtility.generateLogFile({
-        fileName:
-          (searchRequest?.searchReqId || "unknown") +
-          "-" +
-          new Date().toISOString().slice(0, 10) +
-          "-auth-request-TBO",
-        logData: logs,
-        folderName: "auth",
-        logId: null,
-        title: "Auth-TBO",
-        searchReqId:
-          searchRequest?.searchReqId ??
-          searchRequest?.tokenReqData?.searchReqId,
-        bookingReferenceId: searchRequest?.bookingReferenceId ?? null,
-      });
+      // await this.supplierLogUtility.generateLogFile({
+      //   fileName:
+      //     (searchRequest?.searchReqId || "unknown") +
+      //     "-" +
+      //     new Date().toISOString().slice(0, 10) +
+      //     "-auth-request-TBO",
+      //   logData: logs,
+      //   folderName: "auth",
+      //   logId: null,
+      //   title: "Auth-TBO",
+      //   searchReqId:
+      //     searchRequest?.searchReqId ??
+      //     searchRequest?.tokenReqData?.searchReqId,
+      //   bookingReferenceId: searchRequest?.bookingReferenceId ?? null,
+      // });
       if (sessionData.Status == 1 && sessionData.TokenId != "") {
         return sessionData.TokenId;
       } else {

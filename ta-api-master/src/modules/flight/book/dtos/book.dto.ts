@@ -159,6 +159,24 @@ export class PassengerDetail {
     lastName: string;
 }
 
+export class FrequentFlyer {
+    @ApiProperty({
+        description: 'Airline code of the frequent flyer programme',
+        example: '6E',
+    })
+    @IsNotEmpty()
+    @IsString()
+    frequentFlyerAirlineCode: string;
+
+    @ApiProperty({
+        description: 'Frequent flyer number for that airline',
+        example: '123456789',
+    })
+    @IsNotEmpty()
+    @IsString()
+    frequentFlyerNumber: string;
+}
+
 export class Passenger {
     @ApiProperty({
         description: 'Type of passenger',
@@ -265,6 +283,20 @@ export class Passenger {
     @IsOptional()
     @IsString()
     frequentFlyerAirlineCode?: string;
+
+    @ApiPropertyOptional({
+        description: 'Frequent flyer numbers per airline. For each booking the entry matching that leg\'s airline is sent (domestic round trip on different airlines gets the right number per leg). Takes priority over frequentFlyerNumber.',
+        type: [FrequentFlyer],
+        example: [
+            { frequentFlyerAirlineCode: '6E', frequentFlyerNumber: '123456789' },
+            { frequentFlyerAirlineCode: 'AI', frequentFlyerNumber: '987654321' },
+        ],
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => FrequentFlyer)
+    frequentFlyers?: FrequentFlyer[];
 }
 
 export class ContactInfo {
